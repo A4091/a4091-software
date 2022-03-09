@@ -88,4 +88,4 @@ $(OBJDIR):
 	mkdir -p $@
 
 clean:
-	rm -f $(OBJS) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT)
+	rm -f $(OBJS) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)

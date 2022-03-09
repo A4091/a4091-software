@@ -1,11 +1,8 @@
 #ifndef _PORT_H
 #define _PORT_H
 
-// #include <stdio.h>
 #include <stdint.h>
 #include "printf.h"
-// #include <stdarg.h>
-#include <clib/debug_protos.h>
 
 #define BIT(x)        (1 << (x))
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))

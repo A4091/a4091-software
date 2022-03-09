@@ -45,6 +45,7 @@
 
 // #include "printf.h"
 #include "port.h"
+#include <clib/debug_protos.h>
 
 #include <string.h>
 #include <stdarg.h>
