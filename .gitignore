@@ -1,0 +1,8 @@
+scsipi/
+objs/
+build-debug/
+build-release/
+old/
+.cscope*
+*.uaem
+.*.sw[op]
