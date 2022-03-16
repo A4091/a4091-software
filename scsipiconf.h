@@ -399,14 +399,17 @@ struct scsipi_opcodes
  *	still be an improvement.
  */
 struct scsipi_periph {
+	void *drv_state;        /* pointer to Amiga driver's device state */
 	device_t periph_dev;	/* pointer to peripheral's device */
 	struct scsipi_channel *periph_channel; /* channel we're connected to */
 
 					/* link in channel's table of periphs */
 	LIST_ENTRY(scsipi_periph) periph_hash;
 
+#if 0
 	const struct scsipi_periphsw *periph_switch; /* peripheral's entry
 							points */
+#endif
 	int	periph_openings;	/* max # of outstanding commands */
 	int	periph_active;		/* current # of outstanding commands */
 	int	periph_sent;		/* current # of commands sent to adapt*/
@@ -520,16 +523,16 @@ struct scsipi_periph {
  * Error values an adapter driver may return
  */
 typedef enum {
-	XS_NOERROR,		/* there is no error, (sense is invalid)  */
-	XS_SENSE,		/* Check the returned sense for the error */
-	XS_SHORTSENSE,		/* Check the ATAPI sense for the error	  */
-	XS_DRIVER_STUFFUP,	/* Driver failed to perform operation     */
-	XS_RESOURCE_SHORTAGE,	/* adapter resource shortage		  */
-	XS_SELTIMEOUT,		/* The device timed out.. turned off?     */
-	XS_TIMEOUT,		/* The Timeout reported was caught by SW  */
-	XS_BUSY,		/* The device busy, try again later?      */
-	XS_RESET,		/* bus was reset; possible retry command  */
-	XS_REQUEUE		/* requeue this command */
+	XS_NOERROR,		/* 0 there is no error, (sense is invalid)  */
+	XS_SENSE,		/* 1 Check the returned sense for the error */
+	XS_SHORTSENSE,		/* 2 Check the ATAPI sense for the error    */
+	XS_DRIVER_STUFFUP,	/* 3 Driver failed to perform operation     */
+	XS_RESOURCE_SHORTAGE,	/* 4 adapter resource shortage		    */
+	XS_SELTIMEOUT,		/* 5 The device timed out.. turned off?     */
+	XS_TIMEOUT,		/* 6 The Timeout reported was caught by SW  */
+	XS_BUSY,		/* 7 The device busy, try again later?      */
+	XS_RESET,		/* 8 bus was reset; possible retry command  */
+	XS_REQUEUE		/* 9 requeue this command */
 } scsipi_xfer_result_t;
 
 #ifdef _KERNEL
@@ -561,7 +564,8 @@ struct scsipi_xfer {
 	TAILQ_ENTRY(scsipi_xfer) channel_q; /* entry on channel queue */
 	TAILQ_ENTRY(scsipi_xfer) device_q;  /* device's pending xfers */
 //	callout_t xs_callout;		/* callout for adapter use */
-        void    *ior;                   /* AmigaOS IO request for transfer */
+        void    *amiga_ior;             /* AmigaOS IO request for transfer */
+        void    *amiga_sdirect;         /* AmigaOS SCSIDIRECT structure */
 	void *xs_callout;		/* callout for adapter use */
 	int	xs_control;		/* control flags */
 	volatile int xs_status;		/* status flags */
@@ -582,8 +586,10 @@ struct scsipi_xfer {
 		u_int32_t atapi_sense;
 	} sense;
 
+#if 0
 	struct scsipi_xfer *xs_sensefor;/* we are requesting sense for this */
 					/* xfer */
+#endif
 
 	u_int8_t status;		/* SCSI status */
 

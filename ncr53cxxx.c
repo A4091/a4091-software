@@ -28,7 +28,7 @@
 /*	ncr53cxxx.c	- SCSI SCRIPTS Assembler		*/
 
 #include <stdio.h>
-#include "port.h"
+#include "port_bsd.h"
 #include <sys/cdefs.h>
 __RCSID("$NetBSD: ncr53cxxx.c,v 1.16 2009/10/21 23:53:38 snj Exp $");
 

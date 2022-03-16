@@ -193,6 +193,9 @@ void errx(int rc, const char *fmt, ...);
 __attribute__((format(__printf__, 1, 2)))
 void warnx(const char *fmt, ...);
 
+int putchar(int ch);
+int puts(const char *str);
+
 #ifdef __cplusplus
 }
 #endif

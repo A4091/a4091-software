@@ -4,14 +4,15 @@ TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
 
 PROG	:= drv
 OBJDIR  := objs
-SRCS    := device.c version.c siop.c port.c attach.c
-SRCS    += sd.c scsipi_base.c printf.c
+SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c
+SRCS    += sd.c scsipi_base.c scsipi_conf.c printf.c
 #SRCS    += main.c request.c
 #SRCS    := device.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
-CFLAGS  += -D_KERNEL -DDEBUG -DDEBUG_SYNC
+CFLAGS  += -D_KERNEL -DPORT_AMIGA
+#CFLAGS  += -DDEBUG -DDEBUG_SYNC
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing

@@ -3,17 +3,19 @@
 
 #include <stdint.h>
 #include "printf.h"
+#include <proto/exec.h>
+#include <exec/execbase.h>
+#include <inline/exec.h>
 
 #define BIT(x)        (1 << (x))
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
 
-#undef __RCSID
-#define __RCSID(x)
-#define __KERNEL_RCSID(x,y)
-
 #include <sys/param.h>
 #define PAGE_SIZE NBPG
+#define AMIGA_MAX_TRANSFER (1 << 20)  // Maximum DMA size (scatter-gather entry)
 // #define MAXPHYS   (1 << 20)  // Maximum physical DMA size
+#undef MAXPHYS
+#define MAXPHYS AMIGA_MAX_TRANSFER
 
 struct device;
 typedef struct device *device_t;
@@ -31,12 +33,15 @@ void bsd_splx();
 typedef uint32_t paddr_t;
 typedef uint32_t vaddr_t;
 int mstohz(int m);
-uint32_t kvtop(void *vaddr);
+#define kvtop(x) ((uint32_t)(x))
 
-int dma_cachectl(void *addr, int len);
+// int dma_cachectl(void *addr, int len);
 void callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg);
-int callout_stop(void *cs);
+// int callout_stop(void *cs);
 void delay(int usecs);
+#define callout_init(x,y)
+#define callout_stop(x)
+#define callout_reset(w,x,y,z)
 
 #define __UNVOLATILE(x) ((void *)(unsigned long)(volatile void *)(x))
 #define __UNCONST(a) ((void *)(intptr_t)(a))
@@ -66,5 +71,7 @@ int dbgprintf(const char *fmt, ...);
 
 #define mutex_enter(x)
 #define mutex_exit(x)
+
+void *device_private(device_t dev);
 
 #endif /* _PORT_H */

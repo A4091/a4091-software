@@ -13,8 +13,7 @@
 #include <devices/scsidisk.h>
 
 #include "device.h"
-#include "attach.h"
-#include "glob.h"
+#include "cmdhandler.h"
 
 #ifdef DEBUG
 #include <clib/debug_protos.h>
@@ -115,6 +114,10 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     dev->lib_Version = DEVICE_VERSION;
     dev->lib_Revision = DEVICE_REVISION;
     dev->lib_IdString = (APTR)device_id_string;
+    // XXX: This is where we should probe hardware and create a
+    //      new thread to handle each A4091 board. How do we know
+    //      a thread has not already been started? Maybe need
+    //      named ports.
 
     return (dev);
 }
@@ -169,24 +172,27 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     if (SysBase->LibNode.lib_Version < 36)
         return; /* can only run under 2.0 or greater */
 
+    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
+        ioreq->io_Error = HFERR_NoBoard;
+        return;
+    }
     if (dev->lib_OpenCnt == 0) {
-        printf("open() first time\n");
-        if (create_cmd_handler(scsi_unit)) {
-            printf("Open SCSI %u.%u.%u failed\n",
-                   scsi_unit >> 16, (uint16_t) (scsi_unit >> 8),
-                   (uint8_t) scsi_unit);
+        printf("open(%x) first time\n", scsi_unit);
+        if (create_cmd_handler(scsi_unit, (void *) ioreq->io_Unit)) {
+            printf("Open SCSI %d.%d.%d failed\n",
+                   scsi_unit / 100, (scsi_unit / 10) % 10, scsi_unit % 10);
             ioreq->io_Error = HFERR_NoBoard;
 // HFERR_NoBoard - open failed for non-existat board
 // HFERR_SelfUnit - attempted to open our own SCSI ID
             return;
         }
+        printf("Open Dev=%p Unit=%p\n", ioreq->io_Device, ioreq->io_Unit);
     } else {
-        printf("open()\n");
+        printf("open(%d)\n", scsi_unit);
     }
 
     dev->lib_OpenCnt++;
     ioreq->io_Error = 0; // Success
-    printf("opened\n");
 }
 
 /*
@@ -206,14 +212,11 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 {
     struct IORequest ior;
 
-    ioreq->io_Device = NULL;
-    ioreq->io_Unit = NULL;
-
     dev->lib_OpenCnt--;
     printf("Close() opencnt=%d\n", dev->lib_OpenCnt);
 
     if (dev->lib_OpenCnt == 0) {
-        /* send a message to the child process to shut down. */
+        /* Send a message to the command handler to shut down. */
         ior.io_Message.mn_ReplyPort = CreateMsgPort();
         ior.io_Command = CMD_TERM;
         ior.io_Unit = ioreq->io_Unit;
@@ -221,13 +224,17 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
         PutMsg(myPort, &ior.io_Message);
         WaitPort(ior.io_Message.mn_ReplyPort);
         DeleteMsgPort(ior.io_Message.mn_ReplyPort);
-        DeletePort(myPort);
+        DeletePort(myPort);  /* XXX: Move this to command handler? */
 
         if (dev->lib_Flags & LIBF_DELEXP) {
             printf("close() expunge\n");
             return (drv_expunge(dev));
         }
     }
+    close_unit((void *) ioreq->io_Unit);
+
+    ioreq->io_Device = NULL;
+    ioreq->io_Unit = NULL;
 
     return (0);
 }
@@ -236,7 +243,7 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __attribute__((used))
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-    printf("begin_io(%x)\n", ior->io_Command);
+    printf("begin_io(%d)\n", ior->io_Command);
     ior->io_Flags &= ~IOF_QUICK;
     PutMsg(myPort, &ior->io_Message);
 #if 0
@@ -269,7 +276,7 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 static ULONG __attribute__((used))
 drv_abort_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-    printf("abort_io()\n");
+    printf("abort_io(%d)\n", ior->io_Command);
 
     return (IOERR_NOCMD);
 }

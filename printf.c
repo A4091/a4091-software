@@ -79,18 +79,24 @@ typedef struct {
     char *buf_end;
 } buf_t;
 
+#define DEBUG_PRINT
+
 int
 putchar(int ch)
 {
+#ifdef DEBUG_PRINT
     KPutChar(ch);
+#endif
     return (ch);
 }
 
 int
 puts(const char *str)
 {
+#ifdef DEBUG_PRINT
     KPutS(str);
     KPutChar('\n');
+#endif
     return (0);
 }
 
@@ -117,7 +123,7 @@ static void
 put(int ch, buf_t *desc)
 {
     if (desc == NULL) {
-        KPutChar(ch);
+        putchar(ch);
     } else if (desc->buf_cur < desc->buf_end) {
         *(desc->buf_cur)++ = (char) ch;
     }

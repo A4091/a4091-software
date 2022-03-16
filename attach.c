@@ -18,46 +18,19 @@
 #include <exec/errors.h>
 #include <exec/lists.h>
 #include <dos/dostags.h>
+#include <devices/scsidisk.h>
 // #include <inline/exec.h>
 // #include <inline/dos.h>
 
-#if 0
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
-#endif
 #include "device.h"
 
 #include "scsi_all.h"
 #include "scsipiconf.h"
 #include "sd.h"
-#if 0
-#include <dev/scsipi/scsi_all.h>
-#include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/scsiconf.h>
-#include <machine/cpu.h>
-#include <amiga/amiga/custom.h>
-#include <amiga/amiga/cc.h>
-#include <amiga/amiga/device.h>
-#include <amiga/amiga/isr.h>
-#include <amiga/dev/siopreg.h>
-#include <amiga/dev/siopvar.h>
-#include <amiga/dev/zbusvar.h>
-#endif
 #include "sys_queue.h"
 #include "siopreg.h"
 #include "siopvar.h"
-#include "port_bsd.h"
 #include "attach.h"
-
-#ifdef __powerpc__
-#define badaddr(a)      badaddr_read(a, 2, NULL)
-#endif
-
-// int afscmatch(device_t, cfdata_t, void *);
-#ifdef DEBUG
-void afsc_dump(void);
-#endif
 
 #define ZORRO_MFG_COMMODORE     0x0202
 #define ZORRO_PROD_A4091        0x0054
@@ -164,68 +137,40 @@ void afsc_dump(void);
 
 #define BIT(x)        (1 << (x))
 
-typedef struct {
-    struct Message msg;
-    long devbase;
-    uint which_target;
-    uint rc;
-} start_msg_t;
-
-static int a4091_add_local_irq_handler(uint32_t dev_base);
 static const char * const expansion_library_name = "expansion.library";
 
 extern struct ExecBase *SysBase;
 
 #include "device.h"
-static struct device device_self;
-struct scsipi_periph *global_periph;
 
-#include "glob.h"
-a4091_save_t a4091_save;
+typedef struct {
+    uint32_t              as_addr;
+    struct DosLibrary    *as_DOSBase;
+    struct ExecBase      *as_SysBase;
+    uint32_t              as_irq_count;   // Total interrupts
+    struct Task          *as_svc_task;
+    struct Interrupt     *as_isr;         // My interrupt server
+    uint8_t               as_irq_signal;
+    volatile uint8_t      as_exiting;
+    struct device         as_device_self;
+//  struct scsipi_periph  as_periph;
+    struct siop_softc     as_device_private;
+} a4091_save_t;
 
-#if 1
+extern a4091_save_t *asave;
+
+
 static uint8_t
 get_ncrreg8(uint32_t a4091_base, uint reg)
 {
     return (*ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg));
 }
-#else
-static uint8_t
-get_ncrreg8(uint reg)
-{
-    return (*ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg));
-}
-#endif
 
-#if 0
-static uint32_t
-get_ncrreg32(uint reg)
-{
-    return (*ADDR32(a4091_base + A4091_OFFSET_REGISTERS + reg));
-}
-#endif
-
-#if 1
 static void
 set_ncrreg8(uint32_t a4091_base, uint reg, uint8_t value)
 {
     *ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg) = value;
 }
-#else
-static void
-set_ncrreg8(uint reg, uint8_t value)
-{
-    *ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg) = value;
-}
-#endif
-
-#if 0
-static void
-set_ncrreg32(uint reg, uint32_t value)
-{
-    *ADDR32(a4091_base + A4091_OFFSET_REGISTERS + reg) = value;
-}
-#endif
 
 /*
  * a4091_reset
@@ -270,10 +215,10 @@ a4091_reset(uint32_t dev_base)
  * service task to go process them.
  */
 __attribute__((noinline))
-static void
+void
 irq_handler_core(a4091_save_t *save)
 {
-    struct siop_softc *sc = save->as_device_private;
+    struct siop_softc *sc = &save->as_device_private;
     siop_regmap_p      rp;
     u_char             istat;
 
@@ -315,27 +260,13 @@ irq_handler(void)
     return (0);
 }
 
-void
-irq_poll(uint got_int)
+/* CDH: HACK */
+void *
+device_private(device_t dev)
 {
-    struct siop_softc *sc = a4091_save.as_device_private;
-    if (sc->sc_flags & SIOP_INTSOFF) {
-        siop_regmap_p rp    = sc->sc_siopp;
-        u_char        istat = rp->siop_istat;
-
-        if (istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) {
-            sc->sc_istat = istat;
-            sc->sc_sstat0 = rp->siop_sstat0;
-            sc->sc_dstat  = rp->siop_dstat;
-printf("IP %02x\n", istat);
-            siopintr(sc);
-        } else {
-printf("IP nothing\n");
-        }
-    } else {
-        siopintr(sc);
-    }
+    return (&asave->as_device_private);
 }
+/* CDH: HACK */
 
 static int
 a4091_add_local_irq_handler(uint32_t dev_base)
@@ -349,57 +280,56 @@ a4091_add_local_irq_handler(uint32_t dev_base)
         return (0);
 #endif
 
-    a4091_save.as_addr           = dev_base;
-    a4091_save.as_SysBase        = SysBase;
-    a4091_save.as_DOSBase        = DOSBase;
-    a4091_save.as_irq_count      = 0;
-    a4091_save.as_device_private = device_private(NULL);
-    a4091_save.as_svc_task       = task;
-    a4091_save.as_irq_signal     = AllocSignal(-1);
-    a4091_save.as_isr            = AllocMem(sizeof (*a4091_save.as_isr),
-                                            MEMF_CLEAR | MEMF_PUBLIC);
-    if (a4091_save.as_isr == NULL) {
+    asave->as_addr           = dev_base;
+    asave->as_SysBase        = SysBase;
+    asave->as_DOSBase        = DOSBase;
+    asave->as_irq_count      = 0;
+    asave->as_svc_task       = task;
+    asave->as_irq_signal     = AllocSignal(-1);
+    asave->as_isr            = AllocMem(sizeof (*asave->as_isr),
+                                        MEMF_CLEAR | MEMF_PUBLIC);
+    if (asave->as_isr == NULL) {
         printf("AllocMem failed\n");
         return (1);
     }
 
-    a4091_save.as_isr->is_Node.ln_Type = NT_INTERRUPT;
-    a4091_save.as_isr->is_Node.ln_Pri  = A4091_INTPRI;
-    a4091_save.as_isr->is_Node.ln_Name = "A4091.device";
-    a4091_save.as_isr->is_Data         = &a4091_save;
-    a4091_save.as_isr->is_Code         = (VOID (*)()) irq_handler;
+    asave->as_isr->is_Node.ln_Type = NT_INTERRUPT;
+    asave->as_isr->is_Node.ln_Pri  = A4091_INTPRI;
+    asave->as_isr->is_Node.ln_Name = "A4091.device";
+    asave->as_isr->is_Data         = asave;
+    asave->as_isr->is_Code         = (VOID (*)()) irq_handler;
 
-    printf("my irq a4091_save=%p isr_struct=%p IRQ=%d\n", &a4091_save, &a4091_save.as_isr, A4091_INTPRI);
+    printf("my irq a4091_save=%p isr_struct=%p IRQ=%d\n", asave, &asave->as_isr, A4091_INTPRI);
 
-    AddIntServer(A4091_IRQ, a4091_save.as_isr);
+    AddIntServer(A4091_IRQ, asave->as_isr);
     return (0);
 }
 
 static void
 a4091_remove_local_irq_handler(void)
 {
-    if (a4091_save.as_isr != NULL) {
-        struct Interrupt *as_isr = a4091_save.as_isr;
-        printf("Removing ISR handler (%d irqs)\n", a4091_save.as_irq_count);
-        a4091_save.as_exiting = 1;
-        a4091_save.as_isr = NULL;
+    if (asave->as_isr != NULL) {
+        struct Interrupt *as_isr = asave->as_isr;
+        printf("Removing ISR handler (%d irqs)\n", asave->as_irq_count);
+        asave->as_exiting = 1;
+        asave->as_isr = NULL;
         RemIntServer(A4091_IRQ, as_isr);
-        FreeMem(as_isr, sizeof (*a4091_save.as_isr));
+        FreeMem(as_isr, sizeof (*asave->as_isr));
 #if 0
         Forbid();
-        if (a4091_save.as_svc_task != NULL) {
-            Signal(a4091_save.as_svc_task, BIT(a4091_save.as_irq_signal));
+        if (asave->as_svc_task != NULL) {
+            Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
         }
         Permit();
-        while (a4091_save.as_svc_task != NULL) {
+        while (asave->as_svc_task != NULL) {
             if (count++ > TICKS_PER_SECOND) {
-                printf("CMD handler took too long to exit %p\n", &a4091_save.as_svc_task);
+                printf("CMD handler took too long to exit %p\n", &asave->as_svc_task);
                 return;  // This is not going to end well...
             }
             Delay(1);
         }
 #endif
-        FreeSignal(a4091_save.as_irq_signal);
+        FreeSignal(asave->as_irq_signal);
     }
 }
 
@@ -471,35 +401,34 @@ a4091_validate(uint32_t dev_base)
     return (0);
 }
 
-static int
-do_attach(device_t self, uint32_t dev_base, uint scsi_target)
+int
+attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
 {
     int rc;
-    struct siop_softc *sc = device_private(self);
+    struct siop_softc     *sc = device_private(self);
     struct scsipi_adapter *adapt = &sc->sc_adapter;
     struct scsipi_channel *chan = &sc->sc_channel;
-    struct scsipi_periph *periph;
+    uint board = scsi_target / 100;
+    uint32_t dev_base = a4091_find(board);
+    if (dev_base == 0) {
+        printf("A4091 %u not found\n", board);
+        return (1);
+    }
 
     memset(sc, 0, sizeof (*sc));
 
-    printf("do_attach(%x, %x)\n", dev_base, scsi_target);
+    printf("attach(%x, %d)\n", dev_base, scsi_target);
 
     if (a4091_validate(dev_base))
         return (1);
-    periph = AllocMem(sizeof (*periph), MEMF_CLEAR | MEMF_PUBLIC);
-    if (periph == NULL) {
-        printf("AllocMem failed\n");
-        return (1);
-    }
-    global_periph = periph;
     periph->periph_channel = chan;  // Not sure this is needed
 
 //  periph->periph_cap |= PERIPH_CAP_SYNC;   // Synchronous SCSI
 //  periph->periph_cap |= PERIPH_CAP_TQING;  // Tagged command queuing
     periph->periph_openings = 1;  // Max # of outstanding commands
-    periph->periph_target   = (uint8_t)scsi_target;         // SCSI target ID
-    periph->periph_lun      = (uint8_t)(scsi_target >> 8);  // SCSI LUN
-    periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;  // Full debugging
+    periph->periph_target   = scsi_target % 10;         // SCSI target ID
+    periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
+    periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
 
     sc->sc_dev = self;
 
@@ -548,7 +477,7 @@ do_attach(device_t self, uint32_t dev_base, uint scsi_target)
     if (rc != 0)
         return (rc);
 
-    Signal(a4091_save.as_svc_task, BIT(a4091_save.as_irq_signal));
+    Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
     siopinitialize(sc);
 
 #if 0
@@ -564,212 +493,19 @@ do_attach(device_t self, uint32_t dev_base, uint scsi_target)
     return (0);
 }
 
-int
-attach(uint which, uint scsi_target)
-{
-    uint32_t a4091_base = a4091_find(which);
-    if (a4091_base == 0) {
-        printf("A4091 not found\n");
-        return (1);
-    }
-
-    if (do_attach(&device_self, a4091_base, scsi_target))
-        return (1);
-
-    printf("attached(%x, %x)\n", a4091_base, scsi_target);
-#if 0
-    siop_dump(device_private(NULL));  // DEBUG
-#endif
-    return (0);
-}
-
 void
-detach(void)
+detach(struct scsipi_periph *periph)
 {
-    /*
-     * XXX: This function needs a lot of work -- it should only detach from
-     *      a device which was previously attached, and should not use globals.
-     */
-    if (global_periph != NULL) {
-        uint32_t a4091_base = a4091_find(global_periph->periph_target >> 16);
+    printf("detach(%p)\n", periph);
+
+    if (periph != NULL) {
+        uint32_t a4091_base = a4091_find(periph->periph_target >> 16);
         if (a4091_base == 0)
             return;
         a4091_reset(a4091_base);
         a4091_remove_local_irq_handler();
-        FreeMem(global_periph, sizeof (*global_periph));
+//      FreeMem(periph, sizeof (*periph));
+// Actually want to FreeMem(drv_state);
     }
-}
-
-void cmd_handler(void)
-{
-    struct IORequest *ior;
-    struct IOExtTD   *iotd;
-    struct Process   *proc;
-    start_msg_t      *msg;
-    ULONG             int_mask;
-    ULONG             cmd_mask;
-    ULONG             wait_mask;
-    uint              which_target;
-    int               rc;
-    uint64_t          blkno;
-    uint32_t          mask;
-#if 0
-    register long devbase asm("a6");
-#endif
-
-    proc = (struct Process *)FindTask((char *)NULL);
-    printf("cmd_handler()=%p\n", proc);
-
-    /* get the startup message */
-    while ((msg = (start_msg_t *) GetMsg(&proc->pr_MsgPort)) == NULL)
-        WaitPort(&proc->pr_MsgPort);
-//    printf("got startup msg %p\n", msg);
-
-#if 0
-    /* Builtin compiler function to set A4 to the global data area */
-    geta4();
-
-    devbase = msg->devbase;
-    (void) devbase;
-#else
-    SysBase = *(struct ExecBase **)4UL;
-    DOSBase = (struct DosLibrary *) OpenLibrary("dos.library",37L);
-#endif
-    which_target = msg->which_target;
-
-    myPort = CreatePort(0, 0);
-    if (myPort == NULL) {
-        /* Terminate handler and give up */
-        ReplyMsg((struct Message *)msg);
-        Forbid();
-        return;
-    }
-    attach(which_target >> 16, which_target & 0xffff);
-    ReplyMsg((struct Message *)msg);
-
-    cmd_mask   = BIT(myPort->mp_SigBit);
-    int_mask   = BIT(a4091_save.as_irq_signal);
-    wait_mask  = cmd_mask | int_mask;
-
-    while (1) {
-//      WaitPort(myPort);
-        mask = Wait(wait_mask);
-
-        if (a4091_save.as_exiting)
-            break;
-        if (mask & int_mask)
-            printf("Got INT BH\n");
-        irq_poll(mask & int_mask);
-
-        if ((mask & cmd_mask) == 0)
-            continue;
-
-        while ((ior = (struct IORequest *)GetMsg(myPort)) != NULL) {
-            ior->io_Error = 0;
-
-            switch (ior->io_Command) {
-                case CMD_TERM:
-                    printf("CMD_TERM\n");
-                    detach();
-                    printf("Detach done %p\n", &a4091_save.as_isr);
-                    CloseLibrary((struct Library *) DOSBase);
-                    a4091_save.as_isr = NULL;
-                    Forbid();
-                    ReplyMsg(&ior->io_Message);
-                    return;
-
-                case CMD_READ:
-                    iotd = (struct IOExtTD *)ior;
-                    iotd->iotd_Req.io_Actual = 1;
-                    printf("CMD_READ %lx %lx\n",
-                           iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
-                    blkno = iotd->iotd_Req.io_Offset / 512;
-                    rc = diskstart(blkno, B_READ, iotd->iotd_Req.io_Data,
-                                   iotd->iotd_Req.io_Length, ior);
-                    iotd->iotd_Req.io_Error = rc;
-                    if (rc == 0) {
-                        iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
-                    } else {
-                        iotd->iotd_Req.io_Actual = 0;
-                        ReplyMsg(&ior->io_Message);
-                    }
-                    break;
-
-                case CMD_WRITE:
-                    iotd = (struct IOExtTD *)ior;
-                    iotd->iotd_Req.io_Actual = 1;
-                    printf("CMD_WRITE %lx %lx\n",
-                           iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
-#if 0
-ior->io_Error = IOERR_NOCMD;
-ReplyMsg(&ior->io_Message);
-continue;
-#endif
-                    blkno = iotd->iotd_Req.io_Offset / 512;
-                    rc = diskstart(blkno, B_READ, iotd->iotd_Req.io_Data,
-                                   iotd->iotd_Req.io_Length, ior);
-                    iotd->iotd_Req.io_Error = rc;
-                    if (rc == 0) {
-                        iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
-                    } else {
-                        iotd->iotd_Req.io_Actual = 0;
-                        ReplyMsg(&ior->io_Message);
-                    }
-                    break;
-
-                default:
-                    /* Unknown command */
-                    ior->io_Error = IOERR_NOCMD;
-                    ReplyMsg(&ior->io_Message);
-                    break;
-            }
-        }
-    }
-}
-
-void
-amiga_sd_complete(void *ior, int8_t rc)
-{
-    struct IOStdReq *ioreq = ior;
-
-    ioreq->io_Error = rc;
-    ReplyMsg(&ioreq->io_Message);
-}
-
-int
-create_cmd_handler(uint scsi_target)
-{
-    struct Process *myProc;
-    start_msg_t msg;
-    register long devbase asm("a6");
-
-    DOSBase = (struct DosLibrary *) OpenLibrary("dos.library",37L);
-    if (DOSBase == NULL)
-        return (1);
-
-    myProc = CreateNewProcTags(NP_Entry, (ULONG) cmd_handler,
-                               NP_StackSize, 8192,
-                               NP_Priority, 0,
-                               NP_Name, (ULONG) "CMD_Handler",
-                               NP_CloseOutput, FALSE,
-                               TAG_DONE);
-    CloseLibrary((struct Library *) DOSBase);
-    if (myProc == NULL)
-        return (1);
-
-    /* Send the startup message with the library base pointer */
-    msg.msg.mn_Length = sizeof (start_msg_t) - sizeof (struct Message);
-    msg.msg.mn_ReplyPort = CreatePort(0,0);
-    msg.msg.mn_Node.ln_Type = NT_MESSAGE;
-    msg.devbase = devbase;
-    msg.which_target = scsi_target;
-    PutMsg(&myProc->pr_MsgPort, (struct Message *)&msg);
-    WaitPort(msg.msg.mn_ReplyPort);
-    DeletePort(msg.msg.mn_ReplyPort);
-
-    if (myPort == NULL) /* CMD_Handler allocates this */
-        return (1);
-
-    return (0);
 }
 

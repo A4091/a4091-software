@@ -8,6 +8,7 @@ typedef struct cfdata *cfdata_t;
 #define CMD_TERM     0x7ff0
 #define CMD_STARTUP  0x7ff1
 
+#if 0
 /*
  * Configuration data (i.e., data placed in ioconf.c).
  */
@@ -23,6 +24,7 @@ struct cfdata {
 
 /* Max size of a device external name (including terminating NUL) */
 #define DEVICE_XNAME_SIZE       16
+#endif
 
 struct device {
 #if 0
@@ -30,15 +32,11 @@ struct device {
                                        new device_t's get INVALID */
     devclass_t      dv_class;       /* this device's classification */
     TAILQ_ENTRY(device) dv_list;    /* entry on list of all devices */
-#endif
     cfdata_t        dv_cfdata;      /* config data that found us
                                        (NULL if pseudo-device) */
-#if 0
     cfdriver_t      dv_cfdriver;    /* our cfdriver */
     cfattach_t      dv_cfattach;    /* our cfattach */
-#endif
     int             dv_unit;        /* device unit number */
-#if 0
                                     /* external name (name + unit) */
     char            dv_xname[DEVICE_XNAME_SIZE];
     device_t        dv_parent;      /* pointer to parent device

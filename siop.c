@@ -68,6 +68,7 @@
  */
 
 #include "port.h"
+#include "port_bsd.h"
 // #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
@@ -221,16 +222,6 @@ void siop_dump_trace(void);
 #define SIOP_TRACE(a,b,c,d)
 #endif
 
-/* CDH: HACK */
-void *
-device_private(device_t dev)
-{
-    static struct siop_softc sc;
-
-    return (&sc);
-}
-/* CDH: HACK */
-
 /*
  * default minphys routine for siop based controllers
  */
@@ -367,7 +358,6 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
             }
             delay(20000);  // 1 AmigaOS tick
         }
-        printf("CDH: siop_poll() 1\n");
         sstat0 = rp->siop_sstat0;
         dstat = rp->siop_dstat;
         if (siop_checkintr(sc, istat, dstat, sstat0, &status)) {
@@ -382,7 +372,6 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
             siop_scsidone(sc->sc_nexus, status);
         }
 
-        printf("CDH: siop_poll() 2\n");
         if (xs->xs_status & XS_STS_DONE)
             break;
     }
@@ -456,7 +445,7 @@ siop_scsidone(struct siop_acb *acb, int stat)
     struct siop_softc *sc;
     int dosched = 0;
 
-    printf("CDH: siop_scsidone()\n");
+    printf("CDH: siop_scsidone\n");
     if (acb == NULL || (xs = acb->xs) == NULL) {
         printf("CDH: siop_scsidone: NULL acb %p or scsipi_xfer\n", acb);
 #ifdef DIAGNOSTIC
@@ -778,7 +767,12 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 {
     siop_regmap_p rp = sc->sc_siopp;
     int nchain;
+#ifdef PORT_AMIGA
+    int count;
+    ULONG tcount;
+#else
     int count, tcount;
+#endif
     char *addr, *dmaend;
     struct siop_acb *acb = sc->sc_nexus;
 #ifdef DEBUG
@@ -789,7 +783,6 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         return;
     }
 
-    printf("CDH: siop_start acb=%p\n", acb);
 #ifdef DEBUG
     if (siop_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {
         printf ("ACK! siop was busy: rp %p script %p dsa %p active %ld\n",
@@ -872,11 +865,38 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     count = len;
     addr = buf;
     dmaend = NULL;
+#ifdef PORT_AMIGA
+    ULONG flags = DMA_ReadFromRAM;
+#endif
+
     while (count > 0) {
+        acb->ds.chain[nchain].databuf = (char *) kvtop (addr);
+#ifdef PORT_AMIGA
+        tcount = count;
+        if (tcount > AMIGA_MAX_TRANSFER)
+            tcount = AMIGA_MAX_TRANSFER;
+        if ((((ULONG) addr) & 3) && (tcount > 30)) {
+            /*
+             * First sg should align transfer, unless it's a small transfer.
+             *
+             * XXX: The 30 above is subject to tuning. The tradeoff is that
+             *      one more sg entry takes CPU time and some bus bandwidth
+             *      to process.
+             */
+            tcount = 4 - (((ULONG) addr) & 3);
+        }
+        acb->ds.chain[nchain].databuf = (char *)
+                CachePreDMA((APTR) addr, &tcount, flags);
+        flags |= DMA_Continue;
+        printf("CDH: siop_start sg addr=%p count=%lu\n",
+               acb->ds.chain[nchain].databuf, tcount);
+#else
+        /* original PAGESIZE scatter gather */
         acb->ds.chain[nchain].databuf = (char *) kvtop (addr);
         if (count < (tcount = PAGE_SIZE - ((int) addr & PGOFSET)))
             tcount = count;
-        printf("CDH: siop_start 2 count=%d %d PS=%d PO=%d\n", count, tcount, PAGE_SIZE, PGOFSET);
+        printf("CDH: siop_start sg count=%d %d PS=%d PO=%d\n", count, tcount, PAGE_SIZE, PGOFSET);
+#endif
         acb->ds.chain[nchain].datalen = tcount;
         addr += tcount;
         count -= tcount;
@@ -910,10 +930,17 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #endif
 
     /* push data cache for all data the 53c710 needs to access */
+#ifdef PORT_AMIGA
+    ULONG length = sizeof (struct siop_acb);
+    CachePreDMA(acb, &length, DMA_ReadFromRAM);
+    length = clen;
+    CachePreDMA(cbuf, &length, DMA_ReadFromRAM);
+#else
     dma_cachectl ((void *)acb, sizeof (struct siop_acb));
     dma_cachectl (cbuf, clen);
     if (buf != NULL && len != 0)
         dma_cachectl (buf, len);
+#endif
 
 #ifdef DEBUG
     if (siop_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {
@@ -962,7 +989,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     int target = 0;
     int dfifo, dbc, sstat1;
 
-    printf("CDH: siop_checkintr acb=%p\n", acb);
+//  printf("CDH: siop_checkintr acb=%p\n", acb);
     dfifo = rp->siop_dfifo;
     dbc = rp->siop_dbc0;
     sstat1 = rp->siop_sstat1;
@@ -1030,7 +1057,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                     acb->msg[2], acb->msg[3]);
             sc->sc_sync[target].state = NEG_DONE;
         }
+#ifdef PORT_AMIGA
+        ULONG length = 1;
+        CachePostDMA(&acb->stat[0], &length, 0);
+#else
         dma_cachectl(&acb->stat[0], 1);
+#endif
         *status = acb->stat[0];
 #ifdef DEBUG
         if (rp->siop_sbcl & SIOP_BSY) {
@@ -1146,7 +1178,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 }
             }
 #endif
+#ifdef PORT_AMIGA
+            ULONG length = sizeof (*acb);
+            CachePreDMA(acb, &length, DMA_ReadFromRAM);
+#else
             dma_cachectl ((void *)acb, sizeof(*acb));
+#endif
         }
 #ifdef DEBUG
         SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
@@ -1223,6 +1260,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
            device_xname(sc->sc_dev), target);
 #endif
 #if 0
+        /* This is commented out in the original NetBSD code for Amiga */
         siopabort (sc, rp, "siopchkintr");
 #endif
         *status = STS_BUSY;
@@ -1410,7 +1448,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 sc->nexus_list.tqh_first);
             panic("unable to find reselecting device");
         }
+#ifdef PORT_AMIGA
+        ULONG length = sizeof (*acb);
+        CachePreDMA(acb, &length, DMA_ReadFromRAM);
+#else
         dma_cachectl ((void *)acb, sizeof(*acb));
+#endif
         rp->siop_temp = 0;
         rp->siop_dcntl |= SIOP_DCNTL_STD;
         return (0);
@@ -1456,7 +1499,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             goto fail_return;
         }
         /* Unrecognized message in byte */
+#ifdef PORT_AMIGA
+        ULONG length = 1;
+        CachePostDMA(&acb->msg[1], &length, 0);
+#else
         dma_cachectl (&acb->msg[1],1);
+#endif
         printf ("%s: Unrecognized message in data sfbr %x msg %x sbcl %x\n",
             device_xname(sc->sc_dev), rp->siop_sfbr, acb->msg[1], rp->siop_sbcl);
         /* what should be done here? */
@@ -1480,8 +1528,14 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 device_xname(sc->sc_dev));
             goto fail_return;
         } else {
+#ifdef PORT_AMIGA
+            ULONG length = 1;
+            CachePostDMA(&acb->stat[0], &length, 0);
+            CachePostDMA(&acb->msg[0], &length, 0);
+#else
             dma_cachectl (&acb->stat[0], 1);
             dma_cachectl (&acb->msg[0], 1);
+#endif
             printf ("SIOP interrupt: %lx sts %x msg %x %x sbcl %x\n",
                 rp->siop_dsps, acb->stat[0], acb->msg[0], acb->msg[1],
                 rp->siop_sbcl);
@@ -1607,10 +1661,13 @@ siopintr(register struct siop_softc *sc)
             sc->sc_nexus, sc->sc_nexus ? sc->sc_nexus->stat[0] : 0);
     }
 #endif
+
+#if 0
 printf("CDH: sc=%p rp=%p\n", sc, rp);
 if (sc != NULL) {
     printf("CDH: sc_nexus=%p sc_dev=%p\n", sc->sc_nexus, sc->sc_dev);
 }
+#endif
 
 #ifdef DEBUG
     if (siop_debug & 5) {

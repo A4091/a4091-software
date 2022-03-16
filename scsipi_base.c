@@ -45,7 +45,6 @@
 #include "scsipi_disk.h"
 #include "scsipi_base.h"
 #include "scsi_all.h"
-#include "port_bsd.h"
 #include "siopreg.h"
 #include "siopvar.h"
 #include "scsi_message.h"
@@ -56,6 +55,9 @@
 #define ERESTART 100  // Needs restart
 
 static void scsipi_run_queue(struct scsipi_channel *chan);
+static int scsipi_complete(struct scsipi_xfer *xs);
+static void scsipi_request_sense(struct scsipi_xfer *xs);
+static void scsipi_completion_poll(struct scsipi_channel *chan);
 
 extern struct ExecBase *SysBase;
 
@@ -179,10 +181,12 @@ struct scsipi_xfer *
 scsipi_get_xs(struct scsipi_periph *periph, int flags)
 {
     struct scsipi_xfer *xs = AllocMem(sizeof (*xs), MEMF_CLEAR | MEMF_PUBLIC);
-//  callout_init(&xs->xs_callout, 0);
+    callout_init(&xs->xs_callout, 0);
     xs->xs_periph = periph;
     xs->xs_control = flags;
     xs->xs_status = 0;
+    xs->amiga_ior = NULL;
+    xs->amiga_sdirect = NULL;
     return (xs);
 }
 
@@ -320,17 +324,28 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * Not an asynchronous command; wait for it to complete.
 	 */
         uint timeout = 60;
+        struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
+        printf("SYNC -- poll for completion\n");
+
 	while ((xs->xs_status & XS_STS_DONE) == 0) {
+#ifdef PORT_AMIGA
+                /*
+                 * Need to run interrupt message handling here because
+                 * this task runs in the same context as the normal interrupt
+                 * message handling.
+                 */
+                void irq_poll(int gotint, struct siop_softc *sc);
+                irq_poll(0, sc);
+#else
 		if (poll) {
 			scsipi_printaddr(periph);
-			printf("polling command not done\n");
 			panic("scsipi_execute_xs");
 		}
-//		cv_wait(xs_cv(xs), chan_mtx(chan));
-
+		cv_wait(xs_cv(xs), chan_mtx(chan));
+#endif
                 Delay(1);
                 if (timeout-- == 0) {
-                    printf("CDH: XS timeout\n");
+                    printf("CDH: Poll timeout\n");
                     break;
                 }
 	}
@@ -340,9 +355,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * the error handling.
 	 */
 	mutex_exit(chan_mtx(chan));
-        printf("CDH: Forced sd complete with error because we can't poll yet\n");
-        sd_complete(xs, 1); error = 1;
-//	error = scsipi_complete(xs);
+	error = scsipi_complete(xs);
 	if (error == ERESTART)
 		goto restarted;
 
@@ -366,6 +379,14 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * reason.
 	 */
 	scsipi_run_queue(chan);
+        /*
+         * XXX: This is where FS-UAE falls over due to a detected spin loop
+         *      in the scripts processor:
+         *          lsi_execute_script()
+         *              insn_processed > 10000
+         *      Workaround in FS-UAE code is to set s->current = NULL and
+         *      let it go ahead and force an unexpected device disconnect.
+         */
 
 	mutex_enter(chan_mtx(chan));
 	return error;
@@ -480,7 +501,9 @@ scsipi_adapter_request(struct scsipi_channel *chan,
 {
     struct scsipi_adapter *adapt = chan->chan_adapter;
 
-    printf("scsipi_adapter_request(%u)\n", req);
+#if 0
+    printf("CDH: scsipi_adapter_request(%u)\n", req);
+#endif
 
 //  scsipi_adapter_lock(adapt);
     SDT_PROBE3(scsi, base, adapter, request__start,  chan, req, arg);
@@ -723,7 +746,7 @@ scsipi_done(struct scsipi_xfer *xs)
 	struct scsipi_channel *chan = periph->periph_channel;
 	int freezecnt;
 
-printf("CDH: scsipi_done %p\n", xs);
+printf("CDH: scsipi_done(%p)\n", xs);
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_done\n"));
 #ifdef SCSIPI_DEBUG
 	if (periph->periph_dbflags & SCSIPI_DB1)
@@ -788,6 +811,7 @@ printf("CDH: scsipi_done %p\n", xs);
 	 * received before the thread is waked up.
 	 */
 	if (xs->error == XS_BUSY && xs->status == SCSI_CHECK) {
+printf("CDH: periph sense required ior=%p\n", xs->amiga_ior);
 		periph->periph_flags |= PERIPH_SENSE;
 		periph->periph_xscheck = xs;
 	}
@@ -819,19 +843,19 @@ printf("CDH: scsipi_done %p\n", xs);
 	 * if we can handle it in interrupt context.
 	 */
 	if (xs->error == XS_NOERROR) {
-                sd_complete(xs, 0);
+                (void) scsipi_complete(xs);
 		goto out;
 	}
 
-#if 0
 	/*
 	 * There is an error on this xfer.  Put it on the channel's
 	 * completion queue, and wake up the completion thread.
 	 */
 	TAILQ_INSERT_TAIL(&chan->chan_complete, xs, channel_q);
+#if 0
 	cv_broadcast(chan_cv_complete(chan));
 #endif
-        sd_complete(xs, 1);
+        scsipi_completion_poll(chan);
 
  out:
 	/*
@@ -839,6 +863,405 @@ printf("CDH: scsipi_done %p\n", xs);
 	 * run them.
 	 */
 	scsipi_run_queue(chan);
+}
+
+static void
+scsipi_completion_poll(struct scsipi_channel *chan)
+{
+    struct scsipi_xfer *xs;
+
+    chan->chan_flags |= SCSIPI_CHAN_TACTIVE;
+    while ((xs = TAILQ_FIRST(&chan->chan_complete)) != NULL) {
+        if (chan->chan_tflags & SCSIPI_CHANT_GROWRES) {
+            /* attempt to get more openings for this channel */
+            chan->chan_tflags &= ~SCSIPI_CHANT_GROWRES;
+            mutex_exit(chan_mtx(chan));
+            scsipi_adapter_request(chan,
+                ADAPTER_REQ_GROW_RESOURCES, NULL);
+#if 0
+            scsipi_channel_thaw(chan, 1);
+#endif
+            if (chan->chan_tflags & SCSIPI_CHANT_GROWRES)
+                delay(100000);
+            mutex_enter(chan_mtx(chan));
+            continue;
+        }
+        if (chan->chan_tflags & SCSIPI_CHANT_KICK) {
+            /* explicitly run the queues for this channel */
+            chan->chan_tflags &= ~SCSIPI_CHANT_KICK;
+            mutex_exit(chan_mtx(chan));
+            scsipi_run_queue(chan);
+            mutex_enter(chan_mtx(chan));
+            continue;
+        }
+        if (chan->chan_tflags & SCSIPI_CHANT_SHUTDOWN)
+            break;
+        if (xs) {
+            TAILQ_REMOVE(&chan->chan_complete, xs, channel_q);
+            mutex_exit(chan_mtx(chan));
+
+            /*
+             * Have an xfer with an error; process it.
+             */
+            (void) scsipi_complete(xs);
+
+            /*
+             * Kick the queue; keep it running if it was stopped
+             * for some reason.
+             */
+            scsipi_run_queue(chan);
+            mutex_enter(chan_mtx(chan));
+        }
+    }
+    chan->chan_flags &= ~SCSIPI_CHAN_TACTIVE;
+}
+
+
+/*
+ * scsipi_complete:
+ *
+ *	Completion of a scsipi_xfer.  This is the guts of scsipi_done().
+ *
+ *	NOTE: This routine MUST be called with valid thread context
+ *	except for the case where the following two conditions are
+ *	true:
+ *
+ *		xs->error == XS_NOERROR
+ *		XS_CTL_ASYNC is set in xs->xs_control
+ *
+ *	The semantics of this routine can be tricky, so here is an
+ *	explanation:
+ *
+ *		0		Xfer completed successfully.
+ *
+ *		ERESTART	Xfer had an error, but was restarted.
+ *
+ *		anything else	Xfer had an error, return value is Unix
+ *				errno.
+ *
+ *	If the return value is anything but ERESTART:
+ *
+ *		- If XS_CTL_ASYNC is set, `xs' has been freed back to
+ *		  the pool.
+ *		- If there is a buf associated with the xfer,
+ *		  it has been biodone()'d.
+ */
+static int
+scsipi_complete(struct scsipi_xfer *xs)
+{
+	struct scsipi_periph *periph = xs->xs_periph;
+	struct scsipi_channel *chan = periph->periph_channel;
+	int error;
+
+	SDT_PROBE1(scsi, base, xfer, complete,  xs);
+
+#ifdef DIAGNOSTIC
+	if ((xs->xs_control & XS_CTL_ASYNC) != 0 && xs->bp == NULL)
+		panic("scsipi_complete: XS_CTL_ASYNC but no buf");
+#endif
+	/*
+	 * If command terminated with a CHECK CONDITION, we need to issue a
+	 * REQUEST_SENSE command. Once the REQUEST_SENSE has been processed
+	 * we'll have the real status.
+	 * Must be processed with channel lock held to avoid missing
+	 * a SCSI bus reset for this command.
+	 */
+	mutex_enter(chan_mtx(chan));
+	if (xs->error == XS_BUSY && xs->status == SCSI_CHECK) {
+		/* request sense for a request sense ? */
+		if (xs->xs_control & XS_CTL_REQSENSE) {
+			scsipi_printaddr(periph);
+			printf("request sense for a request sense ?\n");
+			/* XXX maybe we should reset the device ? */
+			/* we've been frozen because xs->error != XS_NOERROR */
+#if 0
+			scsipi_periph_thaw_locked(periph, 1);
+#endif
+			mutex_exit(chan_mtx(chan));
+			if (xs->resid < xs->datalen) {
+				printf("we read %d bytes of sense anyway:\n",
+				    xs->datalen - xs->resid);
+//				scsipi_print_sense_data((void *)xs->data, 0);
+			}
+			return EINVAL;
+		}
+		mutex_exit(chan_mtx(chan)); // XXX allows other commands to queue or run
+		scsipi_request_sense(xs);
+#if 0
+                printf("Got sense:");
+                for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
+                    printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
+                printf("\n");
+#endif
+	} else
+		mutex_exit(chan_mtx(chan));
+
+#if 0
+/*
+ * cdh disabled for now -- not sure, but might need this if
+ * scsidirect is not asking for sense data.
+ */
+	/*
+	 * If it's a user level request, bypass all usual completion
+	 * processing, let the user work it out..
+	 */
+	if ((xs->xs_control & XS_CTL_USERCMD) != 0) {
+		SC_DEBUG(periph, SCSIPI_DB3, ("calling user done()\n"));
+		mutex_enter(chan_mtx(chan));
+#if 0
+		if (xs->error != XS_NOERROR)
+			scsipi_periph_thaw_locked(periph, 1);
+#endif
+		mutex_exit(chan_mtx(chan));
+		scsipi_user_done(xs);
+		SC_DEBUG(periph, SCSIPI_DB3, ("returned from user done()\n "));
+		return 0;
+	}
+#endif
+
+	switch (xs->error) {
+	case XS_NOERROR:
+		error = 0;
+		break;
+
+	case XS_SENSE:
+	case XS_SHORTSENSE:
+//		error = (*chan->chan_bustype->bustype_interpret_sense)(xs);
+                error = xs->error;
+		break;
+
+	case XS_RESOURCE_SHORTAGE:
+		/*
+		 * XXX Should freeze channel's queue.
+		 */
+		scsipi_printaddr(periph);
+		printf("adapter resource shortage\n");
+		/* FALLTHROUGH */
+
+	case XS_BUSY:
+#if 0
+		if (xs->error == XS_BUSY && xs->status == SCSI_QUEUE_FULL) {
+			struct scsipi_max_openings mo;
+
+			/*
+			 * We set the openings to active - 1, assuming that
+			 * the command that got us here is the first one that
+			 * can't fit into the device's queue.  If that's not
+			 * the case, I guess we'll find out soon enough.
+			 */
+			mo.mo_target = periph->periph_target;
+			mo.mo_lun = periph->periph_lun;
+			if (periph->periph_active < periph->periph_openings)
+				mo.mo_openings = periph->periph_active - 1;
+			else
+				mo.mo_openings = periph->periph_openings - 1;
+#ifdef DIAGNOSTIC
+			if (mo.mo_openings < 0) {
+				scsipi_printaddr(periph);
+				printf("QUEUE FULL resulted in < 0 openings\n");
+				panic("scsipi_done");
+			}
+#endif
+			if (mo.mo_openings == 0) {
+				scsipi_printaddr(periph);
+				printf("QUEUE FULL resulted in 0 openings\n");
+				mo.mo_openings = 1;
+			}
+			scsipi_async_event(chan, ASYNC_EVENT_MAX_OPENINGS, &mo);
+			error = ERESTART;
+		} else if (xs->xs_retries != 0) {
+#else
+// }
+		if (xs->xs_retries != 0) {
+#endif
+			xs->xs_retries--;
+			/*
+			 * Wait one second, and try again.
+			 */
+			mutex_enter(chan_mtx(chan));
+			if ((xs->xs_control & XS_CTL_POLL) ||
+			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
+#if 0
+				/* XXX: quite extreme */
+				kpause("xsbusy", false, hz, chan_mtx(chan));
+#else
+                                printf("CDH: poll delay\n");
+                                delay(1000000);
+#endif
+#if 0
+			} else if (!callout_pending(&periph->periph_callout)) {
+				scsipi_periph_freeze_locked(periph, 1);
+				callout_reset(&periph->periph_callout,
+				    hz, scsipi_periph_timed_thaw, periph);
+#endif
+			}
+			mutex_exit(chan_mtx(chan));
+			error = ERESTART;
+		} else
+			error = EBUSY;
+		break;
+
+	case XS_REQUEUE:
+		error = ERESTART;
+		break;
+
+	case XS_SELTIMEOUT:
+	case XS_TIMEOUT:
+		/*
+		 * If the device hasn't gone away, honor retry counts.
+		 *
+		 * Note that if we're in the middle of probing it,
+		 * it won't be found because it isn't here yet so
+		 * we won't honor the retry count in that case.
+		 */
+#if 0
+		if (scsipi_lookup_periph(chan, periph->periph_target,
+		    periph->periph_lun) && xs->xs_retries != 0) {
+			xs->xs_retries--;
+			error = ERESTART;
+		} else
+#endif
+			error = EIO;
+		break;
+
+	case XS_RESET:
+		if (xs->xs_control & XS_CTL_REQSENSE) {
+			/*
+			 * request sense interrupted by reset: signal it
+			 * with EINTR return code.
+			 */
+			error = EINTR;
+		} else {
+			if (xs->xs_retries != 0) {
+				xs->xs_retries--;
+				error = ERESTART;
+			} else
+				error = EIO;
+		}
+		break;
+
+	case XS_DRIVER_STUFFUP:
+		scsipi_printaddr(periph);
+		printf("generic HBA error\n");
+		error = EIO;
+		break;
+	default:
+		scsipi_printaddr(periph);
+		printf("invalid return code from adapter: %d\n", xs->error);
+		error = EIO;
+		break;
+	}
+
+	mutex_enter(chan_mtx(chan));
+	if (error == ERESTART) {
+		SDT_PROBE1(scsi, base, xfer, restart,  xs);
+		/*
+		 * If we get here, the periph has been thawed and frozen
+		 * again if we had to issue recovery commands.  Alternatively,
+		 * it may have been frozen again and in a timed thaw.  In
+		 * any case, we thaw the periph once we re-enqueue the
+		 * command.  Once the periph is fully thawed, it will begin
+		 * operation again.
+		 */
+		xs->error = XS_NOERROR;
+		xs->status = SCSI_OK;
+		xs->xs_status &= ~XS_STS_DONE;
+		xs->xs_requeuecnt++;
+		error = scsipi_enqueue(xs);
+		if (error == 0) {
+#if 0
+			scsipi_periph_thaw_locked(periph, 1);
+#endif
+			mutex_exit(chan_mtx(chan));
+			return ERESTART;
+		}
+	}
+
+	/*
+	 * scsipi_done() freezes the queue if not XS_NOERROR.
+	 * Thaw it here.
+	 */
+#if 0
+	if (xs->error != XS_NOERROR)
+		scsipi_periph_thaw_locked(periph, 1);
+	mutex_exit(chan_mtx(chan));
+
+	if (periph->periph_switch->psw_done)
+		periph->periph_switch->psw_done(xs, error);
+#endif
+
+        sd_complete(xs, xs->error);
+
+#if 0
+	mutex_enter(chan_mtx(chan));
+#endif
+#if 0
+	if (xs->xs_control & XS_CTL_ASYNC)
+		scsipi_put_xs(xs);
+#endif
+	mutex_exit(chan_mtx(chan));
+
+	return error;
+}
+
+/*
+ * Issue a request sense for the given scsipi_xfer. Called when the xfer
+ * returns with a CHECK_CONDITION status. Must be called in valid thread
+ * context.
+ */
+
+static void
+scsipi_request_sense(struct scsipi_xfer *xs)
+{
+	struct scsipi_periph *periph = xs->xs_periph;
+	int flags, error;
+	struct scsi_request_sense cmd;
+
+printf("CDH: asking for periph sense ior=%p\n", xs->amiga_ior);
+	periph->periph_flags |= PERIPH_SENSE;
+
+	/* if command was polling, request sense will too */
+	flags = xs->xs_control & XS_CTL_POLL;
+	/* Polling commands can't sleep */
+	if (flags)
+		flags |= XS_CTL_NOSLEEP;
+
+	flags |= XS_CTL_REQSENSE | XS_CTL_URGENT | XS_CTL_DATA_IN |
+	    XS_CTL_THAW_PERIPH | XS_CTL_FREEZE_PERIPH;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.opcode = SCSI_REQUEST_SENSE;
+	cmd.length = sizeof(struct scsi_sense_data);
+
+	error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
+	    (void *)&xs->sense.scsi_sense, sizeof(struct scsi_sense_data),
+	    0, 1000, NULL, flags);
+	periph->periph_flags &= ~PERIPH_SENSE;
+	periph->periph_xscheck = NULL;
+	switch (error) {
+	case 0:
+		/* we have a valid sense */
+		xs->error = XS_SENSE;
+		return;
+	case EINTR:
+		/* REQUEST_SENSE interrupted by bus reset. */
+		xs->error = XS_RESET;
+		return;
+	case EIO:
+		 /* request sense couldn't be performed */
+		/*
+		 * XXX this isn't quite right but we don't have anything
+		 * better for now
+		 */
+		xs->error = XS_DRIVER_STUFFUP;
+		return;
+	default:
+		 /* Notify that request sense failed. */
+		xs->error = XS_DRIVER_STUFFUP;
+		scsipi_printaddr(periph);
+		printf("request sense failed with error %d\n", error);
+		return;
+	}
 }
 
 

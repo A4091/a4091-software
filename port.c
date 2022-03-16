@@ -5,6 +5,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
+#include <exec/execbase.h>
 #include "printf.h"
 
 void check_break(void);
@@ -18,6 +19,20 @@ panic(const char *s)
     printf("PANIC: %s", s);
     exit(1);
 }
+
+#if 0
+void
+usleep(int usecs)
+{
+    /*
+     * 1. Allocate IORequest
+     * 2. Open Message port
+     * 3. Open timer.device with VBLANK and MICROHZ
+     * 4. DoIO request
+     * 5. Close device
+     */
+}
+#endif
 
 void
 delay(int usecs)
@@ -35,11 +50,10 @@ delay(int usecs)
     }
 #endif
     Delay(ticks);
-//  if (ticks > 1)
-        check_break();
 }
 
 static int bsd_ilevel = 0;
+/* Block (nesting) interrupts */
 int
 bsd_splbio(void)
 {
@@ -53,6 +67,7 @@ bsd_splbio(void)
     return (bsd_ilevel++);
 }
 
+/* Enable (nesting) interrupts */
 void
 bsd_splx(int ilevel)
 {
@@ -85,6 +100,7 @@ mstohz(int m)
     return (h);
 }
 
+#if 0
 void
 callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg)
 {
@@ -100,19 +116,15 @@ callout_stop(void *cs)
     check_break();
     return (0);
 }
+#endif
 
-
+#if 0
 uint32_t
 kvtop(void *vaddr)
 {
-#if 0
-    static uint32_t count = 0;
-    while (count++ < 10)
-        printf("kvtop(%p)\n", vaddr);
-    check_break();
-#endif
     return ((uint32_t) vaddr);
 }
+#endif
 
 // #define DCIAS(x) /* cache flush: cpushl dc,%a0@ */
 void
@@ -125,27 +137,53 @@ _DCIAS(uint32_t paddr)
     check_break();
 }
 
+#if 0
+/* cache flush / purge */
 void
 _DCIU(void)
 {
     printf("_DCIU()\n");
 }
+#endif
 
+#if 0
+/* instruction cache purge */
 void
 _ICIA(void)
 {
     printf("_ICIA()\n");
 }
+#endif
 
 
+#if 0
+/*
+ * dma_cachectl
+ * ------------
+ * Flush CPU cache at specified address to memory in preparation for a
+ * device-initiated DMA read to occur.
+ */
 int
 dma_cachectl(void *addr, int len)
 {
-    printf("dma_cachectl(%p, %x)\n", addr, len);
-    check_break();
-    return (0);
-}
+//  printf("dma_cachectl(%p, %x)\n", addr, len);
+    ULONG flags = DMA_ReadFromRAM;
+    int paddr = (int) addr;
 
+    while (len > 0) {
+        ULONG tlen = len;
+        APTR taddr = CachePreDMA(addr, &tlen, flags);
+        if ((flags & DMA_Continue) == 0) {
+            flags |= DMA_Continue;
+            paddr = (int) taddr;
+        }
+        len -= tlen;
+        addr += tlen;
+    }
+    check_break();
+    return (paddr);
+}
+#endif
 
 ulong __stack_size = 32768;
 
@@ -171,37 +209,31 @@ check_break(void)
 {
 }
 
-#if 1
 void exit(int __status)
 {
     KPrintF((CONST_STRPTR) "exit(%ld)", errno);
-}
-#endif
-
-void
-Zignal(struct Task *task, ULONG signalSet)
-{
+    while (1)
+        ;
 }
 
 /* Return the index of the lowest set bit. (Counted from one) */
 int
 ffs(int i)
 {
-        int result = 0;
+    int result = 0;
 
-        if(i != 0)
-        {
-                int x;
+    if (i != 0) {
+        int x;
 
-                x = (i & (-i)) - 1;
-                x -= ((x >> 1) & 0x55555555);
-                x = ((x >> 2) & 0x33333333) + (x & 0x33333333);
-                x = ((x >> 4) + x) & 0x0f0f0f0f;
-                x += (x >> 8);
-                x += (x >> 16);
+        x = (i & (-i)) - 1;
+        x -= ((x >> 1) & 0x55555555);
+        x = ((x >> 2) & 0x33333333) + (x & 0x33333333);
+        x = ((x >> 4) + x) & 0x0f0f0f0f;
+        x += (x >> 8);
+        x += (x >> 16);
 
-                result = 1 + (x & 0x3f); /* The first bit has index 1. */
-        }
+        result = 1 + (x & 0x3f);  /* The first bit has index 1. */
+    }
 
-        return(result);
+    return (result);
 }
