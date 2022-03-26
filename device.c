@@ -132,8 +132,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 static BPTR __attribute__((used))
 drv_expunge(struct Library *dev asm("a6"))
 {
-    printf("expunge()\n");
-
     if (dev->lib_OpenCnt != 0)
     {
         printf("expunge() device still open\n");
@@ -141,10 +139,10 @@ drv_expunge(struct Library *dev asm("a6"))
         return (0);
     }
 
+    printf("expunge()\n");
     BPTR seg_list = saved_seg_list;
     Remove(&dev->lib_Node);
     FreeMem((char *)dev - dev->lib_NegSize, dev->lib_NegSize + dev->lib_PosSize);
-    printf("expunge() expunged\n");
     return (seg_list);
 }
 
@@ -243,7 +241,7 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __attribute__((used))
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-    printf("begin_io(%d)\n", ior->io_Command);
+//    printf("begin_io(%d)\n", ior->io_Command);
     ior->io_Flags &= ~IOF_QUICK;
     PutMsg(myPort, &ior->io_Message);
 #if 0

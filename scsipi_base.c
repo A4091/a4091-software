@@ -33,6 +33,7 @@
 #include "port.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/types.h>
 #include <exec/memory.h>
@@ -44,11 +45,12 @@
 #include "scsi_disk.h"
 #include "scsipi_disk.h"
 #include "scsipi_base.h"
+#include "scsipi_all.h"
 #include "scsi_all.h"
 #include "siopreg.h"
 #include "siopvar.h"
 #include "scsi_message.h"
-#include "sd.h"
+// #include "sd.h"
 
 #undef SCSIPI_DEBUG
 
@@ -180,15 +182,72 @@ scsipi_enqueue(struct scsipi_xfer *xs)
 struct scsipi_xfer *
 scsipi_get_xs(struct scsipi_periph *periph, int flags)
 {
-    struct scsipi_xfer *xs = AllocMem(sizeof (*xs), MEMF_CLEAR | MEMF_PUBLIC);
+    /* pool get */
+    struct scsipi_xfer *xs;
+    struct scsipi_channel *chan = periph->periph_channel;
+
+    xs = chan->chan_xs_free;
+    if (xs != NULL) {
+        chan->chan_xs_free = *(struct scsipi_xfer **) xs;  /* ->next link */
+        memset(xs, 0, sizeof (*xs));
+    } else {
+        xs = AllocMem(sizeof (*xs), MEMF_CLEAR | MEMF_PUBLIC);
+        if (xs == NULL)
+            return (xs);
+    }
+
     callout_init(&xs->xs_callout, 0);
     xs->xs_periph = periph;
     xs->xs_control = flags;
     xs->xs_status = 0;
+    xs->xs_done_callback = NULL;
+    xs->xs_callback_arg = NULL;
     xs->amiga_ior = NULL;
-    xs->amiga_sdirect = NULL;
+
+    periph->periph_active++;
+
+#if 0
+    printf("get_xs(%p) active=%u\n", xs, periph->periph_active);
+#endif
     return (xs);
 }
+
+void
+scsipi_put_xs(struct scsipi_xfer *xs)
+{
+    /* pool put */
+    struct scsipi_periph  *periph = xs->xs_periph;
+    struct scsipi_channel *chan = periph->periph_channel;
+
+    periph->periph_active--;
+
+    /*
+     * Insert this entry at the top of the free list. It's really just
+     * a very simple linked list, where the first bytes of a given xs
+     * point to the next entry. Since the xs is "dead" in the free list,
+     * we ignore the fact there are other fields of a struct scsipi_xfer
+     * are being overwritten by the linked list.
+     */
+    *(struct scsipi_xfer **) xs = chan->chan_xs_free;
+    chan->chan_xs_free = xs;
+
+#if 0
+    printf("put_xs(%p) active=%u\n", xs, periph->periph_active);
+#endif
+}
+
+void
+scsipi_free_all_xs(struct scsipi_channel *chan)
+{
+    struct scsipi_xfer *xs = chan->chan_xs_free;
+    chan->chan_xs_free = NULL;
+    while (xs != NULL) {
+        struct scsipi_xfer *txs = xs;
+        xs = *(struct scsipi_xfer **) xs;  /* ->next link */
+        FreeMem(txs, sizeof (*txs));
+    }
+}
+
 
 /*
  * scsipi_execute_xs:
@@ -371,7 +430,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
 	mutex_enter(chan_mtx(chan));
  free_xs:
-//	scsipi_put_xs(xs);
+	scsipi_put_xs(xs);
 	mutex_exit(chan_mtx(chan));
 
 	/*
@@ -407,6 +466,7 @@ scsipi_channel_init(struct scsipi_channel *chan)
         /* Initialize shared data. */
         scsipi_init();
 #endif
+        chan->chan_xs_free = NULL;
 
         /* Initialize the queues. */
         TAILQ_INIT(&chan->chan_queue);
@@ -429,6 +489,82 @@ scsipi_channel_init(struct scsipi_channel *chan)
 
         return 0;
 }
+
+static uint32_t
+scsipi_chan_periph_hash(uint64_t t, uint64_t l)
+{
+        return (0);
+}
+
+/*
+ * scsipi_insert_periph:
+ *
+ *	Insert a periph into the channel.
+ */
+void
+scsipi_insert_periph(struct scsipi_channel *chan, struct scsipi_periph *periph)
+{
+	uint32_t hash;
+
+	hash = scsipi_chan_periph_hash(periph->periph_target,
+	    periph->periph_lun);
+
+	mutex_enter(chan_mtx(chan));
+	LIST_INSERT_HEAD(&chan->chan_periphtab[hash], periph, periph_hash);
+	mutex_exit(chan_mtx(chan));
+}
+
+/*
+ * scsipi_remove_periph:
+ *
+ *	Remove a periph from the channel.
+ */
+void
+scsipi_remove_periph(struct scsipi_channel *chan,
+    struct scsipi_periph *periph)
+{
+
+	LIST_REMOVE(periph, periph_hash);
+}
+
+/*
+ * scsipi_lookup_periph:
+ *
+ *	Lookup a periph on the specified channel.
+ */
+static struct scsipi_periph *
+scsipi_lookup_periph_internal(struct scsipi_channel *chan, int target, int lun, bool lock)
+{
+	struct scsipi_periph *periph;
+	uint32_t hash;
+
+	if (target >= chan->chan_ntargets ||
+	    lun >= chan->chan_nluns)
+		return NULL;
+
+	hash = scsipi_chan_periph_hash(target, lun);
+
+	if (lock)
+		mutex_enter(chan_mtx(chan));
+	LIST_FOREACH(periph, &chan->chan_periphtab[hash], periph_hash) {
+		if (periph->periph_target == target &&
+		    periph->periph_lun == lun) {
+printf("CDH: periph match %u.%u\n", target, lun);
+			break;
+}
+	}
+	if (lock)
+		mutex_exit(chan_mtx(chan));
+
+	return periph;
+}
+
+struct scsipi_periph *
+scsipi_lookup_periph(struct scsipi_channel *chan, int target, int lun)
+{
+	return scsipi_lookup_periph_internal(chan, target, lun, true);
+}
+
 
 struct scsipi_xfer *
 scsipi_make_xs_internal(struct scsipi_periph *periph,
@@ -746,7 +882,7 @@ scsipi_done(struct scsipi_xfer *xs)
 	struct scsipi_channel *chan = periph->periph_channel;
 	int freezecnt;
 
-printf("CDH: scsipi_done(%p)\n", xs);
+// printf("CDH: scsipi_done(%p) stat=%d sstat=%u serr=%u\n", xs, xs->xs_status, xs->status, xs->error);
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_done\n"));
 #ifdef SCSIPI_DEBUG
 	if (periph->periph_dbflags & SCSIPI_DB1)
@@ -987,7 +1123,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 		}
 		mutex_exit(chan_mtx(chan)); // XXX allows other commands to queue or run
 		scsipi_request_sense(xs);
-#if 0
+#if 1
                 printf("Got sense:");
                 for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
                     printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
@@ -1027,7 +1163,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 	case XS_SENSE:
 	case XS_SHORTSENSE:
 //		error = (*chan->chan_bustype->bustype_interpret_sense)(xs);
-                error = xs->error;
+                error = scsipi_interpret_sense(xs);
 		break;
 
 	case XS_RESOURCE_SHORTAGE:
@@ -1115,6 +1251,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 		 * we won't honor the retry count in that case.
 		 */
 #if 0
+// XXX: Enable this at some point
 		if (scsipi_lookup_periph(chan, periph->periph_target,
 		    periph->periph_lun) && xs->xs_retries != 0) {
 			xs->xs_retries--;
@@ -1190,18 +1327,467 @@ scsipi_complete(struct scsipi_xfer *xs)
 		periph->periph_switch->psw_done(xs, error);
 #endif
 
-        sd_complete(xs, xs->error);
+        if (xs->xs_done_callback != NULL)
+            xs->xs_done_callback(xs);
 
-#if 0
+//        sd_complete(xs, xs->error);
+
 	mutex_enter(chan_mtx(chan));
-#endif
-#if 0
 	if (xs->xs_control & XS_CTL_ASYNC)
 		scsipi_put_xs(xs);
-#endif
 	mutex_exit(chan_mtx(chan));
 
 	return error;
+}
+
+int
+scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
+    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
+    struct buf *bp, int flags)
+{
+        struct scsipi_xfer *xs;
+        int rc;
+
+        xs = scsipi_make_xs_locked(periph, cmd, cmdlen, data_addr, datalen,
+            retries, timeout, bp, flags);
+        if (!xs)
+                return (ENOMEM);
+
+        mutex_enter(chan_mtx(periph->periph_channel));
+        rc = scsipi_execute_xs(xs);
+        mutex_exit(chan_mtx(periph->periph_channel));
+
+        return rc;
+}
+
+/* stubbed routine */
+int
+scsipi_print_sense(struct scsipi_xfer * xs, int verbosity)
+{
+#if 0
+        scsipi_load_verbose();
+        if (scsi_verbose_loaded)
+                return scsipi_print_sense(xs, verbosity);
+        else
+#endif
+                return 0;
+}
+
+/*
+ * scsipi_interpret_sense:
+ *
+ *	Look at the returned sense and act on the error, determining
+ *	the unix error number to pass back.  (0 = report no error)
+ *
+ *	NOTE: If we return ERESTART, we are expected to have
+ *	thawed the device!
+ *
+ *	THIS IS THE DEFAULT ERROR HANDLER FOR SCSI DEVICES.
+ */
+int
+scsipi_interpret_sense(struct scsipi_xfer *xs)
+{
+	struct scsi_sense_data *sense;
+	struct scsipi_periph *periph = xs->xs_periph;
+	u_int8_t key;
+	int error;
+	u_int32_t info;
+	static const char *error_mes[] = {
+		"soft error (corrected)",
+		"not ready", "medium error",
+		"non-media hardware failure", "illegal request",
+		"unit attention", "readonly device",
+		"no data found", "vendor unique",
+		"copy aborted", "command aborted",
+		"search returned equal", "volume overflow",
+		"verify miscompare", "unknown error key"
+	};
+
+	sense = &xs->sense.scsi_sense;
+#define SCSIPI_DEBUG
+#ifdef SCSIPI_DEBUG
+	if (periph->periph_flags & SCSIPI_DB1) {
+	        int count, len;
+		scsipi_printaddr(periph);
+		printf(" sense debug information:\n");
+		printf("\tcode 0x%x valid %d\n",
+			SSD_RCODE(sense->response_code),
+			sense->response_code & SSD_RCODE_VALID ? 1 : 0);
+		printf("\tseg 0x%x key 0x%x ili 0x%x eom 0x%x fmark 0x%x\n",
+			sense->segment,
+			SSD_SENSE_KEY(sense->flags),
+			sense->flags & SSD_ILI ? 1 : 0,
+			sense->flags & SSD_EOM ? 1 : 0,
+			sense->flags & SSD_FILEMARK ? 1 : 0);
+		printf("\ninfo: 0x%x 0x%x 0x%x 0x%x followed by %d "
+			"extra bytes\n",
+			sense->info[0],
+			sense->info[1],
+			sense->info[2],
+			sense->info[3],
+			sense->extra_len);
+		len = SSD_ADD_BYTES_LIM(sense);
+		printf("\textra (up to %d bytes): ", len);
+		for (count = 0; count < len; count++)
+			printf("0x%x ", sense->csi[count]);
+		printf("\n");
+	}
+#endif
+
+#if 0
+	/*
+	 * If the periph has its own error handler, call it first.
+	 * If it returns a legit error value, return that, otherwise
+	 * it wants us to continue with normal error processing.
+	 */
+	if (periph->periph_switch->psw_error != NULL) {
+		SC_DEBUG(periph, SCSIPI_DB2,
+		    ("calling private err_handler()\n"));
+		error = (*periph->periph_switch->psw_error)(xs);
+		if (error != EJUSTRETURN)
+			return error;
+	}
+#endif
+	/* otherwise use the default */
+	switch (SSD_RCODE(sense->response_code)) {
+
+		/*
+		 * Old SCSI-1 and SASI devices respond with
+		 * codes other than 70.
+		 */
+	case 0x00:		/* no error (command completed OK) */
+		return 0;
+	case 0x04:		/* drive not ready after it was selected */
+		if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+			periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+		if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
+			return 0;
+		/* XXX - display some sort of error here? */
+		return EIO;
+	case 0x20:		/* invalid command */
+		if ((xs->xs_control &
+		     XS_CTL_IGNORE_ILLEGAL_REQUEST) != 0)
+			return 0;
+		return EINVAL;
+	case 0x25:		/* invalid LUN (Adaptec ACB-4000) */
+		return EACCES;
+
+		/*
+		 * If it's code 70, use the extended stuff and
+		 * interpret the key
+		 */
+	case 0x71:		/* delayed error */
+		scsipi_printaddr(periph);
+		key = SSD_SENSE_KEY(sense->flags);
+		printf(" DEFERRED ERROR, key = 0x%x\n", key);
+		/* FALLTHROUGH */
+	case 0x70:
+		if ((sense->response_code & SSD_RCODE_VALID) != 0)
+			info = _4btol(sense->info);
+		else
+			info = 0;
+		key = SSD_SENSE_KEY(sense->flags);
+
+		switch (key) {
+		case SKEY_NO_SENSE:
+		case SKEY_RECOVERED_ERROR:
+			if (xs->resid == xs->datalen && xs->datalen) {
+				/*
+				 * Why is this here?
+				 */
+				xs->resid = 0;	/* not short read */
+			}
+			error = 0;
+			break;
+		case SKEY_EQUAL:
+			error = 0;
+			break;
+		case SKEY_NOT_READY:
+			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+			if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
+				return 0;
+			if (sense->asc == 0x3A) {
+				error = ENODEV; /* Medium not present */
+				if (xs->xs_control & XS_CTL_SILENT_NODEV)
+					return error;
+			} else
+				error = EIO;
+			if ((xs->xs_control & XS_CTL_SILENT) != 0)
+				return error;
+			break;
+		case SKEY_ILLEGAL_REQUEST:
+			if ((xs->xs_control &
+			     XS_CTL_IGNORE_ILLEGAL_REQUEST) != 0)
+				return 0;
+			/*
+			 * Handle the case where a device reports
+			 * Logical Unit Not Supported during discovery.
+			 */
+			if ((xs->xs_control & XS_CTL_DISCOVERY) != 0 &&
+			    sense->asc == 0x25 &&
+			    sense->ascq == 0x00)
+				return EINVAL;
+			if ((xs->xs_control & XS_CTL_SILENT) != 0)
+				return EIO;
+			error = EINVAL;
+			break;
+		case SKEY_UNIT_ATTENTION:
+			if (sense->asc == 0x29 &&
+			    sense->ascq == 0x00) {
+				/* device or bus reset */
+				return ERESTART;
+			}
+			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+			if ((xs->xs_control &
+			     XS_CTL_IGNORE_MEDIA_CHANGE) != 0 ||
+				/* XXX Should reupload any transient state. */
+				(periph->periph_flags &
+				 PERIPH_REMOVABLE) == 0) {
+				return ERESTART;
+			}
+			if ((xs->xs_control & XS_CTL_SILENT) != 0)
+				return EIO;
+			error = EIO;
+			break;
+		case SKEY_DATA_PROTECT:
+			error = EROFS;
+			break;
+		case SKEY_BLANK_CHECK:
+			error = 0;
+			break;
+		case SKEY_ABORTED_COMMAND:
+			if (xs->xs_retries != 0) {
+				xs->xs_retries--;
+				error = ERESTART;
+			} else
+				error = EIO;
+			break;
+		case SKEY_VOLUME_OVERFLOW:
+			error = ENOSPC;
+			break;
+		default:
+			error = EIO;
+			break;
+		}
+
+		/* Print verbose decode if appropriate and possible */
+		if ((key == 0) ||
+		    ((xs->xs_control & XS_CTL_SILENT) != 0) ||
+		    (scsipi_print_sense(xs, 0) != 0))
+			return error;
+
+		/* Print brief(er) sense information */
+		scsipi_printaddr(periph);
+		printf("%s", error_mes[key - 1]);
+		if ((sense->response_code & SSD_RCODE_VALID) != 0) {
+			switch (key) {
+			case SKEY_NOT_READY:
+			case SKEY_ILLEGAL_REQUEST:
+			case SKEY_UNIT_ATTENTION:
+			case SKEY_DATA_PROTECT:
+				break;
+			case SKEY_BLANK_CHECK:
+				printf(", requested size: %d (decimal)",
+				    info);
+				break;
+			case SKEY_ABORTED_COMMAND:
+				if (xs->xs_retries)
+					printf(", retrying");
+				printf(", cmd 0x%x, info 0x%x",
+				    xs->cmd->opcode, info);
+				break;
+			default:
+				printf(", info = %d (decimal)", info);
+			}
+		}
+		if (sense->extra_len != 0) {
+			int n;
+			printf(", data =");
+			for (n = 0; n < sense->extra_len; n++)
+				printf(" %02x",
+				    sense->csi[n]);
+		}
+		printf("\n");
+		return error;
+
+	/*
+	 * Some other code, just report it
+	 */
+	default:
+#if    defined(SCSIDEBUG) || defined(DEBUG)
+	{
+		static const char *uc = "undecodable sense error";
+		int i;
+		u_int8_t *cptr = (u_int8_t *) sense;
+		scsipi_printaddr(periph);
+		if (xs->cmd == &xs->cmdstore) {
+			printf("%s for opcode 0x%x, data=",
+			    uc, xs->cmdstore.opcode);
+		} else {
+			printf("%s, data=", uc);
+		}
+		for (i = 0; i < sizeof (sense); i++)
+			printf(" 0x%02x", *(cptr++) & 0xff);
+		printf("\n");
+	}
+#else
+		scsipi_printaddr(periph);
+		printf("Sense Error Code 0x%x",
+			SSD_RCODE(sense->response_code));
+		if ((sense->response_code & SSD_RCODE_VALID) != 0) {
+			struct scsi_sense_data_unextended *usense =
+			    (struct scsi_sense_data_unextended *)sense;
+			printf(" at block no. %d (decimal)",
+			    _3btol(usense->block));
+		}
+		printf("\n");
+#endif
+		return EIO;
+	}
+}
+
+static int
+scsipi_inquiry3_ok(const struct scsipi_inquiry_data *ib)
+{
+#if 0
+	for (size_t i = 0; i < __arraycount(scsipi_inquiry3_quirk); i++) {
+		const struct scsipi_inquiry3_pattern *q =
+		    &scsipi_inquiry3_quirk[i];
+#define MATCH(field) \
+    (q->field[0] ? memcmp(ib->field, q->field, sizeof(ib->field)) == 0 : 1)
+		if (MATCH(vendor) && MATCH(product) && MATCH(revision))
+			return 0;
+	}
+#endif
+	return 1;
+}
+
+
+/*
+ * scsipi_inquire:
+ *
+ *	Ask the device about itself.
+ */
+int
+scsipi_inquire(struct scsipi_periph *periph, struct scsipi_inquiry_data *inqbuf,
+    int flags)
+{
+	struct scsipi_inquiry cmd;
+	int error;
+	int retries;
+
+	if (flags & XS_CTL_DISCOVERY)
+		retries = 0;
+	else
+		retries = SCSIPIRETRIES;
+
+	/*
+	 * If we request more data than the device can provide, it SHOULD just
+	 * return a short response.  However, some devices error with an
+	 * ILLEGAL REQUEST sense code, and yet others have even more special
+	 * failure modes (such as the GL641USB flash adapter, which goes loony
+	 * and sends corrupted CRCs).  To work around this, and to bring our
+	 * behavior more in line with other OSes, we do a shorter inquiry,
+	 * covering all the SCSI-2 information, first, and then request more
+	 * data iff the "additional length" field indicates there is more.
+	 * - mycroft, 2003/10/16
+	 */
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.opcode = INQUIRY;
+	cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI2;
+	error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
+	    (void *)inqbuf, SCSIPI_INQUIRY_LENGTH_SCSI2, retries,
+	    10000, NULL, flags | XS_CTL_DATA_IN);
+	if (!error &&
+	    inqbuf->additional_length > SCSIPI_INQUIRY_LENGTH_SCSI2 - 4) {
+	    if (scsipi_inquiry3_ok(inqbuf)) {
+#if 0
+printf("inquire: addlen=%d, retrying\n", inqbuf->additional_length);
+#endif
+		cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI3;
+		error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
+		    (void *)inqbuf, SCSIPI_INQUIRY_LENGTH_SCSI3, retries,
+		    10000, NULL, flags | XS_CTL_DATA_IN);
+#if 0
+printf("inquire: error=%d\n", error);
+#endif
+	    }
+	}
+
+#ifdef SCSI_OLD_NOINQUIRY
+	/*
+	 * Kludge for the Adaptec ACB-4000 SCSI->MFM translator.
+	 * This board doesn't support the INQUIRY command at all.
+	 */
+	if (error == EINVAL || error == EACCES) {
+		/*
+		 * Conjure up an INQUIRY response.
+		 */
+		inqbuf->device = (error == EINVAL ?
+			 SID_QUAL_LU_PRESENT :
+			 SID_QUAL_LU_NOTPRESENT) | T_DIRECT;
+		inqbuf->dev_qual2 = 0;
+		inqbuf->version = 0;
+		inqbuf->response_format = SID_FORMAT_SCSI1;
+		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
+		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
+		memcpy(inqbuf->vendor, "ADAPTEC ACB-4000            ", 28);
+		error = 0;
+	}
+
+	/*
+	 * Kludge for the Emulex MT-02 SCSI->QIC translator.
+	 * This board gives an empty response to an INQUIRY command.
+	 */
+	else if (error == 0 &&
+	    inqbuf->device == (SID_QUAL_LU_PRESENT | T_DIRECT) &&
+	    inqbuf->dev_qual2 == 0 &&
+	    inqbuf->version == 0 &&
+	    inqbuf->response_format == SID_FORMAT_SCSI1) {
+		/*
+		 * Fill out the INQUIRY response.
+		 */
+		inqbuf->device = (SID_QUAL_LU_PRESENT | T_SEQUENTIAL);
+		inqbuf->dev_qual2 = SID_REMOVABLE;
+		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
+		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
+		memcpy(inqbuf->vendor, "EMULEX  MT-02 QIC           ", 28);
+	}
+#endif /* SCSI_OLD_NOINQUIRY */
+
+	return error;
+}
+
+/*
+ * scsipi_mode_sense, scsipi_mode_sense_big:
+ *	get a sense page from a device
+ */
+
+int
+scsipi_mode_sense(struct scsipi_periph *periph, int byte2, int page,
+    struct scsi_mode_parameter_header_6 *data, int len, int flags, int retries,
+    int timeout)
+{
+	struct scsi_mode_sense_6 cmd;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.opcode = SCSI_MODE_SENSE_6;
+	cmd.byte2 = byte2;
+	cmd.page = page;
+	cmd.length = len & 0xff;
+
+printf("running scsipi_command\n");
+#if 0
+	return scsipi_command(periph, (void *)&cmd, sizeof(cmd),
+	    (void *)data, len, retries, timeout, NULL, flags | XS_CTL_DATA_IN);
+#else
+	int rc = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
+	    (void *)data, len, retries, timeout, NULL, flags | XS_CTL_DATA_IN);
+        printf("scsipi_command returned %d\n", rc);
+        return (rc);
+#endif
 }
 
 /*
@@ -1264,6 +1850,81 @@ printf("CDH: asking for periph sense ior=%p\n", xs->amiga_ior);
 	}
 }
 
+/*
+ * scsipi_test_unit_ready:
+ *
+ *	Issue a `test unit ready' request.
+ */
+int
+scsipi_test_unit_ready(struct scsipi_periph *periph, int flags)
+{
+	struct scsi_test_unit_ready cmd;
+	int retries;
+
+	/* some ATAPI drives don't support TEST UNIT READY. Sigh */
+	if (periph->periph_quirks & PQUIRK_NOTUR)
+		return 0;
+
+	if (flags & XS_CTL_DISCOVERY)
+		retries = 0;
+	else
+		retries = SCSIPIRETRIES;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.opcode = SCSI_TEST_UNIT_READY;
+
+	return scsipi_command(periph, (void *)&cmd, sizeof(cmd), 0, 0,
+	    retries, 10000, NULL, flags);
+}
+
+/*
+ * scsipi_set_xfer_mode:
+ *
+ *	Set the xfer mode for the specified I_T Nexus.
+ */
+void
+scsipi_set_xfer_mode(struct scsipi_channel *chan, int target, int immed)
+{
+	struct scsipi_xfer_mode xm;
+	struct scsipi_periph *itperiph;
+	int lun;
+
+printf("CDH: scsipi_set_xfer_mode %u\n", target);
+	/*
+	 * Go to the minimal xfer mode.
+	 */
+	xm.xm_target = target;
+	xm.xm_mode = 0;
+	xm.xm_period = 0;			/* ignored */
+	xm.xm_offset = 0;			/* ignored */
+
+	/*
+	 * Find the first LUN we know about on this I_T Nexus.
+	 */
+	for (itperiph = NULL, lun = 0; lun < chan->chan_nluns; lun++) {
+		itperiph = scsipi_lookup_periph(chan, target, lun);
+		if (itperiph != NULL)
+			break;
+	}
+	if (itperiph != NULL) {
+		xm.xm_mode = itperiph->periph_cap;
+		/*
+		 * Now issue the request to the adapter.
+		 */
+		scsipi_adapter_request(chan, ADAPTER_REQ_SET_XFER_MODE, &xm);
+		/*
+		 * If we want this to happen immediately, issue a dummy
+		 * command, since most adapters can't really negotiate unless
+		 * they're executing a job.
+		 */
+		if (immed != 0) {
+			(void) scsipi_test_unit_ready(itperiph,
+			    XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
+			    XS_CTL_IGNORE_NOT_READY |
+			    XS_CTL_IGNORE_MEDIA_CHANGE);
+		}
+	}
+}
 
 #ifdef SCSIPI_DEBUG
 void

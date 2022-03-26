@@ -46,7 +46,7 @@ void delay(int usecs);
 #define __UNVOLATILE(x) ((void *)(unsigned long)(volatile void *)(x))
 #define __UNCONST(a) ((void *)(intptr_t)(a))
 
-void _DCIAS(uint32_t paddr);
+// void _DCIAS(uint32_t paddr);
 
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
@@ -69,8 +69,13 @@ int dbgprintf(const char *fmt, ...);
 #define SDT_PROBE3(t,u,v,w,x,y,z)
 #define KASSERT(x)
 
+#define mutex_init(x, y, z)
 #define mutex_enter(x)
 #define mutex_exit(x)
+#define cv_init(x, y)
+#define cv_wait(x, y)
+#define cv_broadcast(x)
+#define cv_destroy(x)
 
 void *device_private(device_t dev);
 

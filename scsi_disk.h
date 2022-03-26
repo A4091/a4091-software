@@ -328,6 +328,16 @@ union scsi_disk_pages {
 		u_int8_t reserved1;
 		u_int8_t reserved2;
 	} flex_geometry;
+	struct page_rbc_params {
+		u_int8_t pg_code;	/* page code (should be 6) */
+		u_int8_t pg_length;	/* page length (should be <= 0x0b) */
+		u_int8_t wcd;           /* bit0: cache disable */
+		u_int8_t lbs[2];        /* logical block size */
+		u_int8_t size[5];       /* number of log. blocks */
+		u_int8_t pp;            /* power/performance */
+		u_int8_t flags;
+		u_int8_t resvd;
+	} rbc_params;
 	struct page_caching {
 		u_int8_t pg_code;	/* page code (should be 8) */
 		u_int8_t pg_length;	/* page length (should be 0x0a) */

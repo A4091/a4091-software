@@ -79,12 +79,10 @@ typedef struct {
     char *buf_end;
 } buf_t;
 
-#define DEBUG_PRINT
-
 int
 putchar(int ch)
 {
-#ifdef DEBUG_PRINT
+#ifndef NO_SERIAL_OUTPUT
     KPutChar(ch);
 #endif
     return (ch);
@@ -93,7 +91,7 @@ putchar(int ch)
 int
 puts(const char *str)
 {
-#ifdef DEBUG_PRINT
+#ifndef NO_SERIAL_OUTPUT
     KPutS(str);
     KPutChar('\n');
 #endif

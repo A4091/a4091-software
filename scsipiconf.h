@@ -273,11 +273,16 @@ struct scsipi_bustype {
  * 	is shared with the aa_bustype member of struct ata_atapi_attach.
  */
 
+#ifdef PORT_AMIGA
+#define	SCSIPI_CHAN_PERIPH_BUCKETS	1
+#else
 #define	SCSIPI_CHAN_PERIPH_BUCKETS	16
+#endif
 #define	SCSIPI_CHAN_PERIPH_HASHMASK	(SCSIPI_CHAN_PERIPH_BUCKETS - 1)
 
 #ifdef _KERNEL
 struct scsipi_channel {
+        struct scsipi_xfer *chan_xs_free;  /* available xfer descriptors */
 //	const struct scsipi_bustype *chan_bustype; /* channel's bus type */
 	const char *chan_name;	/* this channel's name */
 
@@ -430,6 +435,7 @@ struct scsipi_periph {
 
 	int	periph_target;		/* target ID (drive # on ATAPI) */
 	int	periph_lun;		/* LUN (not used on ATAPI) */
+	int	periph_blksize;		/* Block size of this LUN */
 
 	int	periph_version;		/* ANSI SCSI version */
 
@@ -564,9 +570,10 @@ struct scsipi_xfer {
 	TAILQ_ENTRY(scsipi_xfer) channel_q; /* entry on channel queue */
 	TAILQ_ENTRY(scsipi_xfer) device_q;  /* device's pending xfers */
 //	callout_t xs_callout;		/* callout for adapter use */
+        void (*xs_done_callback)(struct scsipi_xfer *);
+
+        void    *xs_callback_arg;       /* AmigaOS callback data */
         void    *amiga_ior;             /* AmigaOS IO request for transfer */
-        void    *amiga_sdirect;         /* AmigaOS SCSIDIRECT structure */
-	void *xs_callout;		/* callout for adapter use */
 	int	xs_control;		/* control flags */
 	volatile int xs_status;		/* status flags */
 	struct scsipi_periph *xs_periph;/* peripheral doing the xfer */
@@ -700,8 +707,10 @@ struct scsi_quirk_inquiry_pattern {
 void	scsipi_init(void);
 void	scsipi_ioctl_init(void);
 void	scsipi_load_verbose(void);
+#if 0
 int	scsipi_command(struct scsipi_periph *, struct scsipi_generic *, int,
 	    u_char *, int, int, int, struct buf *, int);
+#endif
 void	scsipi_create_completion_thread(void *);
 const void *scsipi_inqmatch(struct scsipi_inquiry_pattern *, const void *,
 	    size_t, size_t, int *);
@@ -729,10 +738,13 @@ void    scsipi_get_opcodeinfo(struct scsipi_periph *periph);
 void    scsipi_free_opcodeinfo(struct scsipi_periph *periph);
 struct scsipi_periph *scsipi_alloc_periph(int);
 void	scsipi_free_periph(struct scsipi_periph *);
+void scsipi_free_all_xs(struct scsipi_channel *chan);
 
 /* Function pointers for scsiverbose module */
+#if 0
 extern int	(*scsipi_print_sense)(struct scsipi_xfer *, int);
 extern void	(*scsipi_print_sense_data)(struct scsi_sense_data *, int);
+#endif
 
 int     scsipi_print_sense_stub(struct scsipi_xfer *, int);
 void    scsipi_print_sense_data_stub(struct scsi_sense_data *, int);

@@ -187,10 +187,136 @@ printf("IP %02x\n", istat);
     }
 }
 
+static int
+cmd_do_iorequest(struct IORequest * ior)
+{
+    int             rc;
+    uint64_t        blkno;
+    uint32_t        blksize;
+    struct IOExtTD *iotd = (struct IOExtTD *) ior;
+
+    switch (ior->io_Command) {
+        case CMD_TERM:
+            printf("CMD_TERM\n");
+            detach((struct scsipi_periph *) ior->io_Unit);
+            printf("Detach done %p\n", &asave->as_isr);
+            CloseLibrary((struct Library *) DOSBase);
+            asave->as_isr = NULL;
+            FreeMem(asave, sizeof (*asave));
+            asave = NULL;
+            Forbid();
+            ReplyMsg(&ior->io_Message);
+            // DeletePort(myPort); ??  myPort = NULL;
+            return (1);
+
+        case CMD_READ:
+            printf("CMD_READ %lx %lx\n",
+                   iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            blksize = sd_blocksize((struct scsipi_periph *) ior->io_Unit);
+            blkno = iotd->iotd_Req.io_Offset / blksize;
+            rc = sd_diskstart(iotd->iotd_Req.io_Unit, blkno, B_READ,
+                              iotd->iotd_Req.io_Data,
+                              iotd->iotd_Req.io_Length, ior);
+            if (rc == 0) {
+                iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
+                /* cmd_complete() does ReplyMsg() */
+            } else {
+                iotd->iotd_Req.io_Error = rc;
+                iotd->iotd_Req.io_Actual = 0;
+                ReplyMsg(&ior->io_Message);
+            }
+            break;
+
+        case CMD_WRITE:
+            printf("CMD_WRITE %lx %lx\n",
+                   iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            blksize = sd_blocksize((struct scsipi_periph *) ior->io_Unit);
+            blkno = iotd->iotd_Req.io_Offset / blksize;
+            rc = sd_diskstart(iotd->iotd_Req.io_Unit, blkno, B_WRITE,
+                              iotd->iotd_Req.io_Data,
+                              iotd->iotd_Req.io_Length, ior);
+            if (rc == 0) {
+                iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
+                /* cmd_complete() does ReplyMsg() */
+            } else {
+                iotd->iotd_Req.io_Error = rc;
+                iotd->iotd_Req.io_Actual = 0;
+                ReplyMsg(&ior->io_Message);
+            }
+            break;
+/*
+* ETD_READ
+* ETD_WRITE
+*/
+        case HD_SCSICMD:      // Send any SCSI command to drive (SCSI Direct)
+            rc = sd_scsidirect(iotd->iotd_Req.io_Unit,
+                               iotd->iotd_Req.io_Data, ior);
+            if (rc != 0) {
+                iotd->iotd_Req.io_Error = rc;
+                ReplyMsg(&ior->io_Message);
+            }
+            break;
+        case TD_GETGEOMETRY:  // Get drive capacity, blocksize, etc
+            ior->io_Error = IOERR_NOCMD;
+            rc = sd_getgeometry(iotd->iotd_Req.io_Unit,
+                                iotd->iotd_Req.io_Data, ior);
+            if (rc != 0) {
+                iotd->iotd_Req.io_Error = rc;
+                ReplyMsg(&ior->io_Message);
+            }
+            // TD_GETGEOMETRY without media should return TDERR_DiskChanged 29
+            break;
+
+        // CMD_INVALID
+        // CMD_RESET
+        // CMD_UPDATE
+        // CMD_CLEAR
+        // CMD_STOP
+        // CMD_START
+        // CMD_FLUSH
+        //
+        // ETD_WRITE
+        // ETD_READ
+        // ETD_MOTOR
+        // ETD_SEEK
+        // ETD_FORMAT
+        // ETD_UPDATE
+        // ETD_CLEAR
+        // ETD_RAWREAD
+        // ETD_RAWWRITE
+
+        // TD_MOTOR          control the disk's motor
+        // TD_SEEK           explicit seek (for testing)
+        // TD_FORMAT         format disk
+        // TD_REMOVE         notify when disk changes
+        // TD_CHANGENUM      number of disk changes
+        // TD_CHANGESTATE    is there a disk in the drive?
+        // TD_PROTSTATUS     is the disk write protected?
+        // TD_RAWREAD        read raw bits from the disk
+        // TD_RAWWRITE       write raw bits to the disk
+        // TD_GETDRIVETYPE   get the type of the disk drive
+        // TD_GETNUMTRACKS   # of tracks for this type drive
+        // TD_ADDCHANGEINT   TD_REMOVE done right
+        // TD_REMCHANGEINT   remove softint set by ADDCHANGEINT
+        // TD_EJECT          for those drives that support it
+
+        default:
+            /* Unknown command */
+            printf("Unknown cmd %d\n", ior->io_Command);
+            /* FALLTHROUGH */
+        case TD_MOTOR:
+            ior->io_Error = IOERR_NOCMD;
+            ReplyMsg(&ior->io_Message);
+            break;
+    }
+    ior->io_Error = 0;
+
+    return (0);
+}
+
 void cmd_handler(void)
 {
     struct IORequest     *ior;
-    struct IOExtTD       *iotd;
     struct Process       *proc;
     struct siop_softc    *sc;
     start_msg_t          *msg;
@@ -198,8 +324,6 @@ void cmd_handler(void)
     ULONG                 cmd_mask;
     ULONG                 wait_mask;
     uint                  scsi_target;
-    int                   rc;
-    uint64_t              blkno;
     uint32_t              mask;
 #if 0
     register long devbase asm("a6");
@@ -264,100 +388,21 @@ printf("a4091_save=%p %p periph=%p\n", asave, msg->drv_state, msg->periph);
             continue;
 
         while ((ior = (struct IORequest *)GetMsg(myPort)) != NULL) {
-            ior->io_Error = 0;
-
-            switch (ior->io_Command) {
-                case CMD_TERM:
-                    printf("CMD_TERM\n");
-                    detach((struct scsipi_periph *) ior->io_Unit);
-                    printf("Detach done %p\n", &asave->as_isr);
-                    CloseLibrary((struct Library *) DOSBase);
-                    asave->as_isr = NULL;
-                    Forbid();
-                    ReplyMsg(&ior->io_Message);
-                    // DeletePort(myPort); ??  myPort = NULL;
-                    return;
-
-                case CMD_READ:
-                    iotd = (struct IOExtTD *)ior;
-                    printf("CMD_READ unit=%p %p\n", iotd->iotd_Req.io_Unit, ior->io_Unit);
-                    printf("CMD_READ %lx %lx\n",
-                           iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
-                    blkno = iotd->iotd_Req.io_Offset / 512;
-                    rc = diskstart((struct scsipi_periph *)
-                                   iotd->iotd_Req.io_Unit, blkno, B_READ,
-                                   iotd->iotd_Req.io_Data,
-                                   iotd->iotd_Req.io_Length, ior);
-                    if (rc == 0) {
-                        iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
-                        /* amiga_sd_complete() does ReplyMsg() */
-                    } else {
-                        iotd->iotd_Req.io_Error = rc;
-                        iotd->iotd_Req.io_Actual = 0;
-                        ReplyMsg(&ior->io_Message);
-                    }
-                    break;
-
-                case CMD_WRITE:
-                    iotd = (struct IOExtTD *)ior;
-                    printf("CMD_WRITE %lx %lx\n",
-                           iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
-#if 0
-ior->io_Error = IOERR_NOCMD;
-ReplyMsg(&ior->io_Message);
-continue;
-#endif
-                    blkno = iotd->iotd_Req.io_Offset / 512;
-                    rc = diskstart((struct scsipi_periph *)
-                                   iotd->iotd_Req.io_Unit, blkno, B_READ,
-                                   iotd->iotd_Req.io_Data,
-                                   iotd->iotd_Req.io_Length, ior);
-                    if (rc == 0) {
-                        iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
-                        /* amiga_sd_complete() does ReplyMsg() */
-                    } else {
-                        iotd->iotd_Req.io_Error = rc;
-                        iotd->iotd_Req.io_Actual = 0;
-                        ReplyMsg(&ior->io_Message);
-                    }
-                    break;
-
-/*
- * ETD_READ
- * ETD_WRITE
- * HD_SCSICMD = 28  (SCSI Direct)
- */
-                case HD_SCSICMD:
-                    iotd = (struct IOExtTD *)ior;
-                    rc = scsidirect((struct scsipi_periph *)
-                                    iotd->iotd_Req.io_Unit,
-                                    iotd->iotd_Req.io_Data, ior);
-                    if (rc != 0) {
-                        iotd->iotd_Req.io_Error = rc;
-                        ReplyMsg(&ior->io_Message);
-                    }
-                    break;
-                case TD_GETGEOMETRY:
-                    printf("TD_GETGEOMETRY not yet supportecsi\n");
-                    ior->io_Error = IOERR_NOCMD;
-                    ReplyMsg(&ior->io_Message);
-                    break;
-
-                default:
-                    /* Unknown command */
-                    printf("Unknown cmd %d\n", ior->io_Command);
-                    ior->io_Error = IOERR_NOCMD;
-                    ReplyMsg(&ior->io_Message);
-                    break;
-            }
+            if (cmd_do_iorequest(ior))
+                return;  // Exit handler
         }
     }
 }
 
 void
-amiga_sd_complete(void *ior, int8_t rc)
+cmd_complete(void *ior, int8_t rc)
 {
     struct IOStdReq *ioreq = ior;
+
+    if (ior == NULL) {
+        printf("NULL ior in cmd_complete\n");
+        return;
+    }
 
     ioreq->io_Error = rc;
     ReplyMsg(&ioreq->io_Message);

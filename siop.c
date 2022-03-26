@@ -87,25 +87,21 @@ __KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.70 2019/11/10 21:16:22 chs Exp $");
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
+#include <machine/cpu.h>
+#ifdef __m68k__
+#include <m68k/cacheops.h>
+#else
+#define DCIAS(pa)
 #endif
+
+#include <amiga/amiga/custom.h>
+#endif
+
 #include "scsi_all.h"
 #include "scsipiconf.h"
 #include <string.h>
 #include <stdlib.h>
 
-#if 0
-#include <machine/cpu.h>
-#endif
-#ifdef __m68k__
-// #include <m68k/cacheops.h>
-#include "cacheops.h"
-#else
-#define DCIAS(pa)
-#endif
-
-#if 0
-#include <amiga/amiga/custom.h>
-#endif
 #include "sys_queue.h"
 #include "siopreg.h"
 #include "siopvar.h"
@@ -155,6 +151,7 @@ int siop_data_wait = SCSI_DATA_WAIT;
 int siop_init_wait = SCSI_INIT_WAIT;
 
 #ifdef DEBUG_SYNC
+#define P_NS(x) ((x) / 4)
 /*
  * sync period transfer lookup - only valid for 66 MHz clock
  */
@@ -162,31 +159,35 @@ static struct {
     unsigned char p;    /* period from sync request message */
     unsigned char r;    /* siop_period << 4 | sbcl */
 } sync_tab[] = {
-    { 60/4, 0<<4 | 1},
-    { 76/4, 1<<4 | 1},
-    { 92/4, 2<<4 | 1},
-    { 92/4, 0<<4 | 2},
-    {108/4, 3<<4 | 1},
-    {116/4, 1<<4 | 2},
-    {120/4, 4<<4 | 1},
-    {120/4, 0<<4 | 3},
-    {136/4, 5<<4 | 1},
-    {140/4, 2<<4 | 2},
-    {152/4, 6<<4 | 1},
-    {152/4, 1<<4 | 3},
-    {164/4, 3<<4 | 2},
-    {168/4, 7<<4 | 1},
-    {180/4, 2<<4 | 3},
-    {184/4, 4<<4 | 2},
-    {208/4, 5<<4 | 2},
-    {212/4, 3<<4 | 3},
-    {232/4, 6<<4 | 2},
-    {240/4, 4<<4 | 3},
-    {256/4, 7<<4 | 2},
-    {272/4, 5<<4 | 3},
-    {300/4, 6<<4 | 3},
-    {332/4, 7<<4 | 3}
+    {P_NS(60),  0<<4 | 1},
+    {P_NS(76),  1<<4 | 1},
+    {P_NS(92),  2<<4 | 1},
+    {P_NS(92),  0<<4 | 2},
+    {P_NS(108), 3<<4 | 1},
+    {P_NS(116), 1<<4 | 2},
+    {P_NS(120), 4<<4 | 1},
+    {P_NS(120), 0<<4 | 3},
+    {P_NS(136), 5<<4 | 1},
+    {P_NS(140), 2<<4 | 2},
+    {P_NS(152), 6<<4 | 1},
+    {P_NS(152), 1<<4 | 3},
+    {P_NS(164), 3<<4 | 2},
+    {P_NS(168), 7<<4 | 1},
+    {P_NS(180), 2<<4 | 3},
+    {P_NS(184), 4<<4 | 2},
+    {P_NS(208), 5<<4 | 2},
+    {P_NS(212), 3<<4 | 3},
+    {P_NS(232), 6<<4 | 2},
+    {P_NS(240), 4<<4 | 3},
+    {P_NS(256), 7<<4 | 2},
+    {P_NS(272), 5<<4 | 3},
+    {P_NS(300), 6<<4 | 3},
+    {P_NS(332), 7<<4 | 3}
 };
+#endif
+
+#ifdef DEBUG_SYNC
+int siopsync_debug = 1;
 #endif
 
 #ifdef DEBUG
@@ -200,7 +201,7 @@ static struct {
  *  0x100 - disconnect/reselect
  */
 int siop_debug = 0x1ff;
-int siopsync_debug = 0;
+// int siopsync_debug = 0;
 int siopdma_hits = 0;
 int siopdma_misses = 0;
 int siopchain_ints = 0;
@@ -356,6 +357,7 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
                     return;
                 }
             }
+printf("CDH: delay\n");
             delay(20000);  // 1 AmigaOS tick
         }
         sstat0 = rp->siop_sstat0;
@@ -445,7 +447,6 @@ siop_scsidone(struct siop_acb *acb, int stat)
     struct siop_softc *sc;
     int dosched = 0;
 
-    printf("CDH: siop_scsidone\n");
     if (acb == NULL || (xs = acb->xs) == NULL) {
         printf("CDH: siop_scsidone: NULL acb %p or scsipi_xfer\n", acb);
 #ifdef DIAGNOSTIC
@@ -478,7 +479,6 @@ siop_scsidone(struct siop_acb *acb, int stat)
      * longer busy.  This code is sickening, but it works.
      */
     if (acb == sc->sc_nexus) {
-//      printf("CDH: acb %p is at nexus\n", acb);
         sc->sc_nexus = NULL;
         sc->sc_tinfo[periph->periph_target].lubusy &=
             ~(1<<periph->periph_lun);
@@ -600,7 +600,12 @@ siopinitialize(struct siop_softc *sc)
      * malloc sc_acb to ensure that DS is on a long word boundary.
      */
 
+#ifdef PORT_AMIGA
+    sc->sc_acb = AllocMem(sizeof(struct siop_acb) * SIOP_NACB,
+                          MEMF_CLEAR | MEMF_PUBLIC);
+#else
     sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB);
+#endif
 
     sc->sc_tcp[1] = 1000 / sc->sc_clock_freq;
     sc->sc_tcp[2] = 1500 / sc->sc_clock_freq;
@@ -638,6 +643,19 @@ siopinitialize(struct siop_softc *sc)
     siopreset(sc);
 }
 
+#ifdef PORT_AMIGA
+void
+siopshutdown(struct scsipi_periph *periph)
+{
+    struct scsipi_channel *chan = periph->periph_channel;
+    struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
+
+    siopreset(sc);
+    scsipi_free_all_xs(chan);
+    FreeMem(sc->sc_acb, sizeof(struct siop_acb) * SIOP_NACB);
+}
+#endif
+
 void
 siop_timeout(void *arg)
 {
@@ -669,7 +687,6 @@ siopreset(struct siop_softc *sc)
     struct siop_acb *acb;
 
     rp = sc->sc_siopp;
-printf("CDH: siopreset(%p)\n", rp);
 
     if (sc->sc_flags & SIOP_ALIVE)
         siopabort(sc, rp, "reset");
@@ -830,7 +847,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
             sc->sc_sync[target].state = NEG_DONE;
             sc->sc_sync[target].sbcl = 0;
             sc->sc_sync[target].sxfer = 0;
-#ifdef DEBUG
+#ifdef DEBUG_SYNC
             if (siopsync_debug)
                 printf ("Forcing target %d asynchronous\n", target);
 #endif
@@ -848,7 +865,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
             acb->msgout[5] = SIOP_MAX_OFFSET;
             acb->ds.idlen = 6;
             sc->sc_sync[target].state = NEG_WAITS;
-#ifdef DEBUG
+#ifdef DEBUG_SYNC
             if (siopsync_debug)
                 printf ("Sending sync request to target %d\n", target);
 #endif
@@ -888,8 +905,10 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         acb->ds.chain[nchain].databuf = (char *)
                 CachePreDMA((APTR) addr, &tcount, flags);
         flags |= DMA_Continue;
+#if 0
         printf("CDH: siop_start sg addr=%p count=%lu\n",
                acb->ds.chain[nchain].databuf, tcount);
+#endif
 #else
         /* original PAGESIZE scatter gather */
         acb->ds.chain[nchain].databuf = (char *) kvtop (addr);
@@ -976,6 +995,134 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #endif
 }
 
+#ifdef DEBUG_SYNC
+static void
+report_scsi_speed(siop_regmap_p rp, uint sbcl)
+{
+    uint bclk = 25;  // MHz, externally generated
+    uint sclk = 50;  // MHz, externally generated
+    uint dcntl_cf = rp->siop_dcntl >> 6;
+    uint sscf = sbcl & 3;
+    uint scsi_aclk_freq;
+    uint scsi_cclk_freq;
+    static const char * const sscf_str[] = {
+        "Set by DCNTL",
+        "SCLK / 1.0",
+        "SCLK / 1.5",
+        "SCLK / 2.0"
+    };
+    static const char * const cf_str[] = {
+        "SCLK/2.0 37.51-50.00M",
+        "SCLK/1.5 25.01-37.50M",
+        "SCLK/1.0 16.67-25.00M",
+        "SCLK/3.0 50.01-66.67M"
+    };
+    static const uint8_t aclk_div[] = { 20, 15, 10, 30 };  /* SCLK * 10 */
+    const char *scsi_sclk_str;
+    const char *scsi_aclk_str;
+
+    /*
+     * DCNTL register has clock frequency prescale factor bits CF1 and CF0.
+     * This is used to determine the SCSI Core Clock for Asynchronous and
+     * (optionally) Synchronous logic.
+     *
+     * CF1  CF0  CF Divisor  For SCLK (MHz)   SCSI Core Clock  /TCP
+     *  0    0      2.0      27.51-50.00 MHz  13.78-25.00 MHz  2.0
+     *  0    1      1.5      25.01-37.50 MHz  16.67-25.00 MHz  1.5
+     *  1    0      1.0      16.67-25.00 MHz  16.67-25.00 MHz  1.0
+     *  1    1      3.0      50.01-66.67 MHz  16.67-22.22 MHz  3.0
+     *
+     * Writing bits 1 and 0 of the SBCL register, these are SSCF1 and SSCF0.
+     * These determine the Synchronous Clock
+     * SSCF1  SSCF0  Synchronous Clock
+     *   0      0       Set by DCNTL
+     *   0      1       SCLK / 1.0
+     *   1      0       SCLK / 1.5
+     *   1      1       SCLK / 2.0
+     *
+     * SCSI bus synchronous rate is determined by dividing the Synchronous
+     * Clock by a XFERP (value based on TP2 TP1 TP0 bits 6:4 in the
+     * SXFER register).
+     *  TP2 TP1 TP0  XFERP        TP2 TP1 TP0  XFERP
+     *   0   0   0     4           1   0   0     8
+     *   0   0   1     5           1   0   1     9
+     *   0   1   0     6           1   1   0    10
+     *   0   1   1     7           1   1   1    11
+     */
+    scsi_aclk_str = cf_str[dcntl_cf];
+    scsi_aclk_freq = sclk * 10 / aclk_div[dcntl_cf];
+
+    if (sscf == 0) {
+        scsi_sclk_str = scsi_aclk_str;
+        scsi_cclk_freq = scsi_aclk_freq;
+    } else {
+        scsi_sclk_str = sscf_str[sscf];
+        if (sscf == 1)
+            scsi_cclk_freq = sclk;
+        else if (sscf == 2)
+            scsi_cclk_freq = sclk * 2 / 3;
+        else
+            scsi_cclk_freq = sclk / 2;
+    }
+
+    uint xferp = (rp->siop_sxfer >> 4) & 0x7;
+// CDH for 50MHz A4091, if xferp == 0, then 80ns period = 12.5MHz. 1 = 10MHz
+    uint period;
+    uint scntl1 = rp->siop_scntl1;
+    uint khz100;
+
+    uint tcp = 1000000 / scsi_cclk_freq;  // this is a fraction, now in ns
+    if (scntl1 & BIT(7))
+        period = tcp * (4 + xferp + 1) / 1000;
+    else
+        period = tcp * (4 + xferp) / 1000;
+    khz100 = 10000 / period;
+
+    printf("bclk=%u sclk=%u dcntl_cf=%u aclk=%uMHz \"%s\" sclk=%uMHz \"%s\" tcp=%u xferp=%u scntl1(7)=%x  SCSI Sync period=%uns %u.%uMHz\n", bclk, sclk, dcntl_cf, scsi_aclk_freq, scsi_aclk_str, scsi_cclk_freq, scsi_sclk_str, tcp, xferp, !!(scntl1 & BIT(7)), period, khz100 / 10, khz100 % 10);
+}
+#endif
+
+
+// CDH DEBUG
+static struct scsipi_syncparam {
+        int     ss_factor;
+        int     ss_period;      /* ns * 100 */
+} scsipi_syncparams[] = {
+        { 0x08,          625 }, /* FAST-160 (Ultra320) */
+        { 0x09,         1250 }, /* FAST-80 (Ultra160) */
+        { 0x0a,         2500 }, /* FAST-40 40MHz (Ultra2) */
+        { 0x0b,         3030 }, /* FAST-40 33MHz (Ultra2) */
+        { 0x0c,         5000 }, /* FAST-20 (Ultra) */
+};
+static const int scsipi_nsyncparams =
+    sizeof(scsipi_syncparams) / sizeof(scsipi_syncparams[0]);
+// CDH DEBUG
+int
+scsipi_sync_factor_to_period(int factor)
+{
+        int i;
+
+        for (i = 0; i < scsipi_nsyncparams; i++) {
+                if (factor == scsipi_syncparams[i].ss_factor)
+                        return scsipi_syncparams[i].ss_period;
+        }
+
+        return (factor * 4) * 100;
+}
+// CDH DEBUG
+int
+scsipi_sync_factor_to_freq(int factor)
+{
+        int i;
+
+        for (i = 0; i < scsipi_nsyncparams; i++) {
+                if (factor == scsipi_syncparams[i].ss_factor)
+                        return 100000000 / scsipi_syncparams[i].ss_period;
+        }
+
+        return 10000000 / ((factor * 4) * 10);
+}
+
 /*
  * Process a DMA or SCSI interrupt from the 53C710 SIOP
  */
@@ -1005,7 +1152,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     }
 #if 1
     if ((siop_debug & 0x100) && (acb != NULL))  {
+#ifdef PORT_AMIGA
+        ULONG length = 1;
+        CachePostDMA(&acb->stat[0], &length, 0);
+#else
         DCIAS((uintptr_t)&acb->stat[0]);   /* XXX */
+#endif
         printf ("siopchkintr: istat %x dstat %x sstat0 %x dsps %lx sbcl %x sts %x msg %x\n",
             istat, dstat, sstat0, rp->siop_dsps, rp->siop_sbcl, acb->stat[0], acb->msg[0]);
         printf ("sync msg in: %02x %02x %02x %02x %02x %02x\n",
@@ -1051,7 +1203,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 printf ("%s: target %d rejected sync request\n",
                     device_xname(sc->sc_dev), target);
             else
-/* XXX - need to set sync transfer parameters */
+/* XXX - need to set sync transfer parameters? */
                 printf("%s: target %d (sync) %02x %02x %02x\n",
                     device_xname(sc->sc_dev), target, acb->msg[1],
                     acb->msg[2], acb->msg[3]);
@@ -1091,7 +1243,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         target = acb->xs->xs_periph->periph_target;
         if (acb->msg[1] == MSG_EXT_MESSAGE && acb->msg[2] == 3 &&
             acb->msg[3] == MSG_SYNC_REQ) {
-#ifdef DEBUG
+#ifdef DEBUG_SYNC
             if (siopsync_debug)
                 printf ("sync msg in: %02x %02x %02x %02x %02x %02x\n",
                     acb->msg[0], acb->msg[1], acb->msg[2],
@@ -1131,6 +1283,10 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
             rp->siop_sxfer = sc->sc_sync[target].sxfer;
             rp->siop_sbcl = sc->sc_sync[target].sbcl;
+// printf("CDH: set1 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[target].sbcl);
+#ifdef DEBUG_SYNC
+            report_scsi_speed(rp, sc->sc_sync[target].sbcl);
+#endif
             if (sc->sc_sync[target].state == NEG_WAITS) {
                 sc->sc_sync[target].state = NEG_DONE;
                 rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
@@ -1377,7 +1533,13 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
             if (j < DMAMAXIO)
                 acb->ds.chain[j].datalen = 0;
+#ifdef PORT_AMIGA
+            ULONG length = sizeof (acb->ds.chain);
+            CachePreDMA(&acb->ds.chain, &length, 0);
+#else
+            /* Push and invalidate data cache line */
             DCIAS(kvtop((void *)&acb->ds.chain));
+#endif
         }
         ++sc->sc_tinfo[target].dconns;
         /*
@@ -1434,12 +1596,18 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             sc->sc_nexus = acb;
             sc->sc_flags |= acb->status;
             acb->status = 0;
+#ifdef PORT_AMIGA
+            ULONG length = sizeof (acb->stat[0]);
+            CachePreDMA(&acb->stat[0], &length, 0);
+#else
             DCIAS(kvtop(&acb->stat[0]));
+#endif
             rp->siop_dsa = kvtop((void *)&acb->ds);
             rp->siop_sxfer =
                 sc->sc_sync[acb->xs->xs_periph->periph_target].sxfer;
             rp->siop_sbcl =
                 sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl;
+printf("CDH: set2 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl);
             break;
         }
         if (acb == NULL) {
@@ -1489,6 +1657,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         rp->siop_dsa = kvtop((void *)&sc->sc_nexus->ds);
         rp->siop_sxfer = sc->sc_sync[target].sxfer;
         rp->siop_sbcl = sc->sc_sync[target].sbcl;
+printf("CDH: set3 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[target].sbcl);
         rp->siop_dsp = sc->sc_scriptspa;
         return (0);
     }
@@ -1508,7 +1677,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         printf ("%s: Unrecognized message in data sfbr %x msg %x sbcl %x\n",
             device_xname(sc->sc_dev), rp->siop_sfbr, acb->msg[1], rp->siop_sbcl);
         /* what should be done here? */
+#ifdef PORT_AMIGA
+        length = sizeof (acb->msg[1]);
+        CachePreDMA(&acb->msg[1], &length, 0);
+#else
         DCIAS(kvtop(&acb->msg[1]));
+#endif
         rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
         return (0);
     }
@@ -1671,7 +1845,12 @@ if (sc != NULL) {
 
 #ifdef DEBUG
     if (siop_debug & 5) {
+#ifdef PORT_AMIGA
+        LONG length = sizeof (sc->sc_nexus->stat[0]);
+        CachePreDMA(&sc->sc_nexus->stat[0], &length, 0);
+#else
         DCIAS(kvtop(&sc->sc_nexus->stat[0]));
+#endif
         printf ("%s: intr istat %x dstat %x sstat0 %x dsps %lx sbcl %x sts %x msg %x\n",
             device_xname(sc->sc_dev), istat, dstat, sstat0,
             rp->siop_dsps,  rp->siop_sbcl,
@@ -1706,11 +1885,6 @@ if (sc != NULL) {
 //  bsd_splx(s);
 }
 
-/*
- * This is based on the Progressive Peripherals 33Mhz Zeus driver and will
- * not be correct for other 53c710 boards.
- *
- */
 void
 scsi_period_to_siop(struct siop_softc *sc, int target)
 {
@@ -1719,9 +1893,13 @@ scsi_period_to_siop(struct siop_softc *sc, int target)
     int i;
 #endif
 
-    period = sc->sc_nexus->msg[4];
+    period = sc->sc_nexus->msg[4];  /* SCSI clock period = msg[4] * 4ns */
     offset = sc->sc_nexus->msg[5];
 #ifdef DEBUG_SYNC
+    /*
+     * Determine timing values using table lookup, just for debug comparison
+     * purposes. These values are not used; the computed value is used.
+     */
     sxfer = 0;
     if (offset <= SIOP_MAX_OFFSET)
         sxfer = offset;
@@ -1732,16 +1910,22 @@ scsi_period_to_siop(struct siop_softc *sc, int target)
             break;
         }
     }
-    printf ("siop sync old: siop_sxfr %02x, siop_sbcl %02x\n", sxfer, sbcl);
+    printf ("siop sync old: siop_sxfr %x, siop_sbcl %x\n", sxfer, sbcl);
 #endif
+    period *= 4;  /* Convert to ns */
     for (sbcl = 1; sbcl < 4; ++sbcl) {
-        sxfer = (period * 4 - 1) / sc->sc_tcp[sbcl] - 3;
+        sxfer = (period - 1) / sc->sc_tcp[sbcl] - 3;
         if (sxfer >= 0 && sxfer <= 7)
             break;
     }
+#if 0
+    sxfer = 7; sbcl = 2; // CDH hack for  3.0MHz
+    sxfer = 6;           // CDH hack for  5.0MHz
+    sxfer = 0;           // CDH hack for 12.5MHz
+#endif
     if (sbcl > 3) {
         printf("siop sync: unable to compute sync params for period %dns\n",
-            period * 4);
+            period);
         /*
          * XXX need to pick a value we can do and renegotiate
          */
@@ -1751,7 +1935,7 @@ scsi_period_to_siop(struct siop_softc *sc, int target)
             offset : SIOP_MAX_OFFSET);
 #ifdef DEBUG_SYNC
         printf("siop sync: params for period %dns: sxfer %x sbcl %x",
-            period * 4, sxfer, sbcl);
+            period, sxfer, sbcl);
         printf(" actual period %dns\n",
             sc->sc_tcp[sbcl] * ((sxfer >> 4) + 4));
 #endif

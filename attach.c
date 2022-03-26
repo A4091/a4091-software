@@ -32,6 +32,8 @@
 #include "siopvar.h"
 #include "attach.h"
 
+void scsipi_free_all_xs(struct scsipi_channel *chan);
+
 #define ZORRO_MFG_COMMODORE     0x0202
 #define ZORRO_PROD_A4091        0x0054
 
@@ -141,8 +143,6 @@ static const char * const expansion_library_name = "expansion.library";
 
 extern struct ExecBase *SysBase;
 
-#include "device.h"
-
 typedef struct {
     uint32_t              as_addr;
     struct DosLibrary    *as_DOSBase;
@@ -159,52 +159,6 @@ typedef struct {
 
 extern a4091_save_t *asave;
 
-
-static uint8_t
-get_ncrreg8(uint32_t a4091_base, uint reg)
-{
-    return (*ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg));
-}
-
-static void
-set_ncrreg8(uint32_t a4091_base, uint reg, uint8_t value)
-{
-    *ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg) = value;
-}
-
-/*
- * a4091_reset
- * -----------
- * Resets the A4091's 53C710 SCSI controller.
- */
-static void
-a4091_reset(uint32_t dev_base)
-{
-    /* Enable Ack: allow reg. writes */
-    set_ncrreg8(dev_base, REG_DCNTL, REG_DCNTL_EA);
-
-    /* Reset */
-    set_ncrreg8(dev_base, REG_ISTAT, REG_ISTAT_RST);
-
-    (void) get_ncrreg8(dev_base, REG_ISTAT); // Push out write
-
-    /* Clear reset */
-    set_ncrreg8(dev_base, REG_ISTAT, 0);
-    (void) get_ncrreg8(dev_base, REG_ISTAT); // Push out write
-
-    /* Set SCSI ID */
-    set_ncrreg8(dev_base, REG_SCID, BIT(7));
-
-    /* SCSI Core clock (37.51-50 MHz) */
-    set_ncrreg8(dev_base, REG_DCNTL, REG_DCNTL_EA);
-
-#if 0
-    /* Set DMA interrupt enable on Bus Fault, Abort, or Illegal instruction */
-    set_ncrreg8(dev_base, REG_DIEN, REG_DIEN_BF | REG_DIEN_ABRT | REG_DIEN_ILD);
-#endif
-
-    // Reset Enable Acknowlege and Function Control One (FC1) bits?
-}
 
 /*
  * irq_handler_core
@@ -274,11 +228,6 @@ a4091_add_local_irq_handler(uint32_t dev_base)
     struct Task *task = FindTask(NULL);
     if (task == NULL)
         return (0);
-#if 0
-    save = (a4091_save_t *) ((struct Process *) task)->pr_ExitData;
-    if (save == NULL)
-        return (0);
-#endif
 
     asave->as_addr           = dev_base;
     asave->as_SysBase        = SysBase;
@@ -299,7 +248,8 @@ a4091_add_local_irq_handler(uint32_t dev_base)
     asave->as_isr->is_Data         = asave;
     asave->as_isr->is_Code         = (VOID (*)()) irq_handler;
 
-    printf("my irq a4091_save=%p isr_struct=%p IRQ=%d\n", asave, &asave->as_isr, A4091_INTPRI);
+    printf("Add IRQ=%d pri=%d isr=%p asave=%p\n",
+           A4091_IRQ, A4091_INTPRI, &asave->as_isr, asave);
 
     AddIntServer(A4091_IRQ, asave->as_isr);
     return (0);
@@ -315,20 +265,6 @@ a4091_remove_local_irq_handler(void)
         asave->as_isr = NULL;
         RemIntServer(A4091_IRQ, as_isr);
         FreeMem(as_isr, sizeof (*asave->as_isr));
-#if 0
-        Forbid();
-        if (asave->as_svc_task != NULL) {
-            Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
-        }
-        Permit();
-        while (asave->as_svc_task != NULL) {
-            if (count++ > TICKS_PER_SECOND) {
-                printf("CMD handler took too long to exit %p\n", &asave->as_svc_task);
-                return;  // This is not going to end well...
-            }
-            Delay(1);
-        }
-#endif
         FreeSignal(asave->as_irq_signal);
     }
 }
@@ -381,7 +317,6 @@ a4091_validate(uint32_t dev_base)
         return (1);
     }
 
-    a4091_reset(dev_base);
     /*
      * Minimally validate device is present by writing the temp and scratch
      * registers.
@@ -419,26 +354,28 @@ attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
 
     printf("attach(%x, %d)\n", dev_base, scsi_target);
 
+    sprintf(self->dv_xname, "a4091,%u", scsi_target);
     if (a4091_validate(dev_base))
         return (1);
     periph->periph_channel = chan;  // Not sure this is needed
 
-//  periph->periph_cap |= PERIPH_CAP_SYNC;   // Synchronous SCSI
-//  periph->periph_cap |= PERIPH_CAP_TQING;  // Tagged command queuing
+#if 0
+    // periph_cap override happens elsewhere
+    periph->periph_cap |= PERIPH_CAP_SYNC;   // Synchronous SCSI
+    periph->periph_cap |= PERIPH_CAP_TQING;  // Tagged command queuing
+#endif
     periph->periph_openings = 1;  // Max # of outstanding commands
     periph->periph_target   = scsi_target % 10;         // SCSI target ID
     periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
     periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
+    periph->periph_dev = NULL;
+    periph->periph_opcs = NULL;
+    TAILQ_INIT(&periph->periph_xferq);
 
     sc->sc_dev = self;
-
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
-
-    /*
-     * CTEST7 = 80 [disable burst]
-     */
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
-    sc->sc_ctest7 = SIOP_CTEST7_CDIS;
+    sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
     sc->sc_dcntl = SIOP_DCNTL_EA;
     TAILQ_INIT(&sc->ready_list);
     TAILQ_INIT(&sc->nexus_list);
@@ -472,6 +409,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
 #endif
     scsipi_channel_init(chan);
 
+    scsipi_insert_periph(chan, periph);
 
     rc = a4091_add_local_irq_handler(dev_base);
     if (rc != 0)
@@ -481,14 +419,15 @@ attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
     siopinitialize(sc);
 
 #if 0
-        error = scsipi_test_unit_ready(periph,
-            XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
-            XS_CTL_IGNORE_MEDIA_CHANGE | XS_CTL_SILENT_NODEV);
+    error = scsipi_test_unit_ready(periph,
+        XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
+        XS_CTL_IGNORE_MEDIA_CHANGE | XS_CTL_SILENT_NODEV);
 #endif
 
     /*
-     * attach all scsi units on us
+     * Attach all scsi units
      */
+//  scsipi_set_xfer_mode(chan, scsi_target, 1);
 //  config_found(self, chan, scsiprint, CFARGS_NONE);
     return (0);
 }
@@ -499,13 +438,11 @@ detach(struct scsipi_periph *periph)
     printf("detach(%p)\n", periph);
 
     if (periph != NULL) {
-        uint32_t a4091_base = a4091_find(periph->periph_target >> 16);
-        if (a4091_base == 0)
-            return;
-        a4091_reset(a4091_base);
+        struct scsipi_channel *chan = periph->periph_channel;
+        siopshutdown(periph);
         a4091_remove_local_irq_handler();
+        scsipi_remove_periph(chan, periph);
 //      FreeMem(periph, sizeof (*periph));
-// Actually want to FreeMem(drv_state);
+//      FreeMem(drv_state)?
     }
 }
-

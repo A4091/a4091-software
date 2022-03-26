@@ -12,4 +12,8 @@ struct scsipi_xfer * scsipi_make_xs_locked(struct scsipi_periph *periph,
     struct scsipi_generic *cmd, int cmdlen, u_char *data_addr, int datalen,
     int retries, int timeout, struct buf *bp, int flags);
 
+int scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
+    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
+    struct buf *bp, int flags);
+
 #endif /* _SCSIPI_BASE */

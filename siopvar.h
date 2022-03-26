@@ -233,5 +233,7 @@ void siop_dump_registers(struct siop_softc *);
 void siop_dump(struct siop_softc *);
 #endif
 #endif
+void siopshutdown(struct scsipi_periph *periph);
+
 
 #endif /* _SIOPVAR_H */

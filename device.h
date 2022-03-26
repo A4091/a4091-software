@@ -22,11 +22,13 @@ struct cfdata {
     const struct cfparent *cf_pspec;/* parent specification */
 };
 
+#endif
 /* Max size of a device external name (including terminating NUL) */
 #define DEVICE_XNAME_SIZE       16
-#endif
 
 struct device {
+                                    /* external name (name + unit) */
+    char            dv_xname[DEVICE_XNAME_SIZE];
 #if 0
     devhandle_t     dv_handle;      /* this device's handle;
                                        new device_t's get INVALID */
@@ -37,8 +39,6 @@ struct device {
     cfdriver_t      dv_cfdriver;    /* our cfdriver */
     cfattach_t      dv_cfattach;    /* our cfattach */
     int             dv_unit;        /* device unit number */
-                                    /* external name (name + unit) */
-    char            dv_xname[DEVICE_XNAME_SIZE];
     device_t        dv_parent;      /* pointer to parent device
                                        (NULL if pseudo- or root node) */
     int             dv_depth;       /* number of parents until root */

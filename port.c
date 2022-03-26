@@ -6,12 +6,14 @@
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
 #include <exec/execbase.h>
+#include "device.h"
 #include "printf.h"
 
-void check_break(void);
+/* Not sure this even works for a driver */
+ulong __stack_size = 32768;
 
-unsigned long scsi_nosync = 0;
-unsigned long shift_nosync = 0;
+u_long scsi_nosync = 0;
+int    shift_nosync = 0;
 
 void
 panic(const char *s)
@@ -39,16 +41,14 @@ delay(int usecs)
 {
     int msec = usecs / 1000;
     int ticks = TICKS_PER_SECOND * msec / 1000;
-//  static int count = 0;
-    if ((ticks < 1) && (usecs > 1000))
-        ticks = 1;
 
-#if 0
-    if (count < 10) {
-        count++;
-        printf("delay(%d)\n", usecs);
+    if (ticks == 0) {
+        usecs <<= 3;
+        for (volatile int i = usecs; i > 0; i--)
+            ;
+        return;
     }
-#endif
+
     Delay(ticks);
 }
 
@@ -60,7 +60,6 @@ bsd_splbio(void)
 #undef DEBUG_IRQ
 #ifdef DEBUG_IRQ
     printf("splbio() = %d\n", bsd_ilevel);
-    check_break();
 #endif
     if (bsd_ilevel == 0)
         Disable();
@@ -82,9 +81,14 @@ bsd_splx(int ilevel)
 const char *
 device_xname(void *ptr)
 {
-    return ("SCSI");
+    device_t dev = ptr;
+    if (dev == NULL)
+        return ("SCSI");
+    else
+        return (dev->dv_xname);
 }
 
+#if 0
 int
 mstohz(int m)
 {
@@ -100,12 +104,10 @@ mstohz(int m)
     return (h);
 }
 
-#if 0
 void
 callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg)
 {
     printf("callout_reset()\n");
-    check_break();
 }
 
 int
@@ -113,40 +115,29 @@ callout_stop(void *cs)
 {
     /* try to cancel a pending callout */
     printf("callout_stop()\n");
-    check_break();
     return (0);
 }
-#endif
 
-#if 0
 uint32_t
 kvtop(void *vaddr)
 {
     return ((uint32_t) vaddr);
 }
-#endif
 
 // #define DCIAS(x) /* cache flush: cpushl dc,%a0@ */
 void
 _DCIAS(uint32_t paddr)
 {
     /* Cache flush of some sort */
-#if 0
-    printf("DCIAS(%x)\n", paddr);
-#endif
-    check_break();
 }
 
-#if 0
 /* cache flush / purge */
 void
 _DCIU(void)
 {
     printf("_DCIU()\n");
 }
-#endif
 
-#if 0
 /* instruction cache purge */
 void
 _ICIA(void)
@@ -180,12 +171,9 @@ dma_cachectl(void *addr, int len)
         len -= tlen;
         addr += tlen;
     }
-    check_break();
     return (paddr);
 }
 #endif
-
-ulong __stack_size = 32768;
 
 #if 0
 void *
@@ -203,11 +191,6 @@ local_memset(void *dst, int value, size_t len)
     return (dst);
 }
 #endif
-
-void
-check_break(void)
-{
-}
 
 void exit(int __status)
 {
