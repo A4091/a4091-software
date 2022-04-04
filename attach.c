@@ -143,20 +143,6 @@ static const char * const expansion_library_name = "expansion.library";
 
 extern struct ExecBase *SysBase;
 
-typedef struct {
-    uint32_t              as_addr;
-    struct DosLibrary    *as_DOSBase;
-    struct ExecBase      *as_SysBase;
-    uint32_t              as_irq_count;   // Total interrupts
-    struct Task          *as_svc_task;
-    struct Interrupt     *as_isr;         // My interrupt server
-    uint8_t               as_irq_signal;
-    volatile uint8_t      as_exiting;
-    struct device         as_device_self;
-//  struct scsipi_periph  as_periph;
-    struct siop_softc     as_device_private;
-} a4091_save_t;
-
 extern a4091_save_t *asave;
 
 
@@ -174,7 +160,7 @@ irq_handler_core(a4091_save_t *save)
 {
     struct siop_softc *sc = &save->as_device_private;
     siop_regmap_p      rp;
-    u_char             istat;
+    uint8_t            istat;
 
     if (sc->sc_flags & SIOP_INTSOFF)
         return; /* interrupts are not active */
@@ -187,9 +173,8 @@ irq_handler_core(a4091_save_t *save)
 
     /*
      * save Interrupt Status, SCSI Status 0, and DMA Status.
-     * (may need to deal with stacked interrupts?)
      */
-    sc->sc_istat  = istat;
+    sc->sc_istat |= istat;
     sc->sc_sstat0 = rp->siop_sstat0;
     sc->sc_dstat  = rp->siop_dstat;
 
@@ -231,7 +216,6 @@ a4091_add_local_irq_handler(uint32_t dev_base)
 
     asave->as_addr           = dev_base;
     asave->as_SysBase        = SysBase;
-    asave->as_DOSBase        = DOSBase;
     asave->as_irq_count      = 0;
     asave->as_svc_task       = task;
     asave->as_irq_signal     = AllocSignal(-1);
@@ -246,7 +230,7 @@ a4091_add_local_irq_handler(uint32_t dev_base)
     asave->as_isr->is_Node.ln_Pri  = A4091_INTPRI;
     asave->as_isr->is_Node.ln_Name = "A4091.device";
     asave->as_isr->is_Data         = asave;
-    asave->as_isr->is_Code         = (VOID (*)()) irq_handler;
+    asave->as_isr->is_Code         = (void (*)()) irq_handler;
 
     printf("Add IRQ=%d pri=%d isr=%p asave=%p\n",
            A4091_IRQ, A4091_INTPRI, &asave->as_isr, asave);
@@ -337,41 +321,27 @@ a4091_validate(uint32_t dev_base)
 }
 
 int
-attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
+init_chan(device_t self, uint board)
 {
-    int rc;
     struct siop_softc     *sc = device_private(self);
     struct scsipi_adapter *adapt = &sc->sc_adapter;
     struct scsipi_channel *chan = &sc->sc_channel;
-    uint board = scsi_target / 100;
     uint32_t dev_base = a4091_find(board);
+    int rc;
+
     if (dev_base == 0) {
         printf("A4091 %u not found\n", board);
         return (1);
     }
 
-    memset(sc, 0, sizeof (*sc));
+    printf("init_chan(%x)\n", dev_base);
 
-    printf("attach(%x, %d)\n", dev_base, scsi_target);
-
-    sprintf(self->dv_xname, "a4091,%u", scsi_target);
     if (a4091_validate(dev_base))
         return (1);
-    periph->periph_channel = chan;  // Not sure this is needed
 
-#if 0
-    // periph_cap override happens elsewhere
-    periph->periph_cap |= PERIPH_CAP_SYNC;   // Synchronous SCSI
-    periph->periph_cap |= PERIPH_CAP_TQING;  // Tagged command queuing
-#endif
-    periph->periph_openings = 1;  // Max # of outstanding commands
-    periph->periph_target   = scsi_target % 10;         // SCSI target ID
-    periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
-    periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
-    periph->periph_dev = NULL;
-    periph->periph_opcs = NULL;
-    TAILQ_INIT(&periph->periph_xferq);
+    strcpy(self->dv_xname, "a4091");
 
+    memset(sc, 0, sizeof (*sc));
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
@@ -402,14 +372,10 @@ attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
     chan->chan_ntargets = 8;
     chan->chan_nluns = 8;
     chan->chan_id = 7;
-//  chan->scsipi_periph = periph;
-#if 0
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
-#endif
-    scsipi_channel_init(chan);
 
-    scsipi_insert_periph(chan, periph);
+    scsipi_channel_init(chan);
 
     rc = a4091_add_local_irq_handler(dev_base);
     if (rc != 0)
@@ -417,18 +383,87 @@ attach(device_t self, uint scsi_target, struct scsipi_periph *periph)
 
     Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
     siopinitialize(sc);
+    return (0);
+}
 
-#if 0
-    error = scsipi_test_unit_ready(periph,
-        XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
-        XS_CTL_IGNORE_MEDIA_CHANGE | XS_CTL_SILENT_NODEV);
-#endif
+void
+deinit_chan(device_t self)
+{
+    struct siop_softc     *sc = device_private(self);
+    struct scsipi_channel *chan = &sc->sc_channel;
+
+    siopshutdown(chan);
+    a4091_remove_local_irq_handler();
+}
+
+struct scsipi_periph *
+scsipi_alloc_periph(int flags)
+{
+    struct scsipi_periph *periph;
+    uint i;
+
+    periph = AllocMem(sizeof (*periph), MEMF_PUBLIC | MEMF_CLEAR);
+    if (periph == NULL)
+        return (NULL);
 
     /*
-     * Attach all scsi units
+     * Start with one command opening.  The periph driver
+     * will grow this if it knows it can take advantage of it.
      */
-//  scsipi_set_xfer_mode(chan, scsi_target, 1);
-//  config_found(self, chan, scsiprint, CFARGS_NONE);
+    periph->periph_openings = 1;
+
+    for (i = 0; i < PERIPH_NTAGWORDS; i++)
+            periph->periph_freetags[i] = 0xffffffff;
+
+    TAILQ_INIT(&periph->periph_xferq);
+    return (periph);
+}
+
+void
+scsipi_free_periph(struct scsipi_periph *periph)
+{
+    FreeMem(periph, sizeof (*periph));
+}
+
+int scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed);
+
+int
+attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
+{
+    struct siop_softc     *sc = device_private(self);
+    struct scsipi_channel *chan = &sc->sc_channel;
+    struct scsipi_periph  *periph;
+    int target = scsi_target % 10;
+    int lun    = (scsi_target / 10) % 10;
+    int rc;
+    int failed = 0;
+
+    periph = scsipi_alloc_periph(0);
+    *periph_p = periph;
+    if (periph == NULL)
+        return (1);
+
+    printf("attach(%p, %d)\n", periph, scsi_target);
+    periph->periph_openings = 4;  // Max # of outstanding commands
+    periph->periph_target   = scsi_target % 10;         // SCSI target ID
+    periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
+    periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
+    periph->periph_dbflags  = 0;
+    periph->periph_dev = NULL;
+    periph->periph_channel = chan;  // Not sure this is needed
+    TAILQ_INIT(&periph->periph_xferq);
+
+    rc = scsi_probe_device(chan, target, lun, periph, &failed);
+    printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",
+           target, lun, rc, failed);
+
+    if (failed) {
+        scsipi_free_periph(periph);
+        return (1);
+    }
+
+    scsipi_insert_periph(chan, periph);
+
     return (0);
 }
 
@@ -439,10 +474,6 @@ detach(struct scsipi_periph *periph)
 
     if (periph != NULL) {
         struct scsipi_channel *chan = periph->periph_channel;
-        siopshutdown(periph);
-        a4091_remove_local_irq_handler();
         scsipi_remove_periph(chan, periph);
-//      FreeMem(periph, sizeof (*periph));
-//      FreeMem(drv_state)?
     }
 }

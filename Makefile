@@ -12,8 +12,9 @@ OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
-#CFLAGS  += -DDEBUG
-#CFLAGS  += -DDEBUG_SYNC
+#CFLAGS  += -DDEBUG        # Show basic debug
+#CFLAGS  += -DDEBUG_SYNC   # Show Synchronous SCSI debug
+#CFLAGS  += -DDEBUG_CMD    # Show handler commands received
 CFLAGS  += -DNO_SERIAL_OUTPUT
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer

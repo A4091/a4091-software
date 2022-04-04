@@ -151,6 +151,7 @@ typedef enum {
 } scsipi_adapter_req_t;
 
 #ifdef _KERNEL
+#if 0
 /*
  * scsipi_periphsw:
  *
@@ -174,6 +175,7 @@ struct scsipi_periphsw {
 		    scsipi_async_event_t, void *);
 	void	(*psw_done)(struct scsipi_xfer *, int);
 };
+#endif
 
 struct disk_parms;
 struct scsipi_inquiry_pattern;
@@ -441,9 +443,11 @@ struct scsipi_periph {
 
 	int	periph_qfreeze;		/* queue freeze count */
 
+#ifndef PORT_AMIGA
 	/* available opcodes and timeout information */
 	struct scsipi_opcodes *periph_opcs;
-	
+#endif
+
 	/* Bitmap of free command tags. */
 	u_int32_t periph_freetags[PERIPH_NTAGWORDS];
 

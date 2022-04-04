@@ -50,7 +50,6 @@
 #include "siopreg.h"
 #include "siopvar.h"
 #include "scsi_message.h"
-// #include "sd.h"
 
 #undef SCSIPI_DEBUG
 
@@ -63,8 +62,7 @@ static void scsipi_completion_poll(struct scsipi_channel *chan);
 
 extern struct ExecBase *SysBase;
 
-#undef CDH_DIRECT_REQUEST
-
+#if 0
 /*
  * scsipi_update_timeouts:
  * 	Override timeout value if device/config provided
@@ -112,6 +110,7 @@ scsipi_update_timeouts(struct scsipi_xfer *xs)
 		xs->timeout = timeout;
 	}
 }
+#endif
 
 
 /*
@@ -263,9 +262,11 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 
 	KASSERT(!cold);
 
+#ifndef PORT_AMIGA
 	scsipi_update_timeouts(xs);
 
-//	(chan->chan_bustype->bustype_cmd)(xs);
+	(chan->chan_bustype->bustype_cmd)(xs);
+#endif
 
 	xs->xs_status &= ~XS_STS_DONE;
 	xs->error = XS_NOERROR;
@@ -384,17 +385,17 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
         uint timeout = 60;
         struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
-        printf("SYNC -- poll for completion\n");
 
 	while ((xs->xs_status & XS_STS_DONE) == 0) {
 #ifdef PORT_AMIGA
                 /*
                  * Need to run interrupt message handling here because
-                 * this task runs in the same context as the normal interrupt
-                 * message handling.
+                 * this code is running in the same thread as the normal
+                 * interrupt message handling.
                  */
                 void irq_poll(int gotint, struct siop_softc *sc);
-                irq_poll(0, sc);
+
+                irq_poll(1, sc);
 #else
 		if (poll) {
 			scsipi_printaddr(periph);
@@ -404,7 +405,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 #endif
                 Delay(1);
                 if (timeout-- == 0) {
-                    printf("CDH: Poll timeout\n");
+                    printf("SCSI completion poll timeout\n");
                     break;
                 }
 	}
@@ -1217,14 +1218,22 @@ scsipi_complete(struct scsipi_xfer *xs)
 			mutex_enter(chan_mtx(chan));
 			if ((xs->xs_control & XS_CTL_POLL) ||
 			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
+#ifdef PORT_AMIGA
+                                int count = TICKS_PER_SECOND;
+                                while (count-- > 0) {
+                                    /* Wait 1 AmigaOS tick */
+                                    delay(1000000 / TICKS_PER_SECOND);
 #if 0
+                                    /*
+                                     * Continue running interrupt processing
+                                     * while waiting to try again.
+                                     */
+                                    irq_poll(1, sc);
+#endif
+                                }
+#else  /* !PORT_AMIGA */
 				/* XXX: quite extreme */
 				kpause("xsbusy", false, hz, chan_mtx(chan));
-#else
-                                printf("CDH: poll delay\n");
-                                delay(1000000);
-#endif
-#if 0
 			} else if (!callout_pending(&periph->periph_callout)) {
 				scsipi_periph_freeze_locked(periph, 1);
 				callout_reset(&periph->periph_callout,
@@ -1250,14 +1259,11 @@ scsipi_complete(struct scsipi_xfer *xs)
 		 * it won't be found because it isn't here yet so
 		 * we won't honor the retry count in that case.
 		 */
-#if 0
-// XXX: Enable this at some point
 		if (scsipi_lookup_periph(chan, periph->periph_target,
 		    periph->periph_lun) && xs->xs_retries != 0) {
 			xs->xs_retries--;
 			error = ERESTART;
 		} else
-#endif
 			error = EIO;
 		break;
 
@@ -1327,10 +1333,16 @@ scsipi_complete(struct scsipi_xfer *xs)
 		periph->periph_switch->psw_done(xs, error);
 #endif
 
+        /*
+         * The callback is used by multiple requesters to trigger an
+         * asynchronous I/O continuation:
+         *
+         * sd_complete() geom_done_inquiry() scsidirect_complete()
+         * geom_done_get_capacity() geom_done_mode_page_3()
+         * geom_done_mode_page_4() geom_done_mode_page_5()
+         */
         if (xs->xs_done_callback != NULL)
             xs->xs_done_callback(xs);
-
-//        sd_complete(xs, xs->error);
 
 	mutex_enter(chan_mtx(chan));
 	if (xs->xs_control & XS_CTL_ASYNC)
@@ -1360,18 +1372,18 @@ scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
         return rc;
 }
 
+#if 0
 /* stubbed routine */
 int
 scsipi_print_sense(struct scsipi_xfer * xs, int verbosity)
 {
-#if 0
         scsipi_load_verbose();
         if (scsi_verbose_loaded)
                 return scsipi_print_sense(xs, verbosity);
         else
-#endif
                 return 0;
 }
+#endif
 
 /*
  * scsipi_interpret_sense:
@@ -1572,11 +1584,13 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			break;
 		}
 
+#if 0
 		/* Print verbose decode if appropriate and possible */
 		if ((key == 0) ||
 		    ((xs->xs_control & XS_CTL_SILENT) != 0) ||
 		    (scsipi_print_sense(xs, 0) != 0))
 			return error;
+#endif
 
 		/* Print brief(er) sense information */
 		scsipi_printaddr(periph);
@@ -1861,6 +1875,7 @@ scsipi_test_unit_ready(struct scsipi_periph *periph, int flags)
 	struct scsi_test_unit_ready cmd;
 	int retries;
 
+printf("CDH: scsipi_test_unit_ready\n");
 	/* some ATAPI drives don't support TEST UNIT READY. Sigh */
 	if (periph->periph_quirks & PQUIRK_NOTUR)
 		return 0;

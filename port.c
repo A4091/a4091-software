@@ -61,8 +61,7 @@ bsd_splbio(void)
 #ifdef DEBUG_IRQ
     printf("splbio() = %d\n", bsd_ilevel);
 #endif
-    if (bsd_ilevel == 0)
-        Disable();
+    Disable();
     return (bsd_ilevel++);
 }
 

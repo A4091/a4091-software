@@ -233,7 +233,7 @@ void siop_dump_registers(struct siop_softc *);
 void siop_dump(struct siop_softc *);
 #endif
 #endif
-void siopshutdown(struct scsipi_periph *periph);
+void siopshutdown(struct scsipi_channel *chan);
 
 
 #endif /* _SIOPVAR_H */

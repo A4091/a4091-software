@@ -11,7 +11,10 @@
 #include "scsipi_disk.h"
 #include "scsipi_base.h"
 #include "scsipi_all.h"
+#include "siopreg.h"
+#include "siopvar.h"
 #include "sd.h"
+#include "device.h"
 #include "attach.h"
 #include "cmdhandler.h"
 
@@ -193,7 +196,7 @@ sd_diskstart(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
     int cmdlen;
     int flags;
 
-    printf("CDH: diskstart(%u, %u, %c)\n",
+    printf("diskstart(%u, %u, %c)\n",
            (uint32_t) blkno, nblks, (b_flags & B_READ) ? 'R' : 'W');
 
     /*
@@ -245,7 +248,9 @@ sd_diskstart(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
-    printf("CDH: sd issue: %p\n", xs);
+    printf("sd%d.%d %c issue %p\n",
+           periph->periph_target, periph->periph_lun,
+           (flags & XS_CTL_DATA_OUT) ? 'W' : 'R', xs);
     return (scsipi_execute_xs(xs));
 }
 
@@ -462,11 +467,7 @@ geom_done_mode_page_3(struct scsipi_xfer *xs)
 static void
 geom_done_get_capacity(struct scsipi_xfer *xs)
 {
-    int       rc       = xs->error;
-    uint32_t *capacity = (uint32_t *) xs->data;
-
-    printf("read_capacity_10 complete: %d %d\n", capacity[0], capacity[1]);
-    if (rc == 0) {
+    if (xs->error == 0) {
         /*
          * Geometry struct was used as a holding buffer for TotalSectors
          * and SectorSize. SCSI has them in the opposite order of what
@@ -490,8 +491,8 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
             struct scsipi_periph *periph = xs->xs_periph;
             periph->periph_blksize = geom->dg_SectorSize;
         }
-        printf("TotalSectors=%lu C=%lu H=%lu S=%lu\n", geom->dg_TotalSectors,
-               geom->dg_Cylinders, geom->dg_Heads, geom->dg_TrackSectors);
+        printf("TotalSectors=%lu C=%lu H=%lu S=%lu %p\n", geom->dg_TotalSectors,
+               geom->dg_Cylinders, geom->dg_Heads, geom->dg_TrackSectors, xs);
         cmd_complete(xs->amiga_ior, 0);
         return;
     }
@@ -606,7 +607,8 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     xs->amiga_ior = ior;
     xs->xs_callback_arg = scmd;
     xs->xs_done_callback = scsidirect_complete;
-    printf("CDH: sdirect issue: %p\n", xs);
+    printf("sdirect%d.%d issue: %p\n",
+           xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs);
     return (scsipi_execute_xs(xs));
 // xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command
 //
@@ -640,7 +642,9 @@ sd_complete(struct scsipi_xfer *xs)
         return;  /* IOR was internally generated, not by user request */
     }
 
-    printf("CDH: sd complete: %p rc=%d\n", xs, rc);
+    printf("sd%d.%d %c done %p rc=%d\n",
+           xs->xs_periph->periph_target, xs->xs_periph->periph_lun,
+           (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', xs, rc);
     if (rc != 0) {
         /* Translate error code to AmigaOS */
         scsipi_xfer_result_t res = xs->error;
@@ -668,7 +672,8 @@ scsidirect_complete(struct scsipi_xfer *xs)
     scmd->scsi_CmdActual = scmd->scsi_CmdLength;
 
     if (rc != 0) {
-        printf("CDH: scsidirect fail\n");
+        printf("sdirect%d.%d fail %d\n",
+               xs->xs_periph->periph_target, xs->xs_periph->periph_lun, rc);
         if (scmd->scsi_Flags & SCSIF_AUTOSENSE) {
             UWORD len = scmd->scsi_SenseLength;
             if (len < sizeof (xs->sense.scsi_sense))

@@ -5,9 +5,6 @@ extern struct MsgPort *myPort;
 
 typedef struct cfdata *cfdata_t;
 
-#define CMD_TERM     0x7ff0
-#define CMD_STARTUP  0x7ff1
-
 #if 0
 /*
  * Configuration data (i.e., data placed in ioconf.c).

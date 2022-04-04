@@ -51,11 +51,19 @@
 #include "port_bsd.h"
 
 #include <string.h>
+#ifdef PORT_AMIGA
+#include "device.h"
+#include "scsi_all.h"
+#include "scsipi_all.h"
+#include "scsipiconf.h"
+#include "scsiconf.h"
+
+#else /* !PORT_AMIGA */
+
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp $");
 
 #include <sys/param.h>
-#if 0
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
@@ -65,9 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp
 #include <sys/once.h>
 #include <sys/device.h>
 #include <sys/conf.h>
-#endif
 #include <sys/fcntl.h>
-#if 0
 #include <sys/scsiio.h>
 #include <sys/queue.h>
 #include <sys/atomic.h>
@@ -77,16 +83,7 @@ __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp
 #include <dev/scsipi/scsiconf.h>
 
 #include "locators.h"
-#endif
 
-#include "device.h"
-#include "scsi_all.h"
-#include "scsipi_all.h"
-#include "scsipiconf.h"
-#include "scsiconf.h"
-
-
-#if 0
 static const struct scsipi_periphsw scsi_probe_dev = {
 	NULL,
 	NULL,
@@ -103,19 +100,15 @@ static ONCE_DECL(scsi_conf_ctrl);
 static TAILQ_HEAD(, scsi_initq)	scsi_initq_head;
 static kmutex_t			scsibus_qlock;
 static kcondvar_t		scsibus_qcv;
-#endif
 
 
-#if 0
 static int	scsi_probe_device(struct scsibus_softc *, int, int);
 static int	scsibusmatch(device_t, cfdata_t, void *);
 static void	scsibusattach(device_t, device_t, void *);
 static int	scsibusdetach(device_t, int flags);
 static int	scsibusrescan(device_t, const char *, const int *);
 static void	scsidevdetached(device_t, device_t);
-#endif
 
-#if 0
 CFATTACH_DECL3_NEW(scsibus, sizeof(struct scsibus_softc),
     scsibusmatch, scsibusattach, scsibusdetach, NULL,
     scsibusrescan, scsidevdetached, DVF_DETACH_SHUTDOWN);
@@ -866,20 +859,27 @@ static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
  */
 #ifdef PORT_AMIGA
 int
+scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed)
 #else
 static int
-#endif
 scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
+#endif
 {
+#ifdef PORT_AMIGA
+	struct scsipi_inquiry_data inqbuf;
+	int checkdtype, docontinue, quirks;
+	struct scsipibus_attach_args sa;
+#else /* !PORT_AMIGA */
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
 	struct scsipi_inquiry_data inqbuf;
-//	const struct scsi_quirk_inquiry_pattern *finger;
-//	int priority;
+	const struct scsi_quirk_inquiry_pattern *finger;
+	int priority;
 	int checkdtype, docontinue, quirks;
 	struct scsipibus_attach_args sa;
-//	cfdata_t cf;
-//	int locs[SCSIBUSCF_NLOCS];
+	cfdata_t cf;
+	int locs[SCSIBUSCF_NLOCS];
+#endif
 
 	/*
 	 * Assume no more LUNs to search after this one.
@@ -895,16 +895,10 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 
 #ifdef PORT_AMIGA
         printf("CDH: new periph for target %d.%d\n", target, lun);
-        periph = AllocMem(sizeof (*periph), MEMF_PUBLIC | MEMF_CLEAR);
-        periph->periph_openings = 1;
-        for (u_int i = 0; i < PERIPH_NTAGWORDS; i++)
-                periph->periph_freetags[i] = 0xffffffff;
-        TAILQ_INIT(&periph->periph_xferq);
+	periph->periph_channel = chan;
 #else
 	periph = scsipi_alloc_periph(M_WAITOK);
-#endif
 	periph->periph_channel = chan;
-#ifndef PORT_AMIGA
 	periph->periph_switch = &scsi_probe_dev;
 #endif
 
@@ -948,7 +942,10 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			extension[len++] = ' ';
 	}
 	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY | XS_CTL_SILENT))
+{
+printf("CDH: probe inquire failed\n");
 		goto bad;
+}
 
 	periph->periph_type = inqbuf.device & SID_TYPE;
 	if (inqbuf.dev_qual2 & SID_REMOVABLE)
@@ -969,7 +966,10 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	case SID_QUAL_LU_NOTPRESENT:
 	case SID_QUAL_reserved:
 	case SID_QUAL_LU_NOT_SUPP:
+{
+printf("CDH: probe bad QUAL\n");
 		goto bad;
+}
 
 	default:
 		break;
@@ -978,7 +978,10 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	/* Let the adapter driver handle the device separately if it wants. */
 	if (chan->chan_adapter->adapt_accesschk != NULL &&
 	    (*chan->chan_adapter->adapt_accesschk)(periph, &sa.sa_inqbuf))
+{
+printf("CDH: probe adapter fail\n");
 		goto bad;
+}
 
 	if (checkdtype) {
 		switch (periph->periph_type) {
@@ -1002,6 +1005,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		default:
 			break;
 		case T_NODEVICE:
+printf("CDH: probe nodevice\n");
 			goto bad;
 		}
 	}
@@ -1060,7 +1064,6 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			 */
 			switch (inqbuf.flags4 & SID_Clocking) {
 			case SID_CLOCKING_DT_ONLY:
-printf("clocking DT only\n");
 				periph->periph_cap &=
 				    ~(PERIPH_CAP_SYNC |
 				      PERIPH_CAP_WIDE16 |
@@ -1097,8 +1100,18 @@ printf("clocking DT only\n");
 	if ((periph->periph_quirks & PQUIRK_NOLUNS) == 0)
 		docontinue = 1;
 
-        printf("CDH: disabled config search\n");
-#if 0
+        printf("CDH Caps:%s%s%s%s%s%s%s%s%s%s\n",
+               (periph->periph_cap & PERIPH_CAP_SYNC) ? " SYNC" : "",
+               (periph->periph_cap & PERIPH_CAP_WIDE16) ? " WIDE16" : "",
+               (periph->periph_cap & PERIPH_CAP_WIDE32) ? " WIDE32" : "",
+               (periph->periph_cap & PERIPH_CAP_TQING) ? " TQING" : "",
+               (periph->periph_cap & PERIPH_CAP_LINKCMDS) ? " LINKCMDS" : "",
+               (periph->periph_cap & PERIPH_CAP_SFTRESET) ? " SFTRESET" : "",
+               (periph->periph_cap & PERIPH_CAP_DT) ? " DT" : "",
+               (periph->periph_cap & PERIPH_CAP_IUS) ? " IUS" : "",
+               (periph->periph_cap & PERIPH_CAP_QAS) ? " QAS" : "",
+               (periph->periph_cap & PERIPH_CAP_RELADR) ? " RELADR" : "");
+#ifndef PORT_AMIGA
 	locs[SCSIBUSCF_TARGET] = target;
 	locs[SCSIBUSCF_LUN] = lun;
 
@@ -1132,11 +1145,13 @@ printf("clocking DT only\n");
 		KERNEL_UNLOCK_ONE(NULL);
 		goto bad;
 	}
-#endif
+#endif  /* !PORT_AMIGA */
 
+        *failed = 0;
 	return (docontinue);
 
 bad:
+        *failed = 1;
 #if 0
 	scsipi_free_periph(periph);
 #endif

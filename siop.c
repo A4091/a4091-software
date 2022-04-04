@@ -334,7 +334,6 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
     if (sc->nexus_list.tqh_first)
         printf("%s: siop_poll called with disconnected device\n",
             device_xname(sc->sc_dev));
-    printf("CDH: siop_poll(to=%d)\n", to);
     for (;;) {
         /* use cmd_wait values? */
 #define WAIT_ITERS 50  // 50000 was original value
@@ -357,7 +356,6 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
                     return;
                 }
             }
-printf("CDH: delay\n");
             delay(20000);  // 1 AmigaOS tick
         }
         sstat0 = rp->siop_sstat0;
@@ -645,9 +643,8 @@ siopinitialize(struct siop_softc *sc)
 
 #ifdef PORT_AMIGA
 void
-siopshutdown(struct scsipi_periph *periph)
+siopshutdown(struct scsipi_channel *chan)
 {
-    struct scsipi_channel *chan = periph->periph_channel;
     struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
 
     siopreset(sc);
@@ -734,9 +731,13 @@ siopreset(struct siop_softc *sc)
         dummy = rp->siop_dstat;
 
     __USE(dummy);
+    sc->sc_flags &= ~(SIOP_INTDEFER|SIOP_INTSOFF);
     bsd_splx (s);
 
     delay (siop_reset_delay * 1000);
+#ifdef PORT_AMIGA
+    siopintr(sc);
+#endif
     printf("siop id %d reset V%d\n", sc->sc_channel.chan_id,
         rp->siop_ctest8 >> 4);
 
@@ -796,7 +797,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     int i;
 #endif
     if (acb == NULL) {
-        printf("CDH: NULL acb!\n");
+        printf("siop_start: NULL acb!\n");
         return;
     }
 
@@ -1822,7 +1823,8 @@ siopintr(register struct siop_softc *sc)
     if (dstat & SIOP_DSTAT_SIR)
         sc->sc_intcode = rp->siop_dsps;
     sc->sc_istat = 0;
-#if 1
+#undef EARLY_SPLX
+#ifdef EARLY_SPLX
     bsd_splx(s);
 #endif
 #ifdef DEBUG
@@ -1882,7 +1884,9 @@ if (sc != NULL) {
                 sc->sc_nexus->stat[0] : -1);
         }
     }
-//  bsd_splx(s);
+#ifndef EARLY_SPLX
+    bsd_splx(s);
+#endif
 }
 
 void

@@ -4,6 +4,7 @@
 #include <exec/errors.h>
 #include <exec/execbase.h>
 #include <exec/resident.h>
+#include <exec/semaphores.h>
 #include <exec/io.h>
 #include <libraries/dos.h>
 #include <proto/dos.h>
@@ -14,24 +15,25 @@
 
 #include "device.h"
 #include "cmdhandler.h"
+#include "version.h"
 
 #ifdef DEBUG
 #include <clib/debug_protos.h>
 #endif
 
-#define STR(s) #s      /* Turn s into a string literal without expanding macro definitions (however, \
-                          if invoked from a macro, macro arguments are expanded). */
-#define XSTR(s) STR(s) /* Turn s into a string literal after macro-expanding it. */
+#define STR(s) #s      // Turn s into a string literal without macro expansion
+#define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
 
 #define DRIVER      "a4091"
 
 #define DEVICE_NAME DRIVER".device"
 #define DEVICE_DATE "(20 Feb 2022)"
-#define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." XSTR(DEVICE_REVISION) " " DEVICE_DATE /* format is: 'name version.revision (d.m.yy)' */
+#define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." \
+        XSTR(DEVICE_REVISION) " " DEVICE_DATE
+        /* format: "name version.revision (dd.mm.yy)" */
 #define DEVICE_VERSION 1
 #define DEVICE_REVISION 0
-#define DEVICE_PRIORITY 0 /* Most people will not need a priority and should leave it at zero. */
-
+#define DEVICE_PRIORITY 0 // Probably fine to leave priority as zero
 
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
@@ -41,27 +43,31 @@ BPTR saved_seg_list;
 __asm("_geta4: lea ___a4_init,a4 \n"
       "        rts");
 
-/*-----------------------------------------------------------
-A library or device with a romtag should start with moveq #-1,d0 (to
-safely return an error if a user tries to execute the file), followed by a
-Resident structure.
-------------------------------------------------------------*/
+/*
+ * -----------------------------------------------------------
+ * A library or device with a romtag should start with moveq #-1,d0
+ * (to safely return an error if a user tries to execute the file),
+ * followed by a Resident structure.
+ * ------------------------------------------------------------
+ */
 int __attribute__((no_reorder)) _start()
 {
     return (-1);
 }
 
-/*-----------------------------------------------------------
-A romtag structure.  After your driver is brought in from disk, the
-disk image will be scanned for this structure to discover magic constants
-about you (such as where to start running you from...).
-
-endcode is a marker that shows the end of your code. Make sure it does not
-span hunks, and is not before the rom tag! It is ok to put it right after
-the rom tag -- that way you are always safe.
-Make sure your program has only a single code hunk if you put it at the
-end of your code.
-------------------------------------------------------------*/
+/*
+ * -----------------------------------------------------------
+ * A romtag structure. After the driver is brought in from disk, the
+ * disk image will be scanned for this structure to discover magic
+ * constants about it (such as where to start running from...).
+ *
+ * endcode is a marker that shows the end of your code. Make sure it
+ * does not span hunks, and is not before the rom tag! It is ok to
+ * put it right after the rom tag -- that way you it's always safe.
+ * Make sure the program has only a single code hunk if you put it
+ * at the end of your code.
+ * ------------------------------------------------------------
+ */
 asm("romtag:                                \n"
     "       dc.w    "XSTR(RTC_MATCHWORD)"   \n"
     "       dc.l    romtag                  \n"
@@ -77,6 +83,7 @@ asm("romtag:                                \n"
 
 const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
+struct SignalSemaphore entry_sem;
 
 /*
  * ------- init_device ---------------------------------------
@@ -119,6 +126,8 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     //      a thread has not already been started? Maybe need
     //      named ports.
 
+    InitSemaphore(&entry_sem);
+    printf("A4091 driver %s\n", version_str);
     return (dev);
 }
 
@@ -132,17 +141,20 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 static BPTR __attribute__((used))
 drv_expunge(struct Library *dev asm("a6"))
 {
-    if (dev->lib_OpenCnt != 0)
-    {
+    ObtainSemaphore(&entry_sem);
+    if (dev->lib_OpenCnt != 0) {
         printf("expunge() device still open\n");
         dev->lib_Flags |= LIBF_DELEXP;
         return (0);
     }
 
-    printf("expunge()\n");
+    printf("expunge() %s\n", version_str);
+    Forbid();
     BPTR seg_list = saved_seg_list;
     Remove(&dev->lib_Node);
-    FreeMem((char *)dev - dev->lib_NegSize, dev->lib_NegSize + dev->lib_PosSize);
+    FreeMem((char *)dev - dev->lib_NegSize,
+            dev->lib_NegSize + dev->lib_PosSize);
+    ReleaseSemaphore(&entry_sem);
     return (seg_list);
 }
 
@@ -162,35 +174,44 @@ void __attribute__((used))
 drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
          uint scsi_unit asm("d0"), ULONG flags asm("d1"))
 {
-
-    ioreq->io_Error = IOERR_OPENFAIL;
     ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
 
-    SysBase = *(struct ExecBase **)4UL;
-    if (SysBase->LibNode.lib_Version < 36)
+    if (SysBase->LibNode.lib_Version < 36) {
+        ioreq->io_Error = IOERR_OPENFAIL;
         return; /* can only run under 2.0 or greater */
-
-    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
-        ioreq->io_Error = HFERR_NoBoard;
-        return;
     }
-    if (dev->lib_OpenCnt == 0) {
-        printf("open(%x) first time\n", scsi_unit);
-        if (create_cmd_handler(scsi_unit, (void *) ioreq->io_Unit)) {
-            printf("Open SCSI %d.%d.%d failed\n",
-                   scsi_unit / 100, (scsi_unit / 10) % 10, scsi_unit % 10);
-            ioreq->io_Error = HFERR_NoBoard;
+
+    ObtainSemaphore(&entry_sem);
+    if (dev->lib_OpenCnt++ == 0) {
+//      printf("open(%d) first time\n", scsi_unit);
+        if (start_cmd_handler(scsi_unit, (void *) ioreq->io_Unit)) {
+            printf("Start handler failed\n");
 // HFERR_NoBoard - open failed for non-existat board
 // HFERR_SelfUnit - attempted to open our own SCSI ID
+            dev->lib_OpenCnt--;
+            ioreq->io_Error = HFERR_NoBoard;
+            ReleaseSemaphore(&entry_sem);
             return;
         }
-        printf("Open Dev=%p Unit=%p\n", ioreq->io_Device, ioreq->io_Unit);
-    } else {
-        printf("open(%d)\n", scsi_unit);
+//  } else {
+//      printf("open(%d)\n", scsi_unit);
     }
 
-    dev->lib_OpenCnt++;
+    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
+        printf("Open fail\n");
+        if (--dev->lib_OpenCnt == 0) {
+            printf("Shut down handler\n");
+            stop_cmd_handler(ioreq->io_Unit);
+        }
+        ioreq->io_Error = HFERR_NoBoard;
+        ReleaseSemaphore(&entry_sem);
+        return;
+    }
+    printf("Open Dev=%p Unit=%p\n", ioreq->io_Device, ioreq->io_Unit);
+
     ioreq->io_Error = 0; // Success
+
+    ReleaseSemaphore(&entry_sem);
 }
 
 /*
@@ -208,32 +229,28 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
 static BPTR __attribute__((used))
 drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 {
-    struct IORequest ior;
+    ObtainSemaphore(&entry_sem);
+#if 0
+    printf("close %u\n", dev->lib_OpenCnt);
+#endif
 
-    dev->lib_OpenCnt--;
-    printf("Close() opencnt=%d\n", dev->lib_OpenCnt);
+    close_unit((void *) ioreq->io_Unit);
 
-    if (dev->lib_OpenCnt == 0) {
-        /* Send a message to the command handler to shut down. */
-        ior.io_Message.mn_ReplyPort = CreateMsgPort();
-        ior.io_Command = CMD_TERM;
-        ior.io_Unit = ioreq->io_Unit;
-
-        PutMsg(myPort, &ior.io_Message);
-        WaitPort(ior.io_Message.mn_ReplyPort);
-        DeleteMsgPort(ior.io_Message.mn_ReplyPort);
-        DeletePort(myPort);  /* XXX: Move this to command handler? */
-
+    if (dev->lib_OpenCnt == 1) {
+        /* Ask the command handler to shut down */
+        stop_cmd_handler(ioreq->io_Unit);
         if (dev->lib_Flags & LIBF_DELEXP) {
             printf("close() expunge\n");
+            dev->lib_OpenCnt--;
+            ReleaseSemaphore(&entry_sem);
             return (drv_expunge(dev));
         }
     }
-    close_unit((void *) ioreq->io_Unit);
 
     ioreq->io_Device = NULL;
     ioreq->io_Unit = NULL;
-
+    dev->lib_OpenCnt--;
+    ReleaseSemaphore(&entry_sem);
     return (0);
 }
 
@@ -241,33 +258,8 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __attribute__((used))
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-//    printf("begin_io(%d)\n", ior->io_Command);
     ior->io_Flags &= ~IOF_QUICK;
     PutMsg(myPort, &ior->io_Message);
-#if 0
-    switch (ior->io_Command) {
-        case CMD_READ:
-            printf("CMD_READ\n");
-            PutMsg(myPort, &ior->io_Message);
-            break;
-        case CMD_WRITE:
-            printf("CMD_WRITE\n");
-            PutMsg(myPort, &ior->io_Message);
-            break;
-
-        case CMD_RESET:   // Reset device to initial state. Error queued cmds.
-        case CMD_UPDATE:  // Land all queued writes on disk
-        case CMD_CLEAR:   // Invalidate buffered data
-        case CMD_STOP:    // Stop processing until START or RESET
-        case CMD_START:   // Start processing
-        case CMD_FLUSH:   // Flush queued cmds. Reply to unqueued with error.
-        case CMD_INVALID: // Invalid command (IOERR_NOCMD)
-        default:
-            ior->io_Error = IOERR_NOCMD;
-            ReplyMsg(&ior->io_Message);
-            break;
-    }
-#endif
 }
 
 /* device dependent abortio function */
