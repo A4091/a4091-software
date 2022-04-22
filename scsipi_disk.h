@@ -153,6 +153,25 @@ struct scsipi_capacity_descriptor {
 	u_int8_t blklen[3];
 } __packed;
 
+#ifdef PORT_AMIGA
+#define SCSI_SEEK_6_COMMAND             0x0b
+struct scsi_seek_6 {
+        u_int8_t opcode;
+        u_int8_t addr[3];  // addr[0] is only 5 bits
+        u_int8_t rsvd;
+        u_int8_t control;
+};
+
+#define SCSI_SEEK_10_COMMAND             0x2b
+struct scsi_seek_10 {
+        u_int8_t opcode;
+        u_int8_t lun;
+        u_int8_t addr[4];
+        u_int8_t rsvd[3];
+        u_int8_t control;
+};
+#endif
+
 /* codes only valid in the current/maximum capacity descriptor */
 #define	SCSIPI_CAP_DESC_CODE_MASK		0x3
 #define	SCSIPI_CAP_DESC_CODE_RESERVED		0x0

@@ -58,6 +58,8 @@ void delay(int usecs);
 int dbgprintf(const char *fmt, ...);
 #endif
 
+#define memcpy USE_CopyMem
+
 // void *local_memcpy(void *dest, const void *src, size_t n);
 // void *local_memset(void *dest, int value, size_t len);
 // #define memcpy local_memcpy
@@ -78,5 +80,10 @@ int dbgprintf(const char *fmt, ...);
 #define cv_destroy(x)
 
 void *device_private(device_t dev);
+#ifdef NO_SERIAL_OUTPUT
+#define printf(x...)   do { } while (0)
+#define vfprintf(x...) do { } while (0)
+#define putchar(x...)  do { } while (0)
+#endif
 
 #endif /* _PORT_H */

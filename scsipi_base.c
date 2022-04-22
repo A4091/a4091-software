@@ -224,8 +224,8 @@ scsipi_put_xs(struct scsipi_xfer *xs)
      * Insert this entry at the top of the free list. It's really just
      * a very simple linked list, where the first bytes of a given xs
      * point to the next entry. Since the xs is "dead" in the free list,
-     * we ignore the fact there are other fields of a struct scsipi_xfer
-     * are being overwritten by the linked list.
+     * we ignore the fact there are other fields of the struct scsipi_xfer
+     * being overwritten by the linked list "next" entry pointer.
      */
     *(struct scsipi_xfer **) xs = chan->chan_xs_free;
     chan->chan_xs_free = xs;
@@ -262,7 +262,20 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 
 	KASSERT(!cold);
 
-#ifndef PORT_AMIGA
+#ifdef PORT_AMIGA
+        /*
+         * Set the LUN in the CDB if we have an older device. We also
+         * set it for more modern SCSI-2 devices "just in case".
+         *
+         * CDH: This code is taken from the scsi_base bustype_cmd
+         *      implementation, and is placed here to avoid a call
+         *      through indirection.
+         */
+        if (periph->periph_version <= 2)
+                xs->cmd->bytes[0] |=
+                    ((periph->periph_lun << SCSI_CMD_LUN_SHIFT) &
+                        SCSI_CMD_LUN_MASK);
+#else
 	scsipi_update_timeouts(xs);
 
 	(chan->chan_bustype->bustype_cmd)(xs);
@@ -582,7 +595,11 @@ scsipi_make_xs_internal(struct scsipi_periph *periph,
      * Fill out the scsipi_xfer structure.  We don't know whose context
      * the cmd is in, so copy it.
      */
+#ifdef PORT_AMIGA
+    CopyMem(cmd, &xs->cmdstore, cmdlen);
+#else
     memcpy(&xs->cmdstore, cmd, cmdlen);
+#endif
     xs->cmd = &xs->cmdstore;
     xs->cmdlen = cmdlen;
     xs->data = data_addr;
@@ -989,6 +1006,7 @@ printf("CDH: periph sense required ior=%p\n", xs->amiga_ior);
 	 * completion queue, and wake up the completion thread.
 	 */
 	TAILQ_INSERT_TAIL(&chan->chan_complete, xs, channel_q);
+printf("CDH: XFER ERROR\n");
 #if 0
 	cv_broadcast(chan_cv_complete(chan));
 #endif
@@ -1009,6 +1027,7 @@ scsipi_completion_poll(struct scsipi_channel *chan)
 
     chan->chan_flags |= SCSIPI_CHAN_TACTIVE;
     while ((xs = TAILQ_FIRST(&chan->chan_complete)) != NULL) {
+printf("CDH: xs %p on completion queue\n", xs);
         if (chan->chan_tflags & SCSIPI_CHANT_GROWRES) {
             /* attempt to get more openings for this channel */
             chan->chan_tflags &= ~SCSIPI_CHANT_GROWRES;
@@ -1124,7 +1143,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 		}
 		mutex_exit(chan_mtx(chan)); // XXX allows other commands to queue or run
 		scsipi_request_sense(xs);
-#if 1
+#if 0
                 printf("Got sense:");
                 for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
                     printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
@@ -1403,6 +1422,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	struct scsipi_periph *periph = xs->xs_periph;
 	u_int8_t key;
 	int error;
+#ifndef NO_SERIAL_OUTPUT
 	u_int32_t info;
 	static const char *error_mes[] = {
 		"soft error (corrected)",
@@ -1414,9 +1434,9 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		"search returned equal", "volume overflow",
 		"verify miscompare", "unknown error key"
 	};
+#endif
 
 	sense = &xs->sense.scsi_sense;
-#define SCSIPI_DEBUG
 #ifdef SCSIPI_DEBUG
 	if (periph->periph_flags & SCSIPI_DB1) {
 	        int count, len;
@@ -1431,7 +1451,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			sense->flags & SSD_ILI ? 1 : 0,
 			sense->flags & SSD_EOM ? 1 : 0,
 			sense->flags & SSD_FILEMARK ? 1 : 0);
-		printf("\ninfo: 0x%x 0x%x 0x%x 0x%x followed by %d "
+		printf("info: 0x%x 0x%x 0x%x 0x%x followed by %d "
 			"extra bytes\n",
 			sense->info[0],
 			sense->info[1],
@@ -1494,10 +1514,12 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		printf(" DEFERRED ERROR, key = 0x%x\n", key);
 		/* FALLTHROUGH */
 	case 0x70:
+#ifndef NO_SERIAL_OUTPUT
 		if ((sense->response_code & SSD_RCODE_VALID) != 0)
 			info = _4btol(sense->info);
 		else
 			info = 0;
+#endif
 		key = SSD_SENSE_KEY(sense->flags);
 
 		switch (key) {
@@ -1630,6 +1652,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	 * Some other code, just report it
 	 */
 	default:
+#ifndef NO_SERIAL_OUTPUT
 #if    defined(SCSIDEBUG) || defined(DEBUG)
 	{
 		static const char *uc = "undecodable sense error";
@@ -1658,6 +1681,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		}
 		printf("\n");
 #endif
+#endif /* !NO_SERIAL_OUTPUT */
 		return EIO;
 	}
 }
@@ -1747,7 +1771,11 @@ printf("inquire: error=%d\n", error);
 		inqbuf->response_format = SID_FORMAT_SCSI1;
 		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
 		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
+#ifdef PORT_AMIGA
+		CopyMem("ADAPTEC ACB-4000            ", inqbuf->vendor, 28);
+#else
 		memcpy(inqbuf->vendor, "ADAPTEC ACB-4000            ", 28);
+#endif
 		error = 0;
 	}
 
@@ -1767,7 +1795,11 @@ printf("inquire: error=%d\n", error);
 		inqbuf->dev_qual2 = SID_REMOVABLE;
 		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
 		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
+#ifdef PORT_AMIGA
+		CopyMem("EMULEX  MT-02 QIC           ", inqbuf->vendor, 28);
+#else
 		memcpy(inqbuf->vendor, "EMULEX  MT-02 QIC           ", 28);
+#endif
 	}
 #endif /* SCSI_OLD_NOINQUIRY */
 
@@ -1817,7 +1849,6 @@ scsipi_request_sense(struct scsipi_xfer *xs)
 	int flags, error;
 	struct scsi_request_sense cmd;
 
-printf("CDH: asking for periph sense ior=%p\n", xs->amiga_ior);
 	periph->periph_flags |= PERIPH_SENSE;
 
 	/* if command was polling, request sense will too */

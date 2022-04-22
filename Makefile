@@ -2,7 +2,7 @@ NOW     := $(shell date)
 DATE    := $(shell date -d '$(NOW)' '+%Y-%m-%d')
 TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
 
-PROG	:= drv
+PROG	:= a4091.device
 OBJDIR  := objs
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c
@@ -15,14 +15,12 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG        # Show basic debug
 #CFLAGS  += -DDEBUG_SYNC   # Show Synchronous SCSI debug
 #CFLAGS  += -DDEBUG_CMD    # Show handler commands received
+CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 CFLAGS  += -DNO_SERIAL_OUTPUT
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing
 
-LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2
-
-#LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -mcrt=clib2 -ldebug -nostdlib -lgcc -lc -lamiga
 LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga
 
 #CFLAGS  += -g
@@ -36,11 +34,6 @@ LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-
 #LDFLAGS += -fbaserel
 CFLAGS  += -ramiga-dev
 LDFLAGS += -ramiga-dev
-
-# % make -f Makefile.device debug
-# m68k-amigaos-gcc -m68000 -Wall -Wextra -Wno-unused-parameter -fomit-frame-pointer -I. -g -O2 -DDEBUG -mcrt=clib2 -c -o build-debug/device.o device.c
-# 68k-amigaos-gcc -m68000 -Wall -Wextra -Wno-unused-parameter -fomit-frame-pointer -I. -g -O2 -DDEBUG -mcrt=clib2 -o build-debug/a4091.device build-debug/device.o -nostdlib -nostartfiles -ldebug -Wl,-Map=build-debug/a4091.device.map
-# 68k-amigaos-objdump -D build-debug/a4091.device > build-debug/a4091.device.s
 
 CFLAGS  += -Os
 LDFLAGS += -Os

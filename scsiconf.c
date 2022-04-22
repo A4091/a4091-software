@@ -302,7 +302,8 @@ scsibusattach(device_t parent, device_t self, void *aux)
 	chan->chan_init_cb_arg = NULL;
 
 #ifdef PORT_AMIGA
-	scsi_initq = AllocMem(sizeof(struct scsi_initq), MEMF_PUBLIC);
+        NOTE: Code is not currently enabled
+	scsi_initq = AllocMem(sizeof(*scsi_initq), MEMF_PUBLIC);
 #else
 	scsi_initq = malloc(sizeof(struct scsi_initq), M_DEVBUF, M_WAITOK);
 #endif
@@ -351,6 +352,7 @@ scsibus_config(struct scsibus_softc *sc)
 		    SCSI_DELAY);
 		/* ...an identifier we know no one will use... */
 #ifdef PORT_AMIGA
+                NOTE: Code is not currently enabled
                 delay(SCSI_DELAY * 1000000);
 #else
 		kpause("scsidly", false, SCSI_DELAY * hz, NULL);
@@ -377,7 +379,8 @@ scsibus_config(struct scsibus_softc *sc)
 	mutex_exit(&scsibus_qlock);
 
 #ifdef PORT_AMIGA
-	FreeMem(scsi_initq, sizeof(struct scsi_initq));
+        NOTE: Code is not currently enabled
+	FreeMem(scsi_initq, sizeof(*scsi_initq));
 #else
 	free(scsi_initq, M_DEVBUF);
 #endif
@@ -398,6 +401,7 @@ scsibusdetach(device_t self, int flags)
 	 * Defer while discovery thread is running
 	 */
 #ifdef PORT_AMIGA
+        NOTE: Code is not currently enabled
 	while (chan->chan_dthread != NULL)
                 delay(1000000);
 #else
@@ -850,7 +854,7 @@ static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
 	{{T_ENCLOSURE, T_FIXED,
 	 "SUN     ", "SENA            ", ""},     PQUIRK_NOLUNS},
 };
-#endif
+#endif  /* !PORT_AMIGA */
 
 /*
  * given a target and lun, ask the device what

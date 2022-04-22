@@ -437,7 +437,9 @@ struct scsipi_periph {
 
 	int	periph_target;		/* target ID (drive # on ATAPI) */
 	int	periph_lun;		/* LUN (not used on ATAPI) */
-	int	periph_blksize;		/* Block size of this LUN */
+#ifdef PORT_AMIGA
+	uint	periph_blkshift;	/* Block size of this LUN in bits */
+#endif
 
 	int	periph_version;		/* ANSI SCSI version */
 

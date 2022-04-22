@@ -25,15 +25,14 @@
 #define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
 
 #define DRIVER      "a4091"
+#define DEVICE_VERSION  1
+#define DEVICE_REVISION 0
+#define DEVICE_PRIORITY 0  // Fine to leave priority as zero
 
 #define DEVICE_NAME DRIVER".device"
-#define DEVICE_DATE "(20 Feb 2022)"
 #define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." \
-        XSTR(DEVICE_REVISION) " " DEVICE_DATE
-        /* format: "name version.revision (dd.mm.yy)" */
-#define DEVICE_VERSION 1
-#define DEVICE_REVISION 0
-#define DEVICE_PRIORITY 0 // Probably fine to leave priority as zero
+        XSTR(DEVICE_REVISION) " (" BUILD_DATE ")"
+        /* format: "name version.revision (yyyy-mm-dd)" */
 
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
@@ -127,7 +126,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     //      named ports.
 
     InitSemaphore(&entry_sem);
-    printf("A4091 driver %s\n", version_str);
+    printf("A4091 driver %s %s\n", device_name, device_id_string);
     return (dev);
 }
 
@@ -145,6 +144,7 @@ drv_expunge(struct Library *dev asm("a6"))
     if (dev->lib_OpenCnt != 0) {
         printf("expunge() device still open\n");
         dev->lib_Flags |= LIBF_DELEXP;
+        ReleaseSemaphore(&entry_sem);
         return (0);
     }
 
@@ -184,7 +184,7 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     ObtainSemaphore(&entry_sem);
     if (dev->lib_OpenCnt++ == 0) {
 //      printf("open(%d) first time\n", scsi_unit);
-        if (start_cmd_handler(scsi_unit, (void *) ioreq->io_Unit)) {
+        if (start_cmd_handler(scsi_unit)) {
             printf("Start handler failed\n");
 // HFERR_NoBoard - open failed for non-existat board
 // HFERR_SelfUnit - attempted to open our own SCSI ID
@@ -201,13 +201,13 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
         printf("Open fail\n");
         if (--dev->lib_OpenCnt == 0) {
             printf("Shut down handler\n");
-            stop_cmd_handler(ioreq->io_Unit);
+            stop_cmd_handler();
         }
-        ioreq->io_Error = HFERR_NoBoard;
+        ioreq->io_Error = HFERR_SelTimeout;
         ReleaseSemaphore(&entry_sem);
         return;
     }
-    printf("Open Dev=%p Unit=%p\n", ioreq->io_Device, ioreq->io_Unit);
+    printf("Open Unit=%p\n", ioreq->io_Unit);
 
     ioreq->io_Error = 0; // Success
 
@@ -238,7 +238,7 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 
     if (dev->lib_OpenCnt == 1) {
         /* Ask the command handler to shut down */
-        stop_cmd_handler(ioreq->io_Unit);
+        stop_cmd_handler();
         if (dev->lib_Flags & LIBF_DELEXP) {
             printf("close() expunge\n");
             dev->lib_OpenCnt--;
@@ -247,7 +247,7 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
         }
     }
 
-    ioreq->io_Device = NULL;
+//  ioreq->io_Device = NULL;
     ioreq->io_Unit = NULL;
     dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);

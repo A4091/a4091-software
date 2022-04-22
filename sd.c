@@ -71,13 +71,14 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
     memset(datap, 0, sizeof(datap->data));
     if (scsipi_command(periph, (void *)&cmd.cmd, sizeof(cmd.cmd),
         (void *)datap, sizeof (datap->data), SCSIPIRETRIES, 20000, NULL,
-        flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0)
+        flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0) {
         goto out;
+    }
 
     if (_4btol(datap->data.addr) != 0xffffffff) {
         *blksize = _4btol(datap->data.length);
         capacity = _4btol(datap->data.addr) + 1;
-        goto out;
+//      goto out;
     }
 
     /*
@@ -118,6 +119,16 @@ is_valid_blksize(uint32_t blksize)
     return ((blksize & 0xff00) && ((blksize & (blksize - 1)) == 0));
 }
 
+static int
+calc_blkshift(uint32_t blksize)
+{
+    uint shift = 0;
+    for (shift = 0; blksize != 0; shift++)
+        blksize >>= 1;
+
+    return (shift - 1);
+}
+
 uint32_t
 sd_blocksize(void *periph_p)
 {
@@ -126,8 +137,8 @@ sd_blocksize(void *periph_p)
     uint32_t blksize = 0;
     scsi_mode_sense_t modepage;
 
-    if (periph->periph_blksize != 0)
-        return (periph->periph_blksize);
+    if (periph->periph_blkshift != 0)
+        return (1 << periph->periph_blkshift);
 
     flags = XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;
 
@@ -173,31 +184,28 @@ sd_blocksize(void *periph_p)
     blksize = TD_SECTOR; // Just give up and accept 512 as the default
 
 got_blocksize:
-    periph->periph_blksize = blksize;
+    periph->periph_blkshift = calc_blkshift(blksize);
     return (blksize);
 }
 
 /*
- * sd_diskstart
+ * sd_readwrite
  * ------------
  * Initiate a read or write operation on the specified SCSI device.
  * b_flags includes B_READ when the operation is a read from the SCSI
  * device to computer RAM.
  */
 int
-sd_diskstart(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
+sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
              uint buflen, void *ior)
 {
     struct scsipi_periph *periph = periph_p;
     struct scsipi_generic cmdbuf;
     struct scsipi_xfer *xs;
-    uint32_t blksize = periph->periph_blksize;
-    uint32_t nblks = buflen / blksize;
+    uint32_t blkshift = periph->periph_blkshift;
+    uint32_t nblks = buflen >> blkshift;
     int cmdlen;
     int flags;
-
-    printf("diskstart(%u, %u, %c)\n",
-           (uint32_t) blkno, nblks, (b_flags & B_READ) ? 'R' : 'W');
 
     /*
      * Fill out the scsi command.  Use the smallest CDB possible
@@ -244,15 +252,66 @@ sd_diskstart(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
     xs = scsipi_make_xs_locked(periph, &cmdbuf, cmdlen, buf, buflen,
                                1, SD_IO_TIMEOUT, NULL, flags);
     if (__predict_false(xs == NULL))
-        return (1);  // out of memory
+        return (TDERR_NoMem);  // out of memory
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
-    printf("sd%d.%d %c issue %p\n",
-           periph->periph_target, periph->periph_lun,
-           (flags & XS_CTL_DATA_OUT) ? 'W' : 'R', xs);
+    printf("sd%d.%d %p issue %c %u %u\n",
+           periph->periph_target, periph->periph_lun, xs,
+           (flags & XS_CTL_DATA_OUT) ? 'W' : 'R', (uint32_t) blkno, nblks);
     return (scsipi_execute_xs(xs));
 }
+
+#ifdef ENABLE_SEEK
+/* Seek is implemented but untested code */
+int
+sd_seek(void *periph_p, uint64_t blkno, void *ior)
+{
+    struct scsipi_periph *periph = periph_p;
+    struct scsipi_generic cmdbuf;
+    struct scsipi_xfer *xs;
+    int cmdlen;
+    int flags;
+
+    printf("seek(%u)\n", (uint32_t) blkno);
+
+    /*
+     * Fill out the scsi command.  Use the smallest CDB possible
+     * (6-byte or 10-byte).
+     */
+    if ((blkno & 0x1fffff) == blkno) {
+        /* 6-byte CDB */
+        struct scsi_seek_6 *cmd = (struct scsi_seek_6 *) &cmdbuf;
+        cmdlen = sizeof (*cmd);
+        memset(cmd, 0, cmdlen);
+
+        cmd->opcode = SCSI_SEEK_6_COMMAND;
+        _lto3b(blkno, cmd->addr);
+    } else if ((blkno & 0xffffffff) == blkno) {
+        /* 10-byte CDB */
+        struct scsi_seek_10 *cmd = (struct scsi_seek_10 *) &cmdbuf;
+        cmdlen = sizeof (*cmd);
+        memset(cmd, 0, cmdlen);
+
+        cmd->opcode = SCSI_SEEK_10_COMMAND;
+        _lto4b(blkno, cmd->addr);
+    } else {
+        return (1);
+    }
+    flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG;
+
+    xs = scsipi_make_xs_locked(periph, &cmdbuf, cmdlen, NULL, 0,
+                               1, SD_IO_TIMEOUT, NULL, flags);
+    if (__predict_false(xs == NULL))
+        return (TDERR_NoMem);  // out of memory
+    xs->amiga_ior = ior;
+    xs->xs_done_callback = sd_complete;
+
+    printf("sd%d.%d %c %p issue\n",
+           periph->periph_target, periph->periph_lun, 'S', xs);
+    return (scsipi_execute_xs(xs));
+}
+#endif /* ENABLE_SEEK */
 
 int
 sd_getgeometry(void *periph_p, void *geom_p, void *ior)
@@ -270,9 +329,9 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
     cmd.unused[0] = 0;  /* Page Code */
     cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI2;
 
-    inq = AllocMem(sizeof (struct scsipi_inquiry_data), MEMF_PUBLIC);
+    inq = AllocMem(sizeof (*inq), MEMF_PUBLIC);
     if (inq == NULL)
-        return (1);
+        return (TDERR_NoMem);
 
     geom->dg_SectorSize = 0;
     geom->dg_TotalSectors = 0;
@@ -297,6 +356,67 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
     return (scsipi_execute_xs(xs));
 }
 
+/*
+ * sd_get_protstatus
+ * -----------------
+ * Get disk write protect status (0=Not write protected)
+ */
+int
+sd_get_protstatus(void *periph_p, unsigned long *status)
+{
+    struct scsipi_periph *periph = periph_p;
+    int                   flags = XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;
+    int                   rc;
+    scsi_mode_sense_t     modepage;
+
+    if ((rc = scsipi_mode_sense(periph, SMS_DBD, 3, &modepage.hdr,
+                          sizeof (modepage.hdr) +
+                          sizeof (modepage.pg.control_params),
+                          flags, SDRETRIES, 2000)) == 0) {
+        *status = !!(modepage.pg.control_params.ctl_flags3 & CTL3_SWP);
+        return (0);
+    } else {
+        /* Failure */
+        *status = 0;
+        return (rc);
+    }
+}
+
+/*
+ * sd_startstop
+ * ------------
+ * Send SCSI start or stop command (1=Start, 0=Stop)
+ */
+int
+sd_startstop(void *periph_p, void *ior, int start, int load_eject)
+{
+    struct scsipi_periph *periph = periph_p;
+    struct scsipi_xfer *xs;
+    struct scsipi_start_stop cmd;
+    int flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG;
+
+    memset(&cmd, 0, sizeof (cmd));
+    cmd.opcode = START_STOP;
+    cmd.byte2 = 0;
+    cmd.how = 0;
+    cmd.how = (start ? SSS_START : SSS_STOP) | (load_eject ? SSS_LOEJ : 0);
+
+    xs = scsipi_make_xs_locked(periph, (struct scsipi_generic *) &cmd,
+                               sizeof (cmd), NULL, 0, 1, SD_IO_TIMEOUT,
+                               NULL, flags);
+    if (__predict_false(xs == NULL))
+        return (TDERR_NoMem);  // out of memory
+    xs->amiga_ior = ior;
+    xs->xs_done_callback = sd_complete;
+
+    printf("sd%d.%d %p %s\n",
+           periph->periph_target, periph->periph_lun, xs,
+           load_eject ? (start ? "load" : "eject") :
+           (start ? "start" : "stop"));
+    return (scsipi_execute_xs(xs));
+}
+
+
 void
 queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
                     void *modepage_p, void (*done_cb)(struct scsipi_xfer *))
@@ -311,7 +431,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
     if (modepage == NULL) {
         modepage = AllocMem(sizeof (*modepage), MEMF_PUBLIC | MEMF_CLEAR);
         if (__predict_false(modepage == NULL)) {
-            cmd_complete(oxs->amiga_ior, 1);
+            cmd_complete(oxs->amiga_ior, TDERR_NoMem);
             return;
         }
     }
@@ -352,6 +472,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
     printf("mode_page_5 complete: %d\n", rc);
 
 #if 1
+#ifndef NO_SERIAL_OUTPUT
 {
     uint8_t *ptr = xs->data;
     int count = sizeof (*modepage);
@@ -360,6 +481,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
         printf(" %02x", *(ptr++));
     printf("\n");
 }
+#endif
 #endif
     if (rc == 0) {
         /* Got mode page 5 */
@@ -370,8 +492,8 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
         uint32_t blksize = _2btol(modepage->pg.flex_geometry.bytes_s);
         if (is_valid_blksize(blksize)) {
             struct scsipi_periph *periph = xs->xs_periph;
-            periph->periph_blksize = geom->dg_SectorSize;
             geom->dg_SectorSize = blksize;
+            periph->periph_blkshift = calc_blkshift(blksize);
         }
         if (nspt > 0)
             geom->dg_TrackSectors = nspt;
@@ -447,8 +569,8 @@ geom_done_mode_page_3(struct scsipi_xfer *xs)
         uint8_t  flags   = modepage->pg.disk_format.flags;
         if (is_valid_blksize(blksize)) {
             struct scsipi_periph *periph = xs->xs_periph;
-            periph->periph_blksize = geom->dg_SectorSize;
             geom->dg_SectorSize = blksize;
+            periph->periph_blkshift = calc_blkshift(blksize);
         }
 
         geom->dg_Flags |= (flags & DISK_FMT_RMB) ? DGF_REMOVABLE : 0;
@@ -465,6 +587,22 @@ geom_done_mode_page_3(struct scsipi_xfer *xs)
 }
 
 static void
+conv_sectors_to_chs(ULONG total, ULONG *c_p, ULONG *h_p, ULONG *s_p)
+{
+    ULONG c = total / 2;
+    ULONG h = 2;
+    ULONG s = 1;
+    while ((c >= 10000) && (h < 64) && (s < 32)) {
+        c >>= 2;
+        h <<= 1;
+        s <<= 1;
+    }
+    *c_p = c;
+    *h_p = h;
+    *s_p = s;
+}
+
+static void
 geom_done_get_capacity(struct scsipi_xfer *xs)
 {
     if (xs->error == 0) {
@@ -477,19 +615,15 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
          * add 1 there.
          */
         struct DriveGeometry *geom = xs->xs_callback_arg;
-        uint32_t temp = geom->dg_TotalSectors;
+        uint32_t blksize = geom->dg_TotalSectors;
         geom->dg_TotalSectors = geom->dg_SectorSize + 1;
-        geom->dg_SectorSize = temp;
-        geom->dg_Heads = 64;
-        geom->dg_TrackSectors = 32;
+        geom->dg_SectorSize = blksize;
+        conv_sectors_to_chs(geom->dg_TotalSectors, &geom->dg_Cylinders,
+                            &geom->dg_Heads, &geom->dg_TrackSectors);
         geom->dg_CylSectors = geom->dg_Heads * geom->dg_TrackSectors;
-        if (geom->dg_CylSectors == 0)
-            geom->dg_Cylinders = 0;
-        else
-            geom->dg_Cylinders = geom->dg_TotalSectors / geom->dg_CylSectors;
-        if (is_valid_blksize(geom->dg_SectorSize)) {
+        if (is_valid_blksize(blksize)) {
             struct scsipi_periph *periph = xs->xs_periph;
-            periph->periph_blksize = geom->dg_SectorSize;
+            periph->periph_blkshift = calc_blkshift(blksize);
         }
         printf("TotalSectors=%lu C=%lu H=%lu S=%lu %p\n", geom->dg_TotalSectors,
                geom->dg_Cylinders, geom->dg_Heads, geom->dg_TrackSectors, xs);
@@ -520,7 +654,7 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
         geom->dg_Flags = (inq->dev_qual2 & SID_REMOVABLE) ? DGF_REMOVABLE : 0;
     }
 
-    FreeMem(inq, sizeof (struct scsipi_inquiry_data));
+    FreeMem(inq, sizeof (*inq));
 
     memset(&cmd, 0, sizeof (cmd));
 
@@ -607,7 +741,7 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     xs->amiga_ior = ior;
     xs->xs_callback_arg = scmd;
     xs->xs_done_callback = scsidirect_complete;
-    printf("sdirect%d.%d issue: %p\n",
+    printf("sdirect%d.%d %p issue\n",
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs);
     return (scsipi_execute_xs(xs));
 // xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command
@@ -642,9 +776,9 @@ sd_complete(struct scsipi_xfer *xs)
         return;  /* IOR was internally generated, not by user request */
     }
 
-    printf("sd%d.%d %c done %p rc=%d\n",
-           xs->xs_periph->periph_target, xs->xs_periph->periph_lun,
-           (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', xs, rc);
+    printf("sd%d.%d %p done %c rc=%d\n",
+           xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs,
+           (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', rc);
     if (rc != 0) {
         /* Translate error code to AmigaOS */
         scsipi_xfer_result_t res = xs->error;
@@ -678,7 +812,7 @@ scsidirect_complete(struct scsipi_xfer *xs)
             UWORD len = scmd->scsi_SenseLength;
             if (len < sizeof (xs->sense.scsi_sense))
                 len = sizeof (xs->sense.scsi_sense);
-            memcpy(scmd->scsi_SenseData, &xs->sense.scsi_sense, len);
+            CopyMem(&xs->sense.scsi_sense, scmd->scsi_SenseData, len);
             scmd->scsi_SenseActual = len;
         }
     }

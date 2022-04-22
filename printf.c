@@ -71,7 +71,7 @@
 #define FMT_UPPERCASE  0x0100   // Uppercase hex (A-F) instead of (a-f)
 #define FMT_DOT        0x0200   // Dot specifier was used
 
-uint32_t debug_flags = 0;
+#ifndef NO_SERIAL_OUTPUT
 
 /* Output buffer structure */
 typedef struct {
@@ -82,19 +82,15 @@ typedef struct {
 int
 putchar(int ch)
 {
-#ifndef NO_SERIAL_OUTPUT
     KPutChar(ch);
-#endif
     return (ch);
 }
 
 int
 puts(const char *str)
 {
-#ifndef NO_SERIAL_OUTPUT
     KPutS(str);
     KPutChar('\n');
-#endif
     return (0);
 }
 
@@ -621,6 +617,7 @@ void errx(int rc, const char *fmt, ...)
     while (1)
         ;
 }
+#endif /* NO_SERIAL_OUTPUT */
 
 #undef DO_PRINTF_TEST
 #ifdef DO_PRINTF_TEST

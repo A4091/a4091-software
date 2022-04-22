@@ -155,7 +155,7 @@ extern a4091_save_t *asave;
  * service task to go process them.
  */
 __attribute__((noinline))
-void
+int
 irq_handler_core(a4091_save_t *save)
 {
     struct siop_softc *sc = &save->as_device_private;
@@ -163,12 +163,12 @@ irq_handler_core(a4091_save_t *save)
     uint8_t            istat;
 
     if (sc->sc_flags & SIOP_INTSOFF)
-        return; /* interrupts are not active */
+        return (0); /* interrupts are not active */
 
     rp = sc->sc_siopp;
     istat = rp->siop_istat;
     if ((istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0)
-        return;
+        return (0);
     save->as_irq_count++;
 
     /*
@@ -180,6 +180,8 @@ irq_handler_core(a4091_save_t *save)
 
     if (save->as_svc_task != NULL)
         Signal(save->as_svc_task, BIT(save->as_irq_signal));
+
+    return (!!(save->as_irq_count & 0xf));
 }
 
 /*
@@ -195,8 +197,7 @@ LONG
 irq_handler(void)
 {
     register a4091_save_t *save asm("a1");
-    irq_handler_core(save);
-    return (0);
+    return (irq_handler_core(save));
 }
 
 /* CDH: HACK */
@@ -263,7 +264,7 @@ a4091_find(uint32_t pos)
 {
     struct Library   *ExpansionBase;
     struct ConfigDev *cdev  = NULL;
-    uint32_t          as_addr  = -1;  /* Default to not found */
+    uint32_t          as_addr  = 0;  /* Default to not found */
     int               count = 0;
 
     if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
@@ -339,7 +340,7 @@ init_chan(device_t self, uint board)
     if (a4091_validate(dev_base))
         return (1);
 
-    strcpy(self->dv_xname, "a4091");
+    CopyMem("a4091", self->dv_xname, 6);
 
     memset(sc, 0, sizeof (*sc));
     sc->sc_dev = self;
@@ -456,6 +457,9 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     rc = scsi_probe_device(chan, target, lun, periph, &failed);
     printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",
            target, lun, rc, failed);
+#ifdef NO_SERIAL_OUTPUT
+    (void) rc;
+#endif
 
     if (failed) {
         scsipi_free_periph(periph);
@@ -475,5 +479,6 @@ detach(struct scsipi_periph *periph)
     if (periph != NULL) {
         struct scsipi_channel *chan = periph->periph_channel;
         scsipi_remove_periph(chan, periph);
+        scsipi_free_periph(periph);
     }
 }

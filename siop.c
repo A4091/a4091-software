@@ -290,7 +290,11 @@ siop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 
         acb->flags = ACB_ACTIVE;
         acb->xs = xs;
+#ifdef PORT_AMIGA
+        CopyMem(xs->cmd, &acb->cmd, xs->cmdlen);
+#else
         memcpy(&acb->cmd, xs->cmd, xs->cmdlen);
+#endif
         acb->clen = xs->cmdlen;
         acb->daddr = xs->data;
         acb->dleft = xs->datalen;

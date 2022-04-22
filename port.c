@@ -19,8 +19,22 @@ void
 panic(const char *s)
 {
     printf("PANIC: %s", s);
-    exit(1);
 }
+
+
+/*
+ * I don't know what is dragging this junk in from libc, but stubbing
+ * them here reduces the object size by ~12k
+ */
+const struct __sFILE_fake __sf_fake_stdin =
+    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
+const struct __sFILE_fake __sf_fake_stdout =
+    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
+const struct __sFILE_fake __sf_fake_stderr =
+    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
+
+
+
 
 #if 0
 void
@@ -171,23 +185,6 @@ dma_cachectl(void *addr, int len)
         addr += tlen;
     }
     return (paddr);
-}
-#endif
-
-#if 0
-void *
-local_memcpy(void *dst, const void *src, size_t len)
-{
-    CopyMem((void *)src, dst, len);
-    return (dst);
-}
-#endif
-#if 0
-void *
-local_memset(void *dst, int value, size_t len)
-{
-    SetMem(dst, value, len);
-    return (dst);
 }
 #endif
 
