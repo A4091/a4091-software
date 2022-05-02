@@ -717,7 +717,11 @@ siopreset(struct siop_softc *sc)
     rp->siop_scntl0 = SIOP_ARB_FULL | SIOP_SCNTL0_EPC | SIOP_SCNTL0_EPG;
     rp->siop_scntl1 = SIOP_SCNTL1_ESR;
     rp->siop_dcntl = sc->sc_dcntl;
+#ifdef PORT_AMIGA
+    rp->siop_dmode = 0xe0;  /* burst length = 8, drive FC2 */
+#else
     rp->siop_dmode = 0x80;  /* burst length = 4 */
+#endif
     rp->siop_sien = 0x00;   /* don't enable interrupts yet */
     rp->siop_dien = 0x00;   /* don't enable interrupts yet */
     rp->siop_scid = 1 << sc->sc_channel.chan_id;

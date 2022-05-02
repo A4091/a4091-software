@@ -347,7 +347,11 @@ init_chan(device_t self, uint board)
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
-    sc->sc_dcntl = SIOP_DCNTL_EA;
+#ifdef DRIVER_A4000T
+    sc->sc_dcntl = SIOP_DCNTL_EA;  /* A4000T */
+#else
+    sc->sc_dcntl = 0;              /* A4091 */
+#endif
     TAILQ_INIT(&sc->ready_list);
     TAILQ_INIT(&sc->nexus_list);
     TAILQ_INIT(&sc->free_list);

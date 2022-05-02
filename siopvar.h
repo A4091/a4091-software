@@ -43,6 +43,12 @@
  * buffer is not page aligned (+1).
  */
 #define	DMAMAXIO	(MAXPHYS/PAGE_SIZE+1)
+/*
+ * XXX: This should be much smaller for AmigaOS. It's currently 128, which
+ *      would be 127MB + 1 for unaligned data. Probably doesn't need to be
+ *      that large. Max segment size (AMIGA_MAX_TRANSFER) can be bumped from
+ *      1MB to ?32MB? in which case we would need very few segments here.
+ */
 
 /*
  * Data Structure for SCRIPTS program
