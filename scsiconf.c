@@ -56,7 +56,6 @@
 #include "scsi_all.h"
 #include "scsipi_all.h"
 #include "scsipiconf.h"
-#include "scsiconf.h"
 
 #else /* !PORT_AMIGA */
 
