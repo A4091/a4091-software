@@ -203,7 +203,10 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
     xs->xs_callback_arg = NULL;
     xs->amiga_ior = NULL;
 
+#ifndef PORT_AMIGA
     periph->periph_active++;
+#endif
+    chan->chan_active++;
 
 #if 0
     printf("get_xs(%p) active=%u\n", xs, periph->periph_active);
@@ -218,7 +221,10 @@ scsipi_put_xs(struct scsipi_xfer *xs)
     struct scsipi_periph  *periph = xs->xs_periph;
     struct scsipi_channel *chan = periph->periph_channel;
 
+#ifndef PORT_AMIGA
     periph->periph_active--;
+#endif
+    chan->chan_active--;
 
     /*
      * Insert this entry at the top of the free list. It's really just
@@ -238,13 +244,16 @@ scsipi_put_xs(struct scsipi_xfer *xs)
 void
 scsipi_free_all_xs(struct scsipi_channel *chan)
 {
-    struct scsipi_xfer *xs = chan->chan_xs_free;
+//    struct scsipi_periph *periph;
+    struct scsipi_xfer   *xs = chan->chan_xs_free;
+
     chan->chan_xs_free = NULL;
     while (xs != NULL) {
         struct scsipi_xfer *txs = xs;
         xs = *(struct scsipi_xfer **) xs;  /* ->next link */
         FreeMem(txs, sizeof (*txs));
     }
+    chan->chan_active = 0;
 }
 
 
@@ -552,9 +561,11 @@ scsipi_lookup_periph_internal(struct scsipi_channel *chan, int target, int lun, 
 	struct scsipi_periph *periph;
 	uint32_t hash;
 
+#ifndef PORT_AMIGA
 	if (target >= chan->chan_ntargets ||
 	    lun >= chan->chan_nluns)
 		return NULL;
+#endif
 
 	hash = scsipi_chan_periph_hash(target, lun);
 
@@ -562,10 +573,8 @@ scsipi_lookup_periph_internal(struct scsipi_channel *chan, int target, int lun, 
 		mutex_enter(chan_mtx(chan));
 	LIST_FOREACH(periph, &chan->chan_periphtab[hash], periph_hash) {
 		if (periph->periph_target == target &&
-		    periph->periph_lun == lun) {
-printf("CDH: periph match %u.%u\n", target, lun);
+		    periph->periph_lun == lun)
 			break;
-}
 	}
 	if (lock)
 		mutex_exit(chan_mtx(chan));
@@ -655,10 +664,6 @@ scsipi_adapter_request(struct scsipi_channel *chan,
 {
     struct scsipi_adapter *adapt = chan->chan_adapter;
 
-#if 0
-    printf("CDH: scsipi_adapter_request(%u)\n", req);
-#endif
-
 //  scsipi_adapter_lock(adapt);
     SDT_PROBE3(scsi, base, adapter, request__start,  chan, req, arg);
     (adapt->adapt_request)(chan, req, arg);
@@ -693,6 +698,7 @@ scsipi_grow_resources(struct scsipi_channel *chan)
 #if 0
 		scsipi_channel_freeze_locked(chan, 1);
 #endif
+printf("CDH: chan request growres\n");
 		chan->chan_tflags |= SCSIPI_CHANT_GROWRES;
 //		cv_broadcast(chan_cv_complete(chan));
 		return 0;
@@ -797,6 +803,7 @@ scsipi_run_queue(struct scsipi_channel *chan)
 	struct scsipi_periph *periph;
 
 	for (;;) {
+#ifndef PORT_AMIGA
 		/*
 		 * If the channel is frozen, we can't do any work right
 		 * now.
@@ -804,6 +811,7 @@ scsipi_run_queue(struct scsipi_channel *chan)
 		if (chan->chan_qfreeze != 0) {
 			break;
 		}
+#endif
 
 		/*
 		 * Look for work to do, and make sure we can do it.
@@ -812,10 +820,16 @@ scsipi_run_queue(struct scsipi_channel *chan)
 		     xs = TAILQ_NEXT(xs, channel_q)) {
 			periph = xs->xs_periph;
 
+#ifdef PORT_AMIGA
+			if ((periph->periph_sent >= periph->periph_openings) ||
+			    (periph->periph_flags & PERIPH_UNTAG) != 0)
+				continue;
+#else
 			if ((periph->periph_sent >= periph->periph_openings) ||
 			    periph->periph_qfreeze != 0 ||
 			    (periph->periph_flags & PERIPH_UNTAG) != 0)
 				continue;
+#endif
 
 			if ((periph->periph_flags &
 			    (PERIPH_RECOVERING | PERIPH_SENSE)) != 0 &&
@@ -965,7 +979,6 @@ scsipi_done(struct scsipi_xfer *xs)
 	 * received before the thread is waked up.
 	 */
 	if (xs->error == XS_BUSY && xs->status == SCSI_CHECK) {
-printf("CDH: periph sense required ior=%p\n", xs->amiga_ior);
 		periph->periph_flags |= PERIPH_SENSE;
 		periph->periph_xscheck = xs;
 	}
@@ -1006,11 +1019,11 @@ printf("CDH: periph sense required ior=%p\n", xs->amiga_ior);
 	 * completion queue, and wake up the completion thread.
 	 */
 	TAILQ_INSERT_TAIL(&chan->chan_complete, xs, channel_q);
-printf("CDH: XFER ERROR\n");
-#if 0
+#ifdef PORT_AMIGA
+        scsipi_completion_poll(chan);
+#else
 	cv_broadcast(chan_cv_complete(chan));
 #endif
-        scsipi_completion_poll(chan);
 
  out:
 	/*
@@ -1906,7 +1919,6 @@ scsipi_test_unit_ready(struct scsipi_periph *periph, int flags)
 	struct scsi_test_unit_ready cmd;
 	int retries;
 
-printf("CDH: scsipi_test_unit_ready\n");
 	/* some ATAPI drives don't support TEST UNIT READY. Sigh */
 	if (periph->periph_quirks & PQUIRK_NOTUR)
 		return 0;
@@ -1935,7 +1947,6 @@ scsipi_set_xfer_mode(struct scsipi_channel *chan, int target, int immed)
 	struct scsipi_periph *itperiph;
 	int lun;
 
-printf("CDH: scsipi_set_xfer_mode %u\n", target);
 	/*
 	 * Go to the minimal xfer mode.
 	 */

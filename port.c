@@ -12,9 +12,6 @@
 /* Not sure this even works for a driver */
 ulong __stack_size = 32768;
 
-u_long scsi_nosync = 0;
-int    shift_nosync = 0;
-
 void
 panic(const char *s)
 {
@@ -62,6 +59,9 @@ delay(int usecs)
             ;
         return;
     }
+#if 0
+    printf("delay(%u)\n", usecs);
+#endif
 
     Delay(ticks);
 }
@@ -101,100 +101,39 @@ device_xname(void *ptr)
         return (dev->dv_xname);
 }
 
-#if 0
-int
-mstohz(int m)
+#ifndef NO_SERIAL_OUTPUT
+unsigned int
+read_system_ticks(void)
 {
-    int hz = 50;
-    int h = m;
-
-    if (h > 0) {
-        h = h * hz / 1000;
-        if (h == 0)
-            h = 1000 / hz;
-    }
-
-    return (h);
+    struct DateStamp ds;
+    DateStamp(&ds);  /* Measured latency is ~250us on A3000 A3640 */
+    return ((unsigned int) (ds.ds_Minute) * 60 * TICKS_PER_SECOND + ds.ds_Tick);
 }
 
-void
-callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg)
+unsigned int
+ticks_since_last(void)
 {
-    printf("callout_reset()\n");
-}
-
-int
-callout_stop(void *cs)
-{
-    /* try to cancel a pending callout */
-    printf("callout_stop()\n");
-    return (0);
-}
-
-uint32_t
-kvtop(void *vaddr)
-{
-    return ((uint32_t) vaddr);
-}
-
-// #define DCIAS(x) /* cache flush: cpushl dc,%a0@ */
-void
-_DCIAS(uint32_t paddr)
-{
-    /* Cache flush of some sort */
-}
-
-/* cache flush / purge */
-void
-_DCIU(void)
-{
-    printf("_DCIU()\n");
-}
-
-/* instruction cache purge */
-void
-_ICIA(void)
-{
-    printf("_ICIA()\n");
+    unsigned int etime = read_system_ticks();
+    unsigned int stime;
+    static unsigned int last = 0;
+    stime = last;
+    last = etime;
+    if (etime < stime)
+        etime += 24 * 60 * 60 * TICKS_PER_SECOND;  /* Next day */
+    return (etime - stime);
 }
 #endif
 
-
 #if 0
-/*
- * dma_cachectl
- * ------------
- * Flush CPU cache at specified address to memory in preparation for a
- * device-initiated DMA read to occur.
- */
-int
-dma_cachectl(void *addr, int len)
-{
-//  printf("dma_cachectl(%p, %x)\n", addr, len);
-    ULONG flags = DMA_ReadFromRAM;
-    int paddr = (int) addr;
-
-    while (len > 0) {
-        ULONG tlen = len;
-        APTR taddr = CachePreDMA(addr, &tlen, flags);
-        if ((flags & DMA_Continue) == 0) {
-            flags |= DMA_Continue;
-            paddr = (int) taddr;
-        }
-        len -= tlen;
-        addr += tlen;
-    }
-    return (paddr);
-}
-#endif
-
 void exit(int __status)
 {
     KPrintF((CONST_STRPTR) "exit(%ld)", errno);
     while (1)
         ;
 }
+#endif
 
+#if 0
 /* Return the index of the lowest set bit. (Counted from one) */
 int
 ffs(int i)
@@ -216,3 +155,4 @@ ffs(int i)
 
     return (result);
 }
+#endif

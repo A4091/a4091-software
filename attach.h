@@ -3,7 +3,7 @@
 
 int attach(device_t self, uint scsi_target, struct scsipi_periph **periph);
 void detach(struct scsipi_periph *periph);
-int init_chan(device_t self, uint board);
+int init_chan(device_t self, UBYTE *boardnum);
 void deinit_chan(device_t self);
 
 typedef struct {

@@ -871,7 +871,6 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #ifdef PORT_AMIGA
 	struct scsipi_inquiry_data inqbuf;
 	int checkdtype, docontinue, quirks;
-	struct scsipibus_attach_args sa;
 #else /* !PORT_AMIGA */
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
@@ -883,7 +882,6 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	cfdata_t cf;
 	int locs[SCSIBUSCF_NLOCS];
 #endif
-
 	/*
 	 * Assume no more LUNs to search after this one.
 	 * If we successfully get Inquiry data and after
@@ -907,7 +905,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 
 	periph->periph_target = target;
 	periph->periph_lun = lun;
+#ifndef PORT_AMIGA
 	periph->periph_quirks = chan->chan_defquirks;
+#endif
 
 #ifdef SCSIPI_DEBUG
 	if (SCSIPI_DEBUG_TYPE == SCSIPI_BUSTYPE_SCSI &&
@@ -944,11 +944,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		while (len < 3 + 28 + 20 + 1 + 1 + (8*2))
 			extension[len++] = ' ';
 	}
+
 	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY | XS_CTL_SILENT))
-{
-printf("CDH: probe inquire failed\n");
 		goto bad;
-}
 
 	periph->periph_type = inqbuf.device & SID_TYPE;
 	if (inqbuf.dev_qual2 & SID_REMOVABLE)
@@ -969,22 +967,18 @@ printf("CDH: probe inquire failed\n");
 	case SID_QUAL_LU_NOTPRESENT:
 	case SID_QUAL_reserved:
 	case SID_QUAL_LU_NOT_SUPP:
-{
-printf("CDH: probe bad QUAL\n");
 		goto bad;
-}
 
 	default:
 		break;
 	}
 
+#ifndef PORT_AMIGA
 	/* Let the adapter driver handle the device separately if it wants. */
 	if (chan->chan_adapter->adapt_accesschk != NULL &&
 	    (*chan->chan_adapter->adapt_accesschk)(periph, &sa.sa_inqbuf))
-{
-printf("CDH: probe adapter fail\n");
 		goto bad;
-}
+#endif
 
 	if (checkdtype) {
 		switch (periph->periph_type) {
@@ -1013,6 +1007,7 @@ printf("CDH: probe nodevice\n");
 		}
 	}
 
+#ifndef PORT_AMIGA
 	sa.sa_periph = periph;
 	sa.sa_inqbuf.type = inqbuf.device;
 	sa.sa_inqbuf.removable = inqbuf.dev_qual2 & SID_REMOVABLE ?
@@ -1023,7 +1018,6 @@ printf("CDH: probe nodevice\n");
 	sa.scsipi_info.scsi_version = inqbuf.version;
 	sa.sa_inqptr = &inqbuf;
 
-#if 0
 	finger = scsipi_inqmatch(
 	    &sa.sa_inqbuf, scsi_quirk_patterns,
 	    sizeof(scsi_quirk_patterns)/sizeof(scsi_quirk_patterns[0]),
@@ -1032,8 +1026,10 @@ printf("CDH: probe nodevice\n");
 	if (finger != NULL)
 		quirks = finger->quirks;
 	else
-#endif
 		quirks = 0;
+#else
+        quirks = 0;
+#endif
 
 	/*
 	 * Determine the operating mode capabilities of the device.

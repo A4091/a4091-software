@@ -257,10 +257,12 @@ a4091_remove_local_irq_handler(void)
 /*
  * a4091_find
  * ----------
- * Locates the specified A4091 in the system (by autoconfig order).
+ * Locates the next A4091 in the system (by autoconfig order) which has
+ * not yet been claimed by a driver. If one is not found, the first
+ * device is chosen (reused).
  */
 static uint32_t
-a4091_find(uint32_t pos)
+a4091_find(UBYTE *boardnum)
 {
     struct Library   *ExpansionBase;
     struct ConfigDev *cdev  = NULL;
@@ -274,68 +276,146 @@ a4091_find(uint32_t pos)
 
     do {
         cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if (cdev != NULL) {
-            if (pos == count) {
-                as_addr = (uint32_t) (cdev->cd_BoardAddr);
-                break;
-            }
-            count++;
+        if ((cdev != NULL) && (cdev->cd_Flags & CDB_CONFIGME)) {
+            cdev->cd_Flags &= ~CDB_CONFIGME;
+            as_addr = (uint32_t) (cdev->cd_BoardAddr);
+            *boardnum = count;
+            break;
         }
+        count++;
     } while (cdev != NULL);
+
+    if (cdev == NULL) {
+        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+        if (cdev != NULL) {
+            /* Just take the first board found */
+            as_addr = (uint32_t) (cdev->cd_BoardAddr);
+            *boardnum = 0;
+        }
+    }
+
+#if 0
+    /*
+     * XXX: ROM code probably needs to be using GetCurrentBinding()
+     *      rather than FindConfigDev() to get the current board.
+     */
+{
+    ULONG res;
+    struct CurrentBinding cb;
+    res = GetCurrentBinding(&cb, sizeof (cb));
+    printf("gcb=%lu fn='%s' ps='%s'\n", res, (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
+    if (cb.cb_ConfigDev != NULL) {
+        struct ConfigDev *cd = cb.cb_ConfigDev;
+        do {
+            printf("configdev %p board=%08x flags=%02x configme=%x driver=%p\n", cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
+            cd = cd->cd_NextCD;
+        } while (cd != NULL);
+    }
+}
+#endif
 
     CloseLibrary(ExpansionBase);
 
     return (as_addr);
 }
 
+static void
+a4091_release(uint32_t as_addr)
+{
+    struct Library   *ExpansionBase;
+    struct ConfigDev *cdev  = NULL;
+
+    if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
+        printf("Could not open %s\n", expansion_library_name);
+        return;
+    }
+
+    do {
+        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+        if ((cdev != NULL) && ((uint32_t) cdev->cd_BoardAddr == as_addr)) {
+            cdev->cd_Flags |= CDB_CONFIGME;
+            break;
+        }
+    } while (cdev != NULL);
+
+    CloseLibrary(ExpansionBase);
+}
+
 int
 a4091_validate(uint32_t dev_base)
 {
-    uint32_t temp1;
-    uint32_t temp2;
-    uint32_t scratch1;
-    uint32_t scratch2;
+    uint32_t temp;
+    uint32_t scratch;
+    uint32_t patt = 0xf0e7c3a5;
+    uint32_t next;
+    uint     rot;
+    uint     fail = 0;
 
     siop_regmap_p rp = (siop_regmap_p) (dev_base + 0x00800000);
-    if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000)) {
+    if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000) ||
+        (dev_base & 0x0fffffff)) {
         printf("Invalid device base %x\n", dev_base);
         return (1);
     }
 
+#if 0
+    rp->siop_istat |= SIOP_ISTAT_RST;       /* reset chip */
+    Delay(1);
+    rp->siop_istat &= ~SIOP_ISTAT_RST;
+    Delay(1);
+#endif
+
     /*
-     * Minimally validate device is present by writing the temp and scratch
+     * Validate device connectivity by writing the temp and scratch
      * registers.
      */
-    scratch1 = rp->siop_scratch;
-    temp1    = rp->siop_temp;
-    rp->siop_scratch = 0xdeadbeef;
-    rp->siop_temp    = 0xaaaa5555;
-    scratch2 = rp->siop_scratch;
-    temp2    = rp->siop_temp;
-    rp->siop_scratch = scratch1;
-    rp->siop_temp    = temp1;
-    if ((rp->siop_scratch != scratch1) || (rp->siop_temp != temp1) ||
-        (scratch2 != 0xdeadbeef) || (temp2 != 0xaaaa5555)) {
-        return (1);
+    scratch = rp->siop_scratch;
+    temp    = rp->siop_temp;
+    for (rot = 0; rot < 32; rot++, patt = next) {
+        uint32_t got_scratch;
+        uint32_t got_temp;
+        next = (patt << 1) | (patt >> 31);
+        rp->siop_scratch = patt;
+        rp->siop_temp = next;
+        got_scratch = rp->siop_scratch;
+        got_temp = rp->siop_temp;
+        if ((got_scratch != patt) ||
+            (got_temp != next)) {
+            printf("A4091 FAIL");
+            if (got_scratch != patt) {
+                printf(" scratch %08x != %08x [%08x]",
+                       got_scratch, patt, got_scratch ^ patt);
+            }
+            if (got_temp != next) {
+                printf(" temp %08x != %08x [%08x]",
+                       got_temp, next, got_temp ^ next);
+            }
+            printf("\n");
+            fail++;
+            break;
+        }
     }
-    return (0);
+    rp->siop_scratch = scratch;
+    rp->siop_temp    = temp;
+
+    return (fail);
 }
 
 int
-init_chan(device_t self, uint board)
+init_chan(device_t self, UBYTE *boardnum)
 {
     struct siop_softc     *sc = device_private(self);
     struct scsipi_adapter *adapt = &sc->sc_adapter;
     struct scsipi_channel *chan = &sc->sc_channel;
-    uint32_t dev_base = a4091_find(board);
+    uint32_t dev_base;
+    uint8_t dip_switches;
     int rc;
 
+    dev_base = a4091_find(boardnum);
     if (dev_base == 0) {
-        printf("A4091 %u not found\n", board);
+        printf("A4091 %u not found\n", *boardnum);
         return (1);
     }
-
-    printf("init_chan(%x)\n", dev_base);
 
     if (a4091_validate(dev_base))
         return (1);
@@ -343,6 +423,8 @@ init_chan(device_t self, uint board)
     CopyMem("a4091", self->dv_xname, 6);
 
     memset(sc, 0, sizeof (*sc));
+    dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
+    printf("DIP switches = %02x\n", dip_switches);
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
@@ -365,20 +447,33 @@ init_chan(device_t self, uint board)
     adapt->adapt_openings = 7;
     adapt->adapt_max_periph = 1;
     adapt->adapt_request = siop_scsipi_request;
-    adapt->adapt_minphys = siop_minphys;
 
     /*
      * Fill in the scsipi_channel.
      */
     memset(chan, 0, sizeof (*chan));
     chan->chan_adapter = adapt;
-//  chan->chan_bustype = &scsi_bustype;
-    chan->chan_channel = 0;
-    chan->chan_ntargets = 8;
-    chan->chan_nluns = 8;
-    chan->chan_id = 7;
+    chan->chan_nluns = (dip_switches & BIT(7)) ? 8 : 1;  // SCSI LUNs enabled?
+    chan->chan_id = dip_switches & 7;  // SCSI ID from DIP switches
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
+
+    if ((dip_switches & BIT(5)) == 0) {
+        /* Need to disable synchronous SCSI */
+        sc->sc_nosync = ~0;
+    }
+
+    /*
+     * A4091 Rear-access DIP switches
+     *   SW 8 Off  SCSI LUNs Enabled
+     *   SW 7 Off  Internal Termination On
+     *   SW 6 Off  Synchronous SCSI Mode
+     *   SW 5 Off  Short Spinup
+     *   SW 4 Off  SCSI-2 Fast Bus Mode
+     *   SW 3 Off  ADR2=1
+     *   SW 2 Off  ADR1=1
+     *   SW 1 Off  ADR0=1  Controller Host ID=7
+     */
 
     scsipi_channel_init(chan);
 
@@ -399,6 +494,7 @@ deinit_chan(device_t self)
 
     siopshutdown(chan);
     a4091_remove_local_irq_handler();
+    a4091_release((uint32_t) sc->sc_siopp - 0x00800000);
 }
 
 struct scsipi_periph *
@@ -447,14 +543,12 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     *periph_p = periph;
     if (periph == NULL)
         return (1);
-
     printf("attach(%p, %d)\n", periph, scsi_target);
     periph->periph_openings = 4;  // Max # of outstanding commands
     periph->periph_target   = scsi_target % 10;         // SCSI target ID
     periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
     periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
     periph->periph_dbflags  = 0;
-    periph->periph_dev = NULL;
     periph->periph_channel = chan;  // Not sure this is needed
     TAILQ_INIT(&periph->periph_xferq);
 

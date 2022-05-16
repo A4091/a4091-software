@@ -204,6 +204,7 @@ struct scsipi_adapter {
 
 	void	(*adapt_request)(struct scsipi_channel *,
 		    scsipi_adapter_req_t, void *);
+#ifndef PORT_AMIGA
 	void	(*adapt_minphys)(struct buf *);
 	int	(*adapt_ioctl)(struct scsipi_channel *, u_long,
 		    void *, int, struct proc *);
@@ -212,6 +213,7 @@ struct scsipi_adapter {
 			struct disk_parms *, u_long);
 	int	(*adapt_accesschk)(struct scsipi_periph *,
 			struct scsipi_inquiry_pattern *);
+#endif
 
 //	kmutex_t adapt_mtx;
 	volatile int	adapt_running;	/* how many users of mutex */
@@ -285,30 +287,43 @@ struct scsipi_bustype {
 #ifdef _KERNEL
 struct scsipi_channel {
         struct scsipi_xfer *chan_xs_free;  /* available xfer descriptors */
-//	const struct scsipi_bustype *chan_bustype; /* channel's bus type */
+#ifdef PORT_AMIGA
+        int     chan_active;            /* count of active I/O on channel */
+#endif
+#ifndef PORT_AMIGA
+	const struct scsipi_bustype *chan_bustype; /* channel's bus type */
 	const char *chan_name;	/* this channel's name */
+#endif
 
 	struct scsipi_adapter *chan_adapter; /* pointer to our adapter */
 
 	/* Periphs for this channel. */
 	LIST_HEAD(, scsipi_periph) chan_periphtab[SCSIPI_CHAN_PERIPH_BUCKETS];
 
+#ifndef PORT_AMIGA
 	int	chan_channel;		/* channel number */
+#endif
 	int	chan_flags;		/* channel flags */
 	int	chan_openings;		/* number of command openings */
+#ifndef PORT_AMIGA
 	int	chan_max_periph;	/* max openings per periph */
 
 	int	chan_ntargets;		/* number of targets */
+#endif
 	int	chan_nluns;		/* number of luns */
 	int	chan_id;		/* adapter's ID for this channel */
 
+#ifndef PORT_AMIGA
 	int	chan_defquirks;		/* default device's quirks */
 
 	struct lwp *chan_dthread;	/* discovery thread */
 	struct lwp *chan_thread;	/* completion thread */
+#endif
 	int	chan_tflags;		/* flags for the completion thread */
 
+#ifndef PORT_AMIGA
 	int	chan_qfreeze;		/* freeze count for queue */
+#endif
 
 	/* Job queue for this channel. */
 	struct scsipi_xfer_queue chan_queue;
@@ -316,6 +331,7 @@ struct scsipi_channel {
 	/* Completed (async) jobs. */
 	struct scsipi_xfer_queue chan_complete;
 
+#ifndef PORT_AMIGA
 	/* callback we may have to call from completion thread */
 	void (*chan_callback)(struct scsipi_channel *, void *);
 	void *chan_callback_arg;
@@ -323,6 +339,7 @@ struct scsipi_channel {
 	/* callback we may have to call after forking the kthread */
 	void (*chan_init_cb)(struct scsipi_channel *, void *);
 	void *chan_init_cb_arg;
+#endif
 
 //	kcondvar_t chan_cv_comp;
 //	kcondvar_t chan_cv_thr;
@@ -406,19 +423,24 @@ struct scsipi_opcodes
  *	still be an improvement.
  */
 struct scsipi_periph {
+#ifdef PORT_AMIGA
 	void *drv_state;        /* pointer to Amiga driver's device state */
+#else
 	device_t periph_dev;	/* pointer to peripheral's device */
+#endif
 	struct scsipi_channel *periph_channel; /* channel we're connected to */
 
 					/* link in channel's table of periphs */
 	LIST_ENTRY(scsipi_periph) periph_hash;
 
-#if 0
+#ifndef PORT_AMIGA
 	const struct scsipi_periphsw *periph_switch; /* peripheral's entry
 							points */
 #endif
 	int	periph_openings;	/* max # of outstanding commands */
+#ifndef PORT_AMIGA
 	int	periph_active;		/* current # of outstanding commands */
+#endif
 	int	periph_sent;		/* current # of commands sent to adapt*/
 
 	int	periph_mode;		/* operation modes, CAP bits */
@@ -443,9 +465,9 @@ struct scsipi_periph {
 
 	int	periph_version;		/* ANSI SCSI version */
 
+#ifndef PORT_AMIGA
 	int	periph_qfreeze;		/* queue freeze count */
 
-#ifndef PORT_AMIGA
 	/* available opcodes and timeout information */
 	struct scsipi_opcodes *periph_opcs;
 #endif
@@ -456,12 +478,16 @@ struct scsipi_periph {
 	/* Pending scsipi_xfers on this peripheral. */
 	struct scsipi_xfer_queue periph_xferq;
 
-//	callout_t periph_callout;
+#ifndef PORT_AMIGA
+	callout_t periph_callout;
+#endif
 
 	/* xfer which has a pending CHECK_CONDITION */
 	struct scsipi_xfer *periph_xscheck;
 
-//	kcondvar_t periph_cv;
+#ifndef PORT_AMIGA
+	kcondvar_t periph_cv;
+#endif
 #define periph_cv_periph(p) (&(p)->periph_cv)
 #define periph_cv_active(p) (&(p)->periph_cv)
 };
@@ -763,8 +789,10 @@ int	scsipi_thread_call_callback(struct scsipi_channel *,
 	    void *);
 void	scsipi_async_event(struct scsipi_channel *,
 	    scsipi_async_event_t, void *);
+#ifndef PORT_AMIGA
 int	scsipi_do_ioctl(struct scsipi_periph *, dev_t, u_long, void *,
 	    int, struct lwp *);
+#endif
 
 void	scsipi_set_xfer_mode(struct scsipi_channel *, int, int);
 

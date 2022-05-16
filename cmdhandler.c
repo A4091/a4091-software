@@ -52,7 +52,7 @@ typedef struct {
     a4091_save_t   *drv_state;  // io_Device
     struct MsgPort *msg_port;   // Handler's message port (io_Unit)
     UWORD           cmd;        // CMD_STARTUP            (io_Command)
-    UBYTE           board;      // Desired board number   (io_Flags)
+    UBYTE           boardnum;   // Desired board number   (io_Flags)
     BYTE            io_Error;   // Success=0 or failure code
 } start_msg_t;
 
@@ -60,13 +60,14 @@ typedef struct {
 void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
+#if 0
     struct scsipi_channel *chan = &sc->sc_channel;
 
     /* XXX: DEBUG */
     if (TAILQ_FIRST(&chan->chan_complete) != NULL) {
         printf("SOMETHING on COMPLETION QUEUE\n");
     }
-
+#endif
 
     if (sc->sc_flags & SIOP_INTSOFF) {
         siop_regmap_p rp    = sc->sc_siopp;
@@ -277,6 +278,7 @@ CMD_SEEK_continue:
             } else {
                 (void) sd_blocksize((struct scsipi_periph *) ior->io_Unit);
             }
+
             ReplyMsg(&ior->io_Message);
             break;
 
@@ -324,19 +326,22 @@ CMD_SEEK_continue:
     return (0);
 }
 
+__asm("_geta4: lea ___a4_init,a4 \n"
+      "        rts");
+
 static void
 cmd_handler(void)
 {
-    struct MsgPort       *msgport;
-    struct IORequest     *ior;
-    struct Process       *proc;
-    struct siop_softc    *sc;
-    start_msg_t          *msg;
-    ULONG                 int_mask;
-    ULONG                 cmd_mask;
-    ULONG                 wait_mask;
-    uint                  board;
-    uint32_t              mask;
+    struct MsgPort        *msgport;
+    struct IORequest      *ior;
+    struct Process        *proc;
+    struct siop_softc     *sc;
+    int                   *active;
+    start_msg_t           *msg;
+    ULONG                  int_mask;
+    ULONG                  cmd_mask;
+    ULONG                  wait_mask;
+    uint32_t               mask;
 #if 0
     register long devbase asm("a6");
 
@@ -355,9 +360,8 @@ cmd_handler(void)
 
     SysBase = *(struct ExecBase **) 4UL;
     DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
-    board = msg->board;
 
-    msgport = CreatePort(0, 0);
+    msgport = CreatePort(NULL, 0);
     msg->msg_port = msgport;
     if (msgport == NULL) {
         /* Terminate handler and give up */
@@ -367,7 +371,7 @@ cmd_handler(void)
         return;
     }
     asave = msg->drv_state;
-    msg->io_Error = init_chan(&asave->as_device_self, board);
+    msg->io_Error = init_chan(&asave->as_device_self, &msg->boardnum);
     if (msg->io_Error != 0) {
         ReplyMsg((struct Message *)msg);
         Forbid();
@@ -377,6 +381,7 @@ cmd_handler(void)
     ReplyMsg((struct Message *)msg);
 
     sc         = &asave->as_device_private;
+    active     = &sc->sc_channel.chan_active;
     cmd_mask   = BIT(msgport->mp_SigBit);
     int_mask   = BIT(asave->as_irq_signal);
     wait_mask  = cmd_mask | int_mask;
@@ -391,12 +396,20 @@ cmd_handler(void)
             irq_poll(mask & int_mask, sc);
         } while ((SetSignal(0, 0) & int_mask) && ((mask |= Wait(wait_mask))));
 
-        if ((mask & cmd_mask) == 0)
+        if (*active > 20) {
+            wait_mask = int_mask;
             continue;
+        } else {
+            wait_mask = cmd_mask | int_mask;
+        }
 
         while ((ior = (struct IORequest *)GetMsg(msgport)) != NULL) {
             if (cmd_do_iorequest(ior))
                 return;  // Exit handler
+            if (*active > 20) {
+                wait_mask = int_mask;
+                break;
+            }
         }
     }
 }
@@ -416,7 +429,7 @@ cmd_complete(void *ior, int8_t rc)
 }
 
 int
-start_cmd_handler(uint scsi_target)
+start_cmd_handler(uint *boardnum)
 {
     struct Process *proc;
     struct DosLibrary *DOSBase;
@@ -447,17 +460,19 @@ start_cmd_handler(uint scsi_target)
     /* Send the startup message with the board to initialize */
     memset(&msg, 0, sizeof (msg));
     msg.msg.mn_Length = sizeof (start_msg_t) - sizeof (struct Message);
-    msg.msg.mn_ReplyPort = CreatePort(0, 0);
+    msg.msg.mn_ReplyPort = CreatePort(NULL, 0);
     msg.msg.mn_Node.ln_Type = NT_MESSAGE;
     msg.drv_state = drv_state;
     msg.msg_port  = NULL;
     msg.cmd       = CMD_STARTUP;
-    msg.board     = scsi_target / 100;
+    msg.boardnum  = *boardnum;
     msg.io_Error  = 1;
     PutMsg(&proc->pr_MsgPort, (struct Message *)&msg);
     WaitPort(msg.msg.mn_ReplyPort);
     DeletePort(msg.msg.mn_ReplyPort);
     myPort = msg.msg_port;
+    *boardnum = msg.boardnum;
+
     return (msg.io_Error);
 }
 

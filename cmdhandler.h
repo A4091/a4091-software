@@ -4,7 +4,7 @@
 int open_unit(uint scsi_target, void **io_Unit);
 void close_unit(void *io_Unit);
 
-int start_cmd_handler(uint scsi_target);
+int start_cmd_handler(uint *boardnum);
 void stop_cmd_handler(void);
 void cmd_complete(void *ior, int8_t rc);
 

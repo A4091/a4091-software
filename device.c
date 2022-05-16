@@ -39,9 +39,6 @@ struct MsgPort *myPort;
 
 BPTR saved_seg_list;
 
-__asm("_geta4: lea ___a4_init,a4 \n"
-      "        rts");
-
 /*
  * -----------------------------------------------------------
  * A library or device with a romtag should start with moveq #-1,d0
@@ -120,13 +117,19 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     dev->lib_Version = DEVICE_VERSION;
     dev->lib_Revision = DEVICE_REVISION;
     dev->lib_IdString = (APTR)device_id_string;
-    // XXX: This is where we should probe hardware and create a
-    //      new thread to handle each A4091 board. How do we know
-    //      a thread has not already been started? Maybe need
-    //      named ports.
 
+    /* Start thread to manage board and process commands */
     InitSemaphore(&entry_sem);
+    ObtainSemaphore(&entry_sem);
     printf("A4091 driver %s %s\n", device_name, device_id_string);
+
+    int scsi_unit = 0;
+    if (start_cmd_handler(&scsi_unit)) {
+        printf("Start handler failed\n");
+        return (NULL);
+    }
+    ReleaseSemaphore(&entry_sem);
+
     return (dev);
 }
 
@@ -149,6 +152,10 @@ drv_expunge(struct Library *dev asm("a6"))
     }
 
     printf("expunge() %s\n", version_str);
+
+    /* Ask the command handler to shut down */
+    stop_cmd_handler();
+
     Forbid();
     BPTR seg_list = saved_seg_list;
     Remove(&dev->lib_Node);
@@ -182,28 +189,13 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     }
 
     ObtainSemaphore(&entry_sem);
-    if (dev->lib_OpenCnt++ == 0) {
-//      printf("open(%d) first time\n", scsi_unit);
-        if (start_cmd_handler(scsi_unit)) {
-            printf("Start handler failed\n");
-// HFERR_NoBoard - open failed for non-existat board
-// HFERR_SelfUnit - attempted to open our own SCSI ID
-            dev->lib_OpenCnt--;
-            ioreq->io_Error = HFERR_NoBoard;
-            ReleaseSemaphore(&entry_sem);
-            return;
-        }
-//  } else {
-//      printf("open(%d)\n", scsi_unit);
-    }
+    dev->lib_OpenCnt++;
 
     if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
         printf("Open fail\n");
-        if (--dev->lib_OpenCnt == 0) {
-            printf("Shut down handler\n");
-            stop_cmd_handler();
-        }
+        dev->lib_OpenCnt--;
         ioreq->io_Error = HFERR_SelTimeout;
+// HFERR_SelfUnit - attempted to open our own SCSI ID
         ReleaseSemaphore(&entry_sem);
         return;
     }
@@ -236,21 +228,10 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 
     close_unit((void *) ioreq->io_Unit);
 
-    if (dev->lib_OpenCnt == 1) {
-        /* Ask the command handler to shut down */
-        stop_cmd_handler();
-        if (dev->lib_Flags & LIBF_DELEXP) {
-            printf("close() expunge\n");
-            dev->lib_OpenCnt--;
-            ReleaseSemaphore(&entry_sem);
-            return (drv_expunge(dev));
-        }
-    }
-
-//  ioreq->io_Device = NULL;
-    ioreq->io_Unit = NULL;
     dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);
+    if (dev->lib_Flags & LIBF_DELEXP)
+        return (drv_expunge(dev));
     return (0);
 }
 

@@ -78,7 +78,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
     if (_4btol(datap->data.addr) != 0xffffffff) {
         *blksize = _4btol(datap->data.length);
         capacity = _4btol(datap->data.addr) + 1;
-//      goto out;
+        goto out;
     }
 
     /*

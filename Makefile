@@ -3,12 +3,13 @@ DATE    := $(shell date -d '$(NOW)' '+%Y-%m-%d')
 TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
 
 PROG	:= a4091.device
+PROG2	:= mounter
 OBJDIR  := objs
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c
-#SRCS    += main.c request.c
-#SRCS    := device.c
+SRCS2   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
+OBJS2   := $(SRCS2:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
@@ -20,8 +21,10 @@ CFLAGS  += -DNO_SERIAL_OUTPUT
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing
+CFLAGS2 := -Wall -Wno-pointer-sign -fomit-frame-pointer
 
 LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga
+LDFLAGS2 = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2 -lgcc -lc -lamiga
 
 #CFLAGS  += -g
 #LDFLAGS += -g
@@ -51,7 +54,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG)
+all: $(PROG) $(PROG2)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -59,6 +62,7 @@ define DEPEND_SRC
 $(patsubst %,$(OBJDIR)/%,$(filter-out $(OBJDIR)/%,$(basename $(1)).o)) $(filter $(OBJDIR)/%,$(basename $(1)).o): $(1)
 endef
 $(foreach SRCFILE,$(SRCS),$(eval $(call DEPEND_SRC,$(SRCFILE))))
+$(foreach SRCFILE,$(SRCS2),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 
 $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS))
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
@@ -72,9 +76,17 @@ $(OBJS): Makefile port.h | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -c $(filter %.c,$^) -o $@
 
+$(OBJS2): Makefile | $(OBJDIR)
+	@echo Building $@
+	$(QUIET)$(CC) $(CFLAGS2) -c $(filter %.c,$^) -o $@
+
 $(PROG): $(OBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(OBJS) $(LDFLAGS) -o $@
+
+$(PROG2): $(OBJS2)
+	@echo Building $@
+	$(QUIET)$(CC) $(OBJS2) $(LDFLAGS2) -o $@
 
 $(SIOP_SCRIPT): siop_script.ss $(SC_ASM)
 	@echo Building $@

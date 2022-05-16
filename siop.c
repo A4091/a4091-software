@@ -334,7 +334,7 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
 
     s = bsd_splbio();
     to = xs->timeout / 1000;
-    to = 4; // CDH DEBUG (original code waits for 60 seconds)
+//    to = 4; // CDH DEBUG (original code waits for 60 seconds)
     if (sc->nexus_list.tqh_first)
         printf("%s: siop_poll called with disconnected device\n",
             device_xname(sc->sc_dev));
@@ -587,8 +587,10 @@ siopinitialize(struct siop_softc *sc)
 {
     int i;
     u_int inhibit_sync;
+#ifndef PORT_AMIGA
     extern u_long scsi_nosync;
     extern int shift_nosync;
+#endif
 
     /*
      * Need to check that scripts is on a long word boundary
@@ -629,14 +631,19 @@ siopinitialize(struct siop_softc *sc)
         sc->sc_tcp[0] = 3000 / sc->sc_clock_freq;
     }
 
+#ifdef PORT_AMIGA
+    if (sc->sc_nosync) {
+        inhibit_sync = sc->sc_nosync & 0xff;
+#else
     if (scsi_nosync) {
         inhibit_sync = (scsi_nosync >> shift_nosync) & 0xff;
         shift_nosync += 8;
-#ifdef DEBUG
+#endif
+// #ifdef DEBUG
         if (inhibit_sync)
             printf("%s: Inhibiting synchronous transfer %02x\n",
                 device_xname(sc->sc_dev), inhibit_sync);
-#endif
+// #endif
         for (i = 0; i < 8; ++i)
             if (inhibit_sync & (1 << i))
                 siop_inhibit_sync[i] = 1;

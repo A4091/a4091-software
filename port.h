@@ -21,6 +21,8 @@ struct device;
 typedef struct device *device_t;
 
 void panic(const char *s);
+unsigned int read_system_ticks(void);
+unsigned int ticks_since_last(void);
 
 #define __USE(x) (/*LINTED*/(void)(x))
 

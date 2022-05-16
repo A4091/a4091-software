@@ -141,6 +141,7 @@ struct	siop_softc {
 	u_long	sc_scriptspa;		/* physical address of scripts */
 	siop_regmap_p	sc_siopp;	/* the SIOP */
 	u_long	sc_active;		/* number of active I/O's */
+        u_long  sc_nosync;              /* no synchronous SCSI (bit / target) */
 
 	/* Lists of command blocks */
 	TAILQ_HEAD(acb_list, siop_acb) free_list,
