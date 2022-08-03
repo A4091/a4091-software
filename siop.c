@@ -1157,8 +1157,20 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     dbc = rp->siop_dbc0;
     sstat1 = rp->siop_sstat1;
     rp->siop_ctest8 |= SIOP_CTEST8_CLF;
+#ifdef PORT_AMIGA
+    if ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+        int timeout = 10000;
+        while ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+            if (timeout-- == 0) {
+                printf("DMA FIFO empty timeout\n");
+                break;
+            }
+        }
+    }
+#else
     while ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT)
         ;
+#endif
     rp->siop_ctest8 &= ~SIOP_CTEST8_CLF;
 #ifdef DEBUG
     ++siopints;

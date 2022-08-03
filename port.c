@@ -125,15 +125,6 @@ ticks_since_last(void)
 #endif
 
 #if 0
-void exit(int __status)
-{
-    KPrintF((CONST_STRPTR) "exit(%ld)", errno);
-    while (1)
-        ;
-}
-#endif
-
-#if 0
 /* Return the index of the lowest set bit. (Counted from one) */
 int
 ffs(int i)
@@ -156,3 +147,86 @@ ffs(int i)
     return (result);
 }
 #endif
+
+void
+callout_init(callout_t *c, u_int flags)
+{
+    c->func = NULL;
+}
+
+int
+callout_pending(callout_t *c)
+{
+#if 0
+    if (c->func != NULL)
+        printf("callout pending\n");
+    else
+        printf("callout not pending\n");
+#endif
+    return (c->func != NULL);
+}
+
+int
+callout_stop(callout_t *c)
+{
+    int pending = (c->func != NULL);
+#if 0
+    printf("callout_stop %p\n", c->func);
+#endif
+    c->func = NULL;
+    return (pending);
+}
+
+void
+callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg)
+{
+    c->ticks = ticks;
+    c->func = func;
+    c->arg = arg;
+#if 0
+    printf("callout_reset %p(%x) at %d\n", c->func, (uint32_t) c->arg, ticks);
+#endif
+}
+
+void
+callout_call(callout_t *c)
+{
+    if (c->func == NULL) {
+        printf("callout to NULL function\n");
+        return;
+    }
+#if 0
+    printf("callout_call %p(%x)\n", c->func, (uint32_t) c->arg);
+#endif
+    c->func(c->arg);
+}
+
+
+#if 0
+void
+callout_destroy(callout_t *c);
+
+
+void
+callout_schedule(callout_t *c, int ticks);
+
+void
+callout_setfunc(callout_t *c, void (*func)(void *), void *arg);
+
+bool
+callout_halt(callout_t *c, void *interlock);
+
+
+bool
+callout_expired(callout_t *c);
+
+bool
+callout_active(callout_t *c);
+
+bool
+callout_invoking(callout_t *c);
+
+void
+callout_ack(callout_t *c);
+#endif
+

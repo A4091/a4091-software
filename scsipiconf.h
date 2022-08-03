@@ -478,9 +478,7 @@ struct scsipi_periph {
 	/* Pending scsipi_xfers on this peripheral. */
 	struct scsipi_xfer_queue periph_xferq;
 
-#ifndef PORT_AMIGA
 	callout_t periph_callout;
-#endif
 
 	/* xfer which has a pending CHECK_CONDITION */
 	struct scsipi_xfer *periph_xscheck;
@@ -601,7 +599,7 @@ typedef enum {
 struct scsipi_xfer {
 	TAILQ_ENTRY(scsipi_xfer) channel_q; /* entry on channel queue */
 	TAILQ_ENTRY(scsipi_xfer) device_q;  /* device's pending xfers */
-//	callout_t xs_callout;		/* callout for adapter use */
+	callout_t xs_callout;		/* callout for adapter use */
         void (*xs_done_callback)(struct scsipi_xfer *);
 
         void    *xs_callback_arg;       /* AmigaOS callback data */
@@ -994,5 +992,9 @@ _4ltol(const u_int8_t *bytes)
 	     ((u_int32_t)bytes[3] << 24);
 	return (rv);
 }
+
+#ifdef PORT_AMIGA
+void scsipi_completion_timeout_check(struct scsipi_channel *chan);
+#endif
 
 #endif /* _DEV_SCSIPI_SCSIPICONF_H_ */

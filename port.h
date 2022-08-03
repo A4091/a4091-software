@@ -11,6 +11,7 @@
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
 
 #include <sys/param.h>
+
 #define PAGE_SIZE NBPG
 #define AMIGA_MAX_TRANSFER (1 << 20)  // Maximum DMA size (scatter-gather entry)
 // #define MAXPHYS   (1 << 20)  // Maximum physical DMA size
@@ -34,16 +35,30 @@ void bsd_splx();
 
 typedef uint32_t paddr_t;
 typedef uint32_t vaddr_t;
-int mstohz(int m);
+#define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)
 #define kvtop(x) ((uint32_t)(x))
 
+#if 0
 // int dma_cachectl(void *addr, int len);
 void callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg);
 // int callout_stop(void *cs);
-void delay(int usecs);
 #define callout_init(x,y)
 #define callout_stop(x)
 #define callout_reset(w,x,y,z)
+#else
+typedef struct {
+    int ticks;             /* ticks remaining */
+    void (*func)(void *);  /* callout function at timeout */
+    void *arg;             /* callout function argument */
+} callout_t;
+void callout_init(callout_t *c, u_int flags);
+int callout_pending(callout_t *c);
+void callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg);
+int callout_stop(callout_t *c);
+void callout_call(callout_t *c);
+#endif
+
+void delay(int usecs);
 
 #define __UNVOLATILE(x) ((void *)(unsigned long)(volatile void *)(x))
 #define __UNCONST(a) ((void *)(intptr_t)(a))

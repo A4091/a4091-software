@@ -32,6 +32,28 @@ static void sd_complete(struct scsipi_xfer *xs);
 static void scsidirect_complete(struct scsipi_xfer *xs);
 static void geom_done_inquiry(struct scsipi_xfer *xs);
 
+static const int8_t error_code_mapping[] = {
+    0,                // XS_NOERROR           There is no error, (invalid sense)
+    HFERR_BadStatus,  // XS_SENSE             Check returned sense for the error
+    HFERR_BadStatus,  // XS_SHORTSENSE        Check ATAPI sense for the error
+    HFERR_DMA,        // XS_DRIVER_STUFFUP    Driver failed operation
+    HFERR_BadStatus,  // XS_RESOURCE_SHORTAGE Adapter resource shortage
+    HFERR_SelTimeout, // XS_SELTIMEOUT        Device timed out.. turned off?
+    HFERR_SelTimeout, // XS_TIMEOUT           Timeout was caught by SW
+    IOERR_UNITBUSY,   // XS_BUSY              Device busy, try again later?
+    HFERR_Phase,      // XS_RESET             Bus reset; possible retry command
+    HFERR_Phase,      // XS_REQUEUE           Requeue this command
+};
+
+/* Translate error code to AmigaOS code */
+static int
+translate_xs_error(scsipi_xfer_result_t res)
+{
+    if (res < ARRAY_SIZE(error_code_mapping))
+        res = error_code_mapping[res];
+    return (res);
+}
+
 /*
  * sd_read_capacity
  * ----------------
@@ -61,7 +83,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
      */
     datap = AllocMem(sizeof (*datap), MEMF_PUBLIC);
     if (datap == NULL)
-        return 0;
+        return (ERROR_NO_MEMORY);
 
     /*
      * If the command works, interpret the result as a 4 byte
@@ -70,7 +92,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
     capacity = 0;
     memset(datap, 0, sizeof(datap->data));
     if (scsipi_command(periph, (void *)&cmd.cmd, sizeof(cmd.cmd),
-        (void *)datap, sizeof (datap->data), SCSIPIRETRIES, 20000, NULL,
+        (void *)datap, sizeof (datap->data), 1, 10000, NULL,
         flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0) {
         goto out;
     }
@@ -93,7 +115,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
 
     memset(datap, 0, sizeof(datap->data16));
     if (scsipi_command(periph, (void *)&cmd.cmd16, sizeof(cmd.cmd16),
-        (void *)datap, sizeof(datap->data16), SCSIPIRETRIES, 20000, NULL,
+        (void *)datap, sizeof(datap->data16), 1, 10000, NULL,
         flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0) {
         goto out;
     }
@@ -155,7 +177,7 @@ sd_blocksize(void *periph_p)
     if (scsipi_mode_sense(periph, SMS_DBD, 3, &modepage.hdr,
                           sizeof (modepage.hdr) +
                           sizeof (modepage.pg.disk_format),
-                          flags, SDRETRIES, 2000) == 0) {
+                          flags, 0, 2000) == 0) {
         blksize = _2btol(modepage.pg.disk_format.bytes_s);
         if (is_valid_blksize(blksize))
             goto got_blocksize;
@@ -175,7 +197,7 @@ sd_blocksize(void *periph_p)
     if (scsipi_mode_sense(periph, SMS_DBD, 6, &modepage.hdr,
                           sizeof (modepage.hdr) +
                           sizeof (modepage.pg.rbc_params),
-                          flags, SDRETRIES, 2000) == 0) {
+                          flags, 0, 2000) == 0) {
         blksize = _2btol(modepage.pg.rbc_params.lbs);
         if (is_valid_blksize(blksize))
             goto got_blocksize;
@@ -250,15 +272,17 @@ sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
         flags |= XS_CTL_DATA_OUT;
 
     xs = scsipi_make_xs_locked(periph, &cmdbuf, cmdlen, buf, buflen,
-                               1, SD_IO_TIMEOUT, NULL, flags);
+                               SDRETRIES, SD_IO_TIMEOUT, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
+#if 0
     printf("sd%d.%d %p issue %c %u %u\n",
            periph->periph_target, periph->periph_lun, xs,
            (flags & XS_CTL_DATA_OUT) ? 'W' : 'R', (uint32_t) blkno, nblks);
+#endif
     return (scsipi_execute_xs(xs));
 }
 
@@ -273,7 +297,9 @@ sd_seek(void *periph_p, uint64_t blkno, void *ior)
     int cmdlen;
     int flags;
 
+#if 0
     printf("seek(%u)\n", (uint32_t) blkno);
+#endif
 
     /*
      * Fill out the scsi command.  Use the smallest CDB possible
@@ -301,14 +327,16 @@ sd_seek(void *periph_p, uint64_t blkno, void *ior)
     flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG;
 
     xs = scsipi_make_xs_locked(periph, &cmdbuf, cmdlen, NULL, 0,
-                               1, SD_IO_TIMEOUT, NULL, flags);
+                               SDRETRIES, SD_IO_TIMEOUT, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
+#if 0
     printf("sd%d.%d %c %p issue\n",
            periph->periph_target, periph->periph_lun, 'S', xs);
+#endif
     return (scsipi_execute_xs(xs));
 }
 #endif /* ENABLE_SEEK */
@@ -331,7 +359,7 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
 
     inq = AllocMem(sizeof (*inq), MEMF_PUBLIC);
     if (inq == NULL)
-        return (TDERR_NoMem);
+        return (ERROR_NO_MEMORY);
 
     geom->dg_SectorSize = 0;
     geom->dg_TotalSectors = 0;
@@ -409,10 +437,12 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject)
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
+#if 0
     printf("sd%d.%d %p %s\n",
            periph->periph_target, periph->periph_lun, xs,
            load_eject ? (start ? "load" : "eject") :
            (start ? "start" : "stop"));
+#endif
     return (scsipi_execute_xs(xs));
 }
 
@@ -431,7 +461,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
     if (modepage == NULL) {
         modepage = AllocMem(sizeof (*modepage), MEMF_PUBLIC | MEMF_CLEAR);
         if (__predict_false(modepage == NULL)) {
-            cmd_complete(oxs->amiga_ior, TDERR_NoMem);
+            cmd_complete(oxs->amiga_ior, ERROR_NO_MEMORY);
             return;
         }
     }
@@ -441,7 +471,6 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
     cmd.byte2 = dbd;      // byte 2 DBD says to not return block descriptors.
     cmd.page = page;      // Which page to fetch
     cmd.length = 0x16;
-//  cmd.length = sizeof (*modepage);
 
     flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;
     xs = scsipi_make_xs_locked(periph,
@@ -450,7 +479,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
                                1, 1000, NULL, flags);
     if (__predict_false(xs == NULL)) {
         FreeMem(modepage, sizeof (*modepage));
-        cmd_complete(oxs->amiga_ior, 1);
+        cmd_complete(oxs->amiga_ior, ERROR_NO_MEMORY);
         return;
     }
     xs->amiga_ior = oxs->amiga_ior;
@@ -467,11 +496,10 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
 static void
 geom_done_mode_page_5(struct scsipi_xfer *xs)
 {
-    int                rc       = xs->error;
+    int                rc       = translate_xs_error(xs->error);
     scsi_mode_sense_t *modepage = (scsi_mode_sense_t *) xs->data;
     printf("mode_page_5 complete: %d\n", rc);
 
-#if 1
 #ifndef NO_SERIAL_OUTPUT
 {
     uint8_t *ptr = xs->data;
@@ -481,7 +509,6 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
         printf(" %02x", *(ptr++));
     printf("\n");
 }
-#endif
 #endif
     if (rc == 0) {
         /* Got mode page 5 */
@@ -521,7 +548,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
 static void
 geom_done_mode_page_4(struct scsipi_xfer *xs)
 {
-    int                rc       = xs->error;
+    int                rc       = translate_xs_error(xs->error);
     scsi_mode_sense_t *modepage = (scsi_mode_sense_t *) xs->data;
     printf("mode_page_4 complete: %d\n", rc);
 
@@ -589,10 +616,10 @@ geom_done_mode_page_3(struct scsipi_xfer *xs)
 static void
 conv_sectors_to_chs(ULONG total, ULONG *c_p, ULONG *h_p, ULONG *s_p)
 {
-    ULONG c = total / 2;
+    ULONG c = total >> 1;
     ULONG h = 2;
     ULONG s = 1;
-    while ((c >= 10000) && (h < 64) && (s < 32)) {
+    while ((c >= 10000) && (s < 32)) {
         c >>= 2;
         h <<= 1;
         s <<= 1;
@@ -625,8 +652,10 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
             struct scsipi_periph *periph = xs->xs_periph;
             periph->periph_blkshift = calc_blkshift(blksize);
         }
+#if 0
         printf("TotalSectors=%lu C=%lu H=%lu S=%lu %p\n", geom->dg_TotalSectors,
                geom->dg_Cylinders, geom->dg_Heads, geom->dg_TrackSectors, xs);
+#endif
         cmd_complete(xs->amiga_ior, 0);
         return;
     }
@@ -684,7 +713,7 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
 
     rc = scsipi_execute_xs(xs);
     if (rc != 0)
-        cmd_complete(oxs->amiga_ior, rc);
+        cmd_complete(oxs->amiga_ior, translate_xs_error(rc));
 }
 
 int
@@ -698,6 +727,7 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     struct scsipi_xfer *xs;
     struct scsipi_generic *cmdp;
     struct SCSICmd *scmd = scmd_p;
+#if 0
     printf("scsidirect dlen=%lu clen=%u slen=%u flags=%x [",
            scmd->scsi_Length, scmd->scsi_CmdLength, scmd->scsi_SenseLength,
            scmd->scsi_Flags);
@@ -708,6 +738,7 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
         printf("%02x", scmd->scsi_Command[cmdlen]);
     }
     printf("]\n");
+#endif
 
     scmd->scsi_Status = HFERR_BadStatus;  // XXX might need to be set later
     scmd->scsi_Status = 0;
@@ -741,8 +772,10 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     xs->amiga_ior = ior;
     xs->xs_callback_arg = scmd;
     xs->xs_done_callback = scsidirect_complete;
+#if 0
     printf("sdirect%d.%d %p issue\n",
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs);
+#endif
     return (scsipi_execute_xs(xs));
 // xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command
 //
@@ -752,45 +785,28 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
 //   XS_CTL_REQSENSE
 }
 
-static const int8_t error_code_mapping[] = {
-    0,                // XS_NOERROR           There is no error, (invalid sense)
-    HFERR_BadStatus,  // XS_SENSE             Check returned sense for the error
-    HFERR_BadStatus,  // XS_SHORTSENSE        Check ATAPI sense for the error
-    HFERR_DMA,        // XS_DRIVER_STUFFUP    Driver failed operation
-    HFERR_BadStatus,  // XS_RESOURCE_SHORTAGE Adapter resource shortage
-    HFERR_SelTimeout, // XS_SELTIMEOUT        Device timed out.. turned off?
-    HFERR_SelTimeout, // XS_TIMEOUT           Timeout was caught by SW
-    IOERR_UNITBUSY,   // XS_BUSY              Device busy, try again later?
-    HFERR_Phase,      // XS_RESET             Bus reset; possible retry command
-    HFERR_Phase,      // XS_REQUEUE           Requeue this command
-};
 
 /* Called when disk read/write transfer is complete */
 static void
 sd_complete(struct scsipi_xfer *xs)
 {
-    int rc = xs->error;
+    int rc = translate_xs_error(xs->error);
 
     if (xs->amiga_ior == NULL) {
         printf("NULL IOR received\n\n");
-        return;  /* IOR was internally generated, not by user request */
+        return;  /* This should not happen */
     }
 
+#if 0
     printf("sd%d.%d %p done %c rc=%d\n",
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs,
            (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', rc);
-    if (rc != 0) {
-        /* Translate error code to AmigaOS */
-        scsipi_xfer_result_t res = xs->error;
-        if (res < ARRAY_SIZE(error_code_mapping))
-            rc = error_code_mapping[res];
-
-        if (xs->error == XS_SENSE) {
-            printf("got sense:");
-            for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
-                printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
-            printf("\n");
-        }
+#endif
+    if (xs->error == XS_SENSE) {
+        printf("got sense:");
+        for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
+            printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
+        printf("\n");
     }
     cmd_complete(xs->amiga_ior, rc);
 }
@@ -798,7 +814,7 @@ sd_complete(struct scsipi_xfer *xs)
 static void
 scsidirect_complete(struct scsipi_xfer *xs)
 {
-    int             rc   = xs->error;
+    int             rc   = translate_xs_error(xs->error);
     struct SCSICmd *scmd = xs->xs_callback_arg;
 
     scmd->scsi_Status    = rc;

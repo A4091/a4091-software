@@ -46,10 +46,10 @@ extern struct ExecBase *SysBase;
 
 a4091_save_t *asave = NULL;
 
+
 /* Structure of the startup message closely follows IOStdReq */
 typedef struct {
     struct Message  msg;        // io_Message
-    a4091_save_t   *drv_state;  // io_Device
     struct MsgPort *msg_port;   // Handler's message port (io_Unit)
     UWORD           cmd;        // CMD_STARTUP            (io_Command)
     UBYTE           boardnum;   // Desired board number   (io_Flags)
@@ -60,15 +60,6 @@ typedef struct {
 void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
-#if 0
-    struct scsipi_channel *chan = &sc->sc_channel;
-
-    /* XXX: DEBUG */
-    if (TAILQ_FIRST(&chan->chan_complete) != NULL) {
-        printf("SOMETHING on COMPLETION QUEUE\n");
-    }
-#endif
-
     if (sc->sc_flags & SIOP_INTSOFF) {
         siop_regmap_p rp    = sc->sc_siopp;
         uint8_t       istat = rp->siop_istat;
@@ -82,6 +73,66 @@ irq_poll(uint got_int, struct siop_softc *sc)
     } else if (got_int) {
         siopintr(sc);
     }
+}
+
+static void
+restart_timer(void)
+{
+    if (asave->as_timerio != NULL) {
+        asave->as_timerio->tr_time.tv_secs  = 1;
+        asave->as_timerio->tr_time.tv_micro = 0;
+        SendIO(&asave->as_timerio->tr_node);
+        asave->as_timer_running = 1;
+    }
+}
+
+static void
+close_timer(void)
+{
+    if (asave->as_timerio != NULL) {
+        if (asave->as_timer_running)
+            WaitIO(&asave->as_timerio->tr_node);
+        CloseDevice(&asave->as_timerio->tr_node);
+        asave->as_timer_running = 0;
+    }
+
+    if (asave->as_timerport != NULL) {
+        DeletePort(asave->as_timerport);
+        asave->as_timerport = NULL;
+    }
+
+    if (asave->as_timerio != NULL) {
+        DeleteExtIO(&asave->as_timerio->tr_node);
+        asave->as_timerio = NULL;
+    }
+}
+
+static int
+open_timer(void)
+{
+    int rc;
+    asave->as_timerport = CreatePort(NULL, 0);
+    if (asave->as_timerport == NULL) {
+        return (ERROR_NO_MEMORY);
+    }
+
+    if (!(asave->as_timerio = (struct timerequest *)
+            CreateExtIO(asave->as_timerport, sizeof (struct timerequest)))) {
+        printf("Fail: CreateExtIO timer\n");
+        close_timer();
+        return (ERROR_NO_MEMORY);
+    }
+
+    rc = OpenDevice(TIMERNAME, UNIT_VBLANK, &asave->as_timerio->tr_node, 0);
+    if (rc != 0) {
+        printf("Fail: open "TIMERNAME"\n");
+        close_timer();
+        return (rc);
+    }
+
+    asave->as_timerio->tr_node.io_Command = TR_ADDREQUEST;
+
+    return (0);
 }
 
 static const UWORD nsd_supported_cmds[] = {
@@ -222,7 +273,7 @@ CMD_SEEK_continue:
             struct NSDeviceQueryResult *nsd =
                 (struct NSDeviceQueryResult *) iotd->iotd_Req.io_Data;
             if (iotd->iotd_Req.io_Length < 16) {
-                ior->io_Error = IOERR_BADLENGTH;
+                ior->io_Error = ERROR_BAD_LENGTH;
             } else {
                 nsd->DevQueryFormat      = 0;
                 nsd->SizeAvailable       = sizeof (*nsd);
@@ -274,7 +325,7 @@ CMD_SEEK_continue:
             rc = attach(&asave->as_device_self, iotd->iotd_Req.io_Offset,
                         (struct scsipi_periph **) &ior->io_Unit);
             if (rc != 0) {
-                ior->io_Error = IOERR_OPENFAIL;
+                ior->io_Error = rc;
             } else {
                 (void) sd_blocksize((struct scsipi_periph *) ior->io_Unit);
             }
@@ -291,13 +342,14 @@ CMD_SEEK_continue:
         case CMD_TERM:
             PRINTF_CMD("CMD_TERM\n");
             deinit_chan(&asave->as_device_self);
+            close_timer();
             CloseLibrary((struct Library *) DOSBase);
             asave->as_isr = NULL;
             FreeMem(asave, sizeof (*asave));
             asave = NULL;
+            Forbid();
             DeletePort(myPort);
             myPort = NULL;
-            Forbid();
             ReplyMsg(&ior->io_Message);
             return (1);
 
@@ -319,12 +371,15 @@ CMD_SEEK_continue:
             printf("Unknown cmd %x\n", ior->io_Command);
             /* FALLTHROUGH */
         case TD_MOTOR:         // Not supported by SCSI (floppy-only)
-            ior->io_Error = IOERR_NOCMD;
+            ior->io_Error = ERROR_UNKNOWN_COMMAND;
             ReplyMsg(&ior->io_Message);
             break;
     }
     return (0);
 }
+
+
+void scsipi_completion_poll(struct scsipi_channel *chan);
 
 __asm("_geta4: lea ___a4_init,a4 \n"
       "        rts");
@@ -336,11 +391,13 @@ cmd_handler(void)
     struct IORequest      *ior;
     struct Process        *proc;
     struct siop_softc     *sc;
+    struct scsipi_channel *chan;
     int                   *active;
     start_msg_t           *msg;
     ULONG                  int_mask;
     ULONG                  cmd_mask;
     ULONG                  wait_mask;
+    ULONG                  timer_mask;
     uint32_t               mask;
 #if 0
     register long devbase asm("a6");
@@ -364,27 +421,44 @@ cmd_handler(void)
     msgport = CreatePort(NULL, 0);
     msg->msg_port = msgport;
     if (msgport == NULL) {
-        /* Terminate handler and give up */
-        msg->io_Error = 1;
-        ReplyMsg((struct Message *)msg);
-        Forbid();
-        return;
+        msg->io_Error = ERROR_NO_MEMORY;
+        goto fail_msgport;
     }
-    asave = msg->drv_state;
+
+    asave = AllocMem(sizeof (*asave), MEMF_CLEAR | MEMF_PUBLIC);
+    if (asave == NULL) {
+        msg->io_Error = ERROR_NO_MEMORY;
+        goto fail_allocmem;
+    }
+
+    msg->io_Error = open_timer();
+    if (msg->io_Error != 0)
+        goto fail_timer;
+
     msg->io_Error = init_chan(&asave->as_device_self, &msg->boardnum);
     if (msg->io_Error != 0) {
+        close_timer();
+fail_timer:
+        FreeMem(asave, sizeof (*asave));
+fail_allocmem:
+        /* Terminate handler and give up */
+        DeletePort(msgport);
+fail_msgport:
         ReplyMsg((struct Message *)msg);
         Forbid();
         return;
     }
 
     ReplyMsg((struct Message *)msg);
+    restart_timer();
 
     sc         = &asave->as_device_private;
     active     = &sc->sc_channel.chan_active;
     cmd_mask   = BIT(msgport->mp_SigBit);
     int_mask   = BIT(asave->as_irq_signal);
-    wait_mask  = cmd_mask | int_mask;
+    timer_mask = BIT(asave->as_timerport->mp_SigBit);
+    wait_mask  = int_mask | timer_mask | cmd_mask;
+    chan       = &sc->sc_channel;
 
     while (1) {
         mask = Wait(wait_mask);
@@ -396,11 +470,18 @@ cmd_handler(void)
             irq_poll(mask & int_mask, sc);
         } while ((SetSignal(0, 0) & int_mask) && ((mask |= Wait(wait_mask))));
 
+        if (mask & timer_mask) {
+            WaitIO(&asave->as_timerio->tr_node);
+//          printf("timer\n");
+            scsipi_completion_timeout_check(chan);
+            restart_timer();
+        }
+
         if (*active > 20) {
-            wait_mask = int_mask;
+            wait_mask = int_mask | timer_mask;
             continue;
         } else {
-            wait_mask = cmd_mask | int_mask;
+            wait_mask = int_mask | timer_mask | cmd_mask;
         }
 
         while ((ior = (struct IORequest *)GetMsg(msgport)) != NULL) {
@@ -411,6 +492,9 @@ cmd_handler(void)
                 break;
             }
         }
+
+        /* Run the retry completion queue, if anything is present */
+        scsipi_completion_poll(chan);
     }
 }
 
@@ -434,18 +518,11 @@ start_cmd_handler(uint *boardnum)
     struct Process *proc;
     struct DosLibrary *DOSBase;
     start_msg_t msg;
-    a4091_save_t *drv_state;
 //    register long devbase asm("a6");
 
     DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
     if (DOSBase == NULL)
         return (1);
-
-    drv_state = AllocMem(sizeof (*drv_state), MEMF_CLEAR | MEMF_PUBLIC);
-    if (drv_state == NULL) {
-        CloseLibrary((struct Library *) DOSBase);
-        return (1);
-    }
 
     proc = CreateNewProcTags(NP_Entry, (ULONG) cmd_handler,
                              NP_StackSize, 8192,
@@ -462,11 +539,10 @@ start_cmd_handler(uint *boardnum)
     msg.msg.mn_Length = sizeof (start_msg_t) - sizeof (struct Message);
     msg.msg.mn_ReplyPort = CreatePort(NULL, 0);
     msg.msg.mn_Node.ln_Type = NT_MESSAGE;
-    msg.drv_state = drv_state;
     msg.msg_port  = NULL;
     msg.cmd       = CMD_STARTUP;
     msg.boardnum  = *boardnum;
-    msg.io_Error  = 1;
+    msg.io_Error  = ERROR_OPEN_FAIL;  // Default, which should be overwritten
     PutMsg(&proc->pr_MsgPort, (struct Message *)&msg);
     WaitPort(msg.msg.mn_ReplyPort);
     DeletePort(msg.msg.mn_ReplyPort);

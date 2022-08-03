@@ -213,7 +213,7 @@ a4091_add_local_irq_handler(uint32_t dev_base)
 {
     struct Task *task = FindTask(NULL);
     if (task == NULL)
-        return (0);
+        return (ERROR_OPEN_FAIL);
 
     asave->as_addr           = dev_base;
     asave->as_SysBase        = SysBase;
@@ -224,7 +224,7 @@ a4091_add_local_irq_handler(uint32_t dev_base)
                                         MEMF_CLEAR | MEMF_PUBLIC);
     if (asave->as_isr == NULL) {
         printf("AllocMem failed\n");
-        return (1);
+        return (ERROR_NO_MEMORY);
     }
 
     asave->as_isr->is_Node.ln_Type = NT_INTERRUPT;
@@ -271,7 +271,7 @@ a4091_find(UBYTE *boardnum)
 
     if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
         printf("Could not open %s\n", expansion_library_name);
-        return (-1);
+        return (0);
     }
 
     do {
@@ -353,9 +353,9 @@ a4091_validate(uint32_t dev_base)
 
     siop_regmap_p rp = (siop_regmap_p) (dev_base + 0x00800000);
     if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000) ||
-        (dev_base & 0x0fffffff)) {
+        (dev_base & 0x00ffffff)) {
         printf("Invalid device base %x\n", dev_base);
-        return (1);
+        return (ERROR_BAD_BOARD);
     }
 
 #if 0
@@ -377,6 +377,11 @@ a4091_validate(uint32_t dev_base)
         next = (patt << 1) | (patt >> 31);
         rp->siop_scratch = patt;
         rp->siop_temp = next;
+
+        /* 68030 cache write-allocate mode bug work-around */
+        CacheClearE((void *)(&rp->siop_scratch), 4, CACRF_ClearD);
+        CacheClearE((void *)(&rp->siop_temp), 4, CACRF_ClearD);
+
         got_scratch = rp->siop_scratch;
         got_temp = rp->siop_temp;
         if ((got_scratch != patt) ||
@@ -398,7 +403,7 @@ a4091_validate(uint32_t dev_base)
     rp->siop_scratch = scratch;
     rp->siop_temp    = temp;
 
-    return (fail);
+    return (fail ? ERROR_BAD_BOARD : 0);
 }
 
 int
@@ -414,17 +419,19 @@ init_chan(device_t self, UBYTE *boardnum)
     dev_base = a4091_find(boardnum);
     if (dev_base == 0) {
         printf("A4091 %u not found\n", *boardnum);
-        return (1);
+        return (ERROR_NO_BOARD);
     }
 
-    if (a4091_validate(dev_base))
-        return (1);
+    if ((rc = a4091_validate(dev_base)))
+        return (rc);
 
     CopyMem("a4091", self->dv_xname, 6);
 
     memset(sc, 0, sizeof (*sc));
     dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
+#ifdef DEBUG_ATTACH
     printf("DIP switches = %02x\n", dip_switches);
+#endif
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
@@ -542,8 +549,10 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     periph = scsipi_alloc_periph(0);
     *periph_p = periph;
     if (periph == NULL)
-        return (1);
+        return (ERROR_NO_MEMORY);
+#ifdef DEBUG_ATTACH
     printf("attach(%p, %d)\n", periph, scsi_target);
+#endif
     periph->periph_openings = 4;  // Max # of outstanding commands
     periph->periph_target   = scsi_target % 10;         // SCSI target ID
     periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
@@ -561,7 +570,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
 
     if (failed) {
         scsipi_free_periph(periph);
-        return (1);
+        return (failed);
     }
 
     scsipi_insert_periph(chan, periph);
@@ -572,7 +581,9 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
 void
 detach(struct scsipi_periph *periph)
 {
+#ifdef DEBUG_ATTACH
     printf("detach(%p)\n", periph);
+#endif
 
     if (periph != NULL) {
         struct scsipi_channel *chan = periph->periph_channel;

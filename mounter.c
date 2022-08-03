@@ -13,6 +13,7 @@
 #include <devices/scsidisk.h>
 #include <devices/hardblocks.h>
 #include <dos/filehandler.h>
+#include <resources/filesysres.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,8 +30,9 @@
 #define MOUNTER_STATUS_UNKNOWN    0x03
 #define MOUNTER_STATUS_TERMINATED 0x04
 
-#define MOUNTER_SCAN_FLAG_NOLUNS  0x01
+#define MOUNTER_SCAN_FLAG_MOUNT   0x01
 #define MOUNTER_SCAN_FLAG_UNMOUNT 0x02
+#define MOUNTER_SCAN_FLAG_NOLUNS  0x04
 
 #define MOUNTER_PORT "mounter"
 
@@ -52,14 +54,15 @@ usage(void)
 {
     printf("Usage: -k kill daemon\n"
            "       -h show help\n"
+           "       -m mount\n"
            "       -u unmount\n"
            "       -s start daemon\n"
            "       <device name> [<unit>]\n");
 }
 
 /* BCPL conversion functions */
-#define BTOC(x) ((x)<<2)
-#define CTOB(x) ((x)>>2)
+#define BTOC(x) ((void *)(((ULONG)(x))<<2))
+#define CTOB(x) (((ULONG)(x))>>2)
 
 #if 0
 static void
@@ -201,6 +204,87 @@ blk_read(struct IOExtTD *tio, uint32_t blk, uint32_t blksize, void *buf)
 //    printf("blkread %u\n", blk);
     return (DoIO((struct IORequest *) tio));
 }
+
+static void
+mount_device(const char *name, const char *devname, uint8_t unitno,
+             ULONG dostype)
+{
+    struct DosLibrary        *DosBase;
+    struct FileSysEntry      *fse;
+    struct FileSysResource   *fsr;
+    struct FileSysStartupMsg *fsstart;
+    struct DosList           *de;
+    ULONG                    *envec;
+
+    DosBase  = (struct DosLibrary *) OpenLibrary("dos.library", 0L);
+
+    de = MakeDosEntry(name, DLT_DEVICE);
+    if (de == NULL) {
+        printf("Failed to alloc Dos Entry for %s\n", name);
+        goto failed_dosentry;
+    }
+    de->dol_Type                           = DLT_DEVICE;
+    de->dol_misc.dol_handler.dol_StackSize = 8192;
+    de->dol_misc.dol_handler.dol_Priority  = 0;
+
+#define ENVEC_SIZE 10
+    fsstart = AllocVec(sizeof (*fsstart), MEMF_PUBLIC | MEMF_CLEAR);
+    if (fsstart == NULL)
+        goto failed_fsstart;
+    envec   = AllocVec((ENVEC_SIZE + 1) * 4, MEMF_PUBLIC | MEMF_CLEAR);
+    if (envec == NULL)
+        goto failed_envec;
+
+    fsstart->fssm_Unit    = unitno;
+    fsstart->fssm_Device  = (ULONG) devname;
+    fsstart->fssm_Environ = CTOB(envec);
+    fsstart->fssm_Flags   = 0;
+
+    de->dol_misc.dol_handler.dol_SegList =
+        DOSBase->dl_Root->rn_FileHandlerSegment;
+
+    fsr = OpenResource("FileSystem.resource");
+    if (fsr == NULL)
+        goto failed_openresource;
+    Forbid();
+    fse = (struct FileSysEntry *) fsr->fsr_FileSysEntries.lh_Head;
+    while (fse->fse_Node.ln_Succ != NULL) {
+        if (fse->fse_DosType == dostype) {
+            if (fse->fse_PatchFlags & 0x0001)
+                de->dol_Type = fse->fse_Type;
+            if (fse->fse_PatchFlags & 0x0002)
+                de->dol_Task = (struct MsgPort *)fse->fse_Task;
+            if (fse->fse_PatchFlags & 0x0004)
+                de->dol_Lock = fse->fse_Lock;
+            if (fse->fse_PatchFlags & 0x0008)
+                de->dol_misc.dol_handler.dol_Handler = fse->fse_Handler;
+            if (fse->fse_PatchFlags & 0x0010)
+                de->dol_misc.dol_handler.dol_StackSize = fse->fse_StackSize;
+            if (fse->fse_PatchFlags & 0x0020)
+                de->dol_misc.dol_handler.dol_Priority = fse->fse_Priority;
+            if (fse->fse_PatchFlags & 0x0040)
+                de->dol_misc.dol_handler.dol_Startup = fse->fse_Startup;
+            if (fse->fse_PatchFlags & 0x0080)
+                de->dol_misc.dol_handler.dol_SegList = fse->fse_SegList;
+            if (fse->fse_PatchFlags & 0x0100)
+                de->dol_misc.dol_handler.dol_GlobVec = fse->fse_GlobalVec;
+            break;
+        }
+        fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ;
+    }
+    Permit();
+
+    /* No need to CloseResource() */
+failed_openresource:
+    FreeVec(envec);
+failed_envec:
+    FreeVec(fsstart);
+failed_fsstart:
+    FreeDosEntry(de);
+failed_dosentry:
+    CloseLibrary((struct Library *)DosBase);
+}
+
 
 typedef struct {
     uint8_t  bootable;     // This partition is bootable
@@ -456,7 +540,10 @@ scan_partition_table_rdb(mounter_msg_t *msg, uint8_t unitno,
             printf(" Mounted");
         }
         printf("\n");
-        if ((scan_flags & MOUNTER_SCAN_FLAG_UNMOUNT) && (di != NULL)) {
+        if ((scan_flags & MOUNTER_SCAN_FLAG_MOUNT) && (di == NULL)) {
+            mount_device(part->pb_DriveName + 1, msg->devname, unitno,
+                         env->de_DosType);
+        } else if ((scan_flags & MOUNTER_SCAN_FLAG_UNMOUNT) && (di != NULL)) {
             unmount_device(di);
         }
         partblk = part->pb_Next;
@@ -716,6 +803,7 @@ main(int argc, char *argv[])
     char *flags_str = NULL;
     char *lun_str = NULL;
     int arg;
+    int flag_mount = 0;
     int flag_unmount = 0;
     int unit_min = -1;
     int unit_max = 7;
@@ -737,6 +825,9 @@ main(int argc, char *argv[])
                     case 'h':
                         usage();
                         exit(1);
+                    case 'm':
+                        flag_mount++;
+                        break;
                     case 's':
                         start_mounter();
                         exit(0);
@@ -790,7 +881,9 @@ main(int argc, char *argv[])
     else
         lun_max = lun_min;
 
-    if (flag_unmount)
+    if (flag_mount)
+        scan_flags = MOUNTER_SCAN_FLAG_MOUNT;
+    else if (flag_unmount)
         scan_flags = MOUNTER_SCAN_FLAG_UNMOUNT;
     status = notify_mounter(MOUNTER_CMD_SCAN, unit_min, unit_max,
                             lun_min, lun_max, scan_flags, devname, open_flags);

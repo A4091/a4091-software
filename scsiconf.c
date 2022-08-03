@@ -871,6 +871,8 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #ifdef PORT_AMIGA
 	struct scsipi_inquiry_data inqbuf;
 	int checkdtype, docontinue, quirks;
+
+        *failed = 0;  // Default to success
 #else /* !PORT_AMIGA */
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
@@ -895,7 +897,6 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		return (docontinue);
 
 #ifdef PORT_AMIGA
-        printf("CDH: new periph for target %d.%d\n", target, lun);
 	periph->periph_channel = chan;
 #else
 	periph = scsipi_alloc_periph(M_WAITOK);
@@ -945,8 +946,12 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			extension[len++] = ' ';
 	}
 
-	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY | XS_CTL_SILENT))
+	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY | XS_CTL_SILENT)) {
+#ifdef PORT_AMIGA
+                *failed = ERROR_INQUIRY_FAILED;
+#endif
 		goto bad;
+        }
 
 	periph->periph_type = inqbuf.device & SID_TYPE;
 	if (inqbuf.dev_qual2 & SID_REMOVABLE)
@@ -967,6 +972,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	case SID_QUAL_LU_NOTPRESENT:
 	case SID_QUAL_reserved:
 	case SID_QUAL_LU_NOT_SUPP:
+#ifdef PORT_AMIGA
+                *failed = ERROR_BAD_DRIVE_TYPE;
+#endif
 		goto bad;
 
 	default:
@@ -1003,6 +1011,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			break;
 		case T_NODEVICE:
 printf("CDH: probe nodevice\n");
+#ifdef PORT_AMIGA
+                        *failed = ERROR_BAD_DRIVE_TYPE;
+#endif
 			goto bad;
 		}
 	}
@@ -1099,7 +1110,8 @@ printf("CDH: probe nodevice\n");
 	if ((periph->periph_quirks & PQUIRK_NOLUNS) == 0)
 		docontinue = 1;
 
-        printf("CDH Caps:%s%s%s%s%s%s%s%s%s%s\n",
+#if 0
+        printf("SCSI Caps:%s%s%s%s%s%s%s%s%s%s\n",
                (periph->periph_cap & PERIPH_CAP_SYNC) ? " SYNC" : "",
                (periph->periph_cap & PERIPH_CAP_WIDE16) ? " WIDE16" : "",
                (periph->periph_cap & PERIPH_CAP_WIDE32) ? " WIDE32" : "",
@@ -1110,6 +1122,7 @@ printf("CDH: probe nodevice\n");
                (periph->periph_cap & PERIPH_CAP_IUS) ? " IUS" : "",
                (periph->periph_cap & PERIPH_CAP_QAS) ? " QAS" : "",
                (periph->periph_cap & PERIPH_CAP_RELADR) ? " RELADR" : "");
+#endif
 #ifndef PORT_AMIGA
 	locs[SCSIBUSCF_TARGET] = target;
 	locs[SCSIBUSCF_LUN] = lun;
@@ -1146,11 +1159,11 @@ printf("CDH: probe nodevice\n");
 	}
 #endif  /* !PORT_AMIGA */
 
-        *failed = 0;
 	return (docontinue);
 
 bad:
-        *failed = 1;
+        if (*failed == 0)
+            *failed = ERROR_OPEN_FAIL;
 #if 0
 	scsipi_free_periph(periph);
 #endif

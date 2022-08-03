@@ -209,7 +209,7 @@ int puts(const char *str);
  *
  * This function requires no arguments.
  *
- * @return      RC_SUCCESS
+ * @return      None.
  */
 int printf_test(void);
 #endif

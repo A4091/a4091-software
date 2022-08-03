@@ -192,14 +192,16 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     dev->lib_OpenCnt++;
 
     if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
-        printf("Open fail\n");
+        printf("Open fail %d.%d\n", scsi_unit % 10, scsi_unit / 10);
         dev->lib_OpenCnt--;
         ioreq->io_Error = HFERR_SelTimeout;
 // HFERR_SelfUnit - attempted to open our own SCSI ID
         ReleaseSemaphore(&entry_sem);
         return;
     }
+#if 0
     printf("Open Unit=%p\n", ioreq->io_Unit);
+#endif
 
     ioreq->io_Error = 0; // Success
 
