@@ -88,6 +88,7 @@ $(OBJS2): Makefile | $(OBJDIR)
 $(PROG): $(OBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(OBJS) $(LDFLAGS) -o $@
+	$(STRIP) $@
 
 $(PROG2): $(OBJS2)
 	@echo Building $@

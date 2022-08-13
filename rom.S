@@ -22,9 +22,6 @@
 	    INCLUDE "lvo/exec_lib.i"
             INCLUDE "libraries/configvars.i"
 
-            ; LVO's resolved by linking with library amiga.lib
-            XREF   _LVOFindResident
-
 *----- We'll store Version and Revision in serial number
 VERSION         EQU    40               ; also the high word of serial number
 REVISION        EQU    21               ; also the low word of serial number
@@ -120,6 +117,7 @@ DiagStart:  ; This is the DiagArea structure whose relative offset from
 **********************************************************************
 
 DiagEntry:
+            movem.l d2-d7/a2-a6,-(sp)
             move.w #$0f0f,$dff180                 ; sign of life
 
 	    ; Patch up Romtag Resident Structure in memory
@@ -136,9 +134,10 @@ DiagEntry:
 
             lea.l    Romtag(pc),a4                ; find Romtag in memory
 	    lea.l    _Hunks(pc),a0
-	    move.l   (a0),a0
-	    move.l   a0,RT_INIT(a4)
+	    move.l   (a0),a2
+	    move.l   a2,RT_INIT(a4)
 
+            movem.l (sp)+,d2-d7/a2-a6
             moveq.l #1,d0           ; indicate "success"
             rts
 
@@ -148,9 +147,12 @@ DiagEntry:
 
 BootEntry:  lea     DosName(PC),a1          ; 'dos.library',0
             jsr     _LVOFindResident(a6)    ; find the DOS resident tag
+	    tst.l   d0
+	    beq.s   BadBoot
             move.l  d0,a0                   ; in order to bootstrap
             move.l  RT_INIT(A0),a0          ; set vector to DOS INIT
             jsr     (a0)                    ; and initialize DOS
+BadBoot:
             rts
 
 *******  Resident Structure  *****************************************

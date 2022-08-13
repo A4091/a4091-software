@@ -151,7 +151,6 @@ RomFetch32
   lea ReadHandle(pc),a1
   move.l (a1),a0
   move.l (a0)+,d0
-; addq #4,a0
   move.l a0,(a1)
   movem.l (sp)+,a0-a1
   rts
@@ -162,16 +161,16 @@ RomFetchZ3
   lea ReadHandle(pc),a1
   move.l (a1),a0
 
-  move.l #4,d3
+  moveq.l #3,d3
 nextnip
+  lsl.l #8,d0
   move.b (a0),d1
   and.b #$f0,d1
   move.b 2(a0),d2
   lsr.w #4,d2
-  or.b d2,d1
+  or.b d1,d2
 
-  move.b d1,d0
-  lsl.l #8,d0
+  move.b d2,d0
 
   addq #4,a0
   dbra d3,nextnip
