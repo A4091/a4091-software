@@ -2,6 +2,7 @@ NOW     := $(shell date)
 DATE    := $(shell date -d '$(NOW)' '+%Y-%m-%d')
 TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
 
+ROM	:= a4091.rom
 PROG	:= a4091.device
 PROG2	:= mounter
 OBJDIR  := objs
@@ -11,6 +12,10 @@ SRCS2   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJS2   := $(SRCS2:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
+STRIP   := m68k-amigaos-strip
+VLINK   := vlink
+VASM    := vasmm68k_mot
+NDK_PATH:= /opt/amiga-2021.05/m68k-amigaos/ndk-include
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG        # Show basic debug
@@ -54,7 +59,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROG2)
+all: $(PROG) $(PROG2) $(ROM)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -96,8 +101,40 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)cc -o $@ $^
 
+$(OBJDIR)/rom.o: rom.S reloc.S $(PROG)
+	@echo Building $@
+	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
+
+$(OBJDIR)/reloc.o: reloc.S $(PROG)
+	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DDEBUG=1
+
+$(OBJDIR)/reloctest.o: reloctest.c
+	@echo Building $@
+	$(QUIET)$(CC) $(CFLAGS2) -c $^ -o $@
+
+reloctest: $(OBJDIR)/reloctest.o $(OBJDIR)/reloc.o
+	@echo Building $@
+	$(QUIET)$(CC) $^ $(LDFLAGS2) -o $@
+
+test: reloctest
+	@echo Running relocation test
+	vamos reloctest
+
+a4091.rom: $(OBJDIR)/rom.bin
+	@echo Building $@
+	cp $< $@
+
+$(OBJDIR)/rom.bin: $(OBJDIR)/rom.o rom.ld
+	@echo Building $@
+	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
+
 $(OBJDIR):
 	mkdir -p $@
 
 clean:
-	rm -f $(OBJS) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	rm -f $(OBJS) $(OBJS2) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
+
+distclean: clean
+	rm -f $(PROG) $(PROG2) $(ROM)
+	rm -r $(OBJDIR)
