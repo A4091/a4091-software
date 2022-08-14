@@ -207,7 +207,7 @@ _HunksLen
  endif
 
  ; keep out of the Diag area copied to RAM automatically
- section .device,data
+ section DEVICE,data
 device:
  incbin "a4091.device"
 

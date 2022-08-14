@@ -9,7 +9,7 @@ SECTIONS {
     /* Visible at 0x2000 but this lives at 0x800 */
     .device : {
 	. = 0x800;
-	*(.device)
+	*(DEVICE)
     }
     /* How is this done the right way? */
     .fill : {
