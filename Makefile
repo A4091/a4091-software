@@ -128,7 +128,7 @@ a4091.rom: $(OBJDIR)/rom.bin
 $(OBJDIR)/rom.bin: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
-	@test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!"
+	@test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!" || echo "ROM fits in 32k"
 
 $(OBJDIR):
 	mkdir -p $@
