@@ -13,7 +13,7 @@ SECTIONS {
     }
     /* How is this done the right way? */
     .fill : {
-	. = 0x7ff8;
+	. = ALIGN(0x8000)-8;
 	LONG(0xFFFF5352);
 	LONG(0x2F434448);
     } =0xffff
