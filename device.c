@@ -27,7 +27,7 @@
 #define DRIVER      "a4091"
 #define DEVICE_VERSION  1
 #define DEVICE_REVISION 0
-#define DEVICE_PRIORITY 0  // Fine to leave priority as zero
+#define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
 #define DEVICE_NAME DRIVER".device"
 #define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." \
@@ -68,7 +68,7 @@ asm("romtag:                                \n"
     "       dc.w    "XSTR(RTC_MATCHWORD)"   \n"
     "       dc.l    romtag                  \n"
     "       dc.l    endcode                 \n"
-    "       dc.b    "XSTR(RTF_AUTOINIT)"    \n"
+    "       dc.b    "XSTR(RTF_COLDSTART|RTF_AUTOINIT)"    \n"
     "       dc.b    "XSTR(DEVICE_VERSION)"  \n"
     "       dc.b    "XSTR(NT_DEVICE)"       \n"
     "       dc.b    "XSTR(DEVICE_PRIORITY)" \n"

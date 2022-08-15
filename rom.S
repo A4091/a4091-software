@@ -135,7 +135,8 @@ DiagEntry:
             lea.l    Romtag(pc),a4                ; find Romtag in memory
 	    lea.l    _Hunks(pc),a0
 	    move.l   (a0),a2
-	    move.l   a2,RT_INIT(a4)
+	    add.l   #4+RT_INIT,a2 ; skip _start and find _auto_init_tables
+	    move.l   (a2),RT_INIT(a4)
 
             movem.l (sp)+,d2-d7/a2-a6
             moveq.l #1,d0           ; indicate "success"
@@ -161,7 +162,7 @@ Romtag:
             dc.w    RTC_MATCHWORD      ; UWORD RT_MATCHWORD
             dc.l    0                  ; APTR  RT_MATCHTAG
             dc.l    0                  ; APTR  RT_ENDSKIP
-            dc.b    RTW_COLDSTART      ; UBYTE RT_FLAGS
+            dc.b    RTF_COLDSTART|RTF_AUTOINIT      ; UBYTE RT_FLAGS
             dc.b    VERSION            ; UBYTE RT_VERSION
             dc.b    NT_DEVICE          ; UBYTE RT_TYPE
             dc.b    10                 ; BYTE  RT_PRI
