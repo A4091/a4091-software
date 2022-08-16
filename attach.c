@@ -1,3 +1,6 @@
+#ifndef DEBUG_ATTACH
+#define NO_SERIAL_OUTPUT
+#endif
 #include "port.h"
 #include "printf.h"
 // // // // // // // // // #include <stdio.h>

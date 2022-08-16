@@ -18,11 +18,23 @@ VASM    := vasmm68k_mot
 NDK_PATH:= /opt/amiga-2021.05/m68k-amigaos/ndk-include
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
-#CFLAGS  += -DDEBUG        # Show basic debug
-#CFLAGS  += -DDEBUG_SYNC   # Show Synchronous SCSI debug
-#CFLAGS  += -DDEBUG_CMD    # Show handler commands received
+#CFLAGS  += -DDEBUG            # Show basic debug
+#CFLAGS  += -DDEBUG_SYNC       # Show Synchronous SCSI debug
+#CFLAGS  += -DDEBUG_CMD        # Show handler commands received
+# Per file debugging
+#CFLAGS  += -DDEBUG_ATTACH     # Debug attach.c
+#CFLAGS  += -DDEBUG_DEVICE     # Debug device.c
+#CFLAGS  += -DDEBUG_CMDHANDLER # Debug commandhandler.c
+#CFLAGS  += -DDEBUG_NCR53CXXX  # Debug ncr53cxxx.c
+#CFLAGS  += -DEBUG_PORT        # Debug port.c
+#CFLAGS  += -DEBUG_SCSIPI_BASE # Debug scsipi_base.c
+#CFLAGS  += -DEBUG_SCSICONF    # Debug scsiconf.c
+#CFLAGS  += -DEBUG_SD          # Debug sd.c
+#CFLAGS  += -DEBUG_SIOP        # Debug siop.c
+#CFLAGS2 += -DEBUG_MOUNTER     # Debug mounter.c # Makes more sense when integrated
+
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
-CFLAGS  += -DNO_SERIAL_OUTPUT
+#CFLAGS  += -DNO_SERIAL_OUTPUT # Turn off serial debugging for the whole driver
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing

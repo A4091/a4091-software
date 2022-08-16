@@ -1,3 +1,6 @@
+#ifndef DEBUG_CMDHANDLER
+#define NO_SERIAL_OUTPUT
+#endif
 #include "port.h"
 #include "printf.h"
 #include <stdlib.h>

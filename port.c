@@ -1,3 +1,7 @@
+#ifndef DEBUG_PORT
+#define NO_SERIAL_OUTPUT
+#endif
+
 #include "port.h"
 
 #include <stdlib.h>

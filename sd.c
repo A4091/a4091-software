@@ -1,3 +1,7 @@
+#ifndef DEBUG_SD
+#define NO_SERIAL_OUTPUT
+#endif
+
 #include "port.h"
 #include "port_bsd.h"
 #include <stdint.h>

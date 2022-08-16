@@ -1,3 +1,6 @@
+#ifndef DEBUG_DEVICE
+#define NO_SERIAL_OUTPUT
+#endif
 #include "port.h"
 #include <devices/trackdisk.h>
 #include <dos/dostags.h>

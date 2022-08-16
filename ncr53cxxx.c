@@ -27,6 +27,10 @@
 
 /*	ncr53cxxx.c	- SCSI SCRIPTS Assembler		*/
 
+#ifndef DEBUG_NCR53CXXX
+#define NO_SERIAL_OUTPUT
+#endif
+
 #include <stdio.h>
 #include "port_bsd.h"
 #include <sys/cdefs.h>

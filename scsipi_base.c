@@ -29,6 +29,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef DEBUG_SCSIPI_BASE
+#define NO_SERIAL_OUTPUT
+#endif
 
 #include "port.h"
 #include <stdio.h>
