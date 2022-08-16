@@ -28,8 +28,6 @@
 #define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
 
 #define DRIVER      "a4091"
-#define DEVICE_VERSION  1
-#define DEVICE_REVISION 0
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
 #define DEVICE_NAME DRIVER".device"

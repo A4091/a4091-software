@@ -8,10 +8,11 @@
         INCLUDE "exec/resident.i"
         INCLUDE "lvo/exec_lib.i"
         INCLUDE "libraries/configvars.i"
+	INCLUDE "version.i"
 
 *----- We'll store Version and Revision in serial number
-VERSION         EQU     40        ; also the high word of serial number
-REVISION        EQU     21        ; also the low word of serial number
+VERSION         EQU     DEVICE_VERSION  ; also the high word of serial number
+REVISION        EQU     DEVICE_REVISION ; also the low word of serial number
 
 * See the Amiga Hardware Manual for more info.
 
