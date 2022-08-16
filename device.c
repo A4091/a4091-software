@@ -1,5 +1,5 @@
-#ifndef DEBUG_DEVICE
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_DEVICE
+#define USE_SERIAL_OUTPUT
 #endif
 #include "port.h"
 #include <devices/trackdisk.h>

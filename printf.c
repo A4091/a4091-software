@@ -44,6 +44,7 @@
  */
 
 // #include "printf.h"
+#define USE_SERIAL_OUTPUT
 #include "port.h"
 #include <clib/debug_protos.h>
 
@@ -71,7 +72,7 @@
 #define FMT_UPPERCASE  0x0100   // Uppercase hex (A-F) instead of (a-f)
 #define FMT_DOT        0x0200   // Dot specifier was used
 
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 
 /* Output buffer structure */
 typedef struct {
@@ -617,7 +618,7 @@ void errx(int rc, const char *fmt, ...)
     while (1)
         ;
 }
-#endif /* NO_SERIAL_OUTPUT */
+#endif /* USE_SERIAL_OUTPUT */
 
 #undef DO_PRINTF_TEST
 #ifdef DO_PRINTF_TEST

@@ -97,7 +97,23 @@ int dbgprintf(const char *fmt, ...);
 #define cv_destroy(x)
 
 void *device_private(device_t dev);
-#ifdef NO_SERIAL_OUTPUT
+
+#if (!defined(DEBUG_ATTACH)      && \
+     !defined(DEBUG_DEVICE)      && \
+     !defined(DEBUG_CMDHANDLER)  && \
+     !defined(DEBUG_NCR53CXXX)   && \
+     !defined(DEBUG_PORT)        && \
+     !defined(DEBUG_SCSIPI_BASE) && \
+     !defined(DEBUG_SCSICONF)    && \
+     !defined(DEBUG_SD)          && \
+     !defined(DEBUG_SIOP)        && \
+     !defined(DEBUG_MOUNTER)) || defined(NO_SERIAL_OUTPUT)
+#ifdef USE_SERIAL_OUTPUT
+#undef USE_SERIAL_OUTPUT
+#endif
+#endif
+
+#ifndef USE_SERIAL_OUTPUT
 #define printf(x...)   do { } while (0)
 #define vfprintf(x...) do { } while (0)
 #define putchar(x...)  do { } while (0)

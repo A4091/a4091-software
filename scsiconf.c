@@ -46,8 +46,8 @@
  *
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  */
-#ifndef DEBUG_SCSICONF
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_SCSICONF
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include "port.h"
@@ -266,7 +266,7 @@ scsibusattach(device_t parent, device_t self, void *aux)
 	    chan->chan_nluns == 1 ? "" : "s");
 
 	/*
-	 * XXX 
+	 * XXX
 	 * newer adapters support more than 256 outstanding commands
 	 * per periph and don't use the tag (they eventually allocate one
 	 * internally). Right now scsipi always allocate a tag and

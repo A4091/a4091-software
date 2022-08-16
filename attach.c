@@ -1,5 +1,5 @@
-#ifndef DEBUG_ATTACH
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_ATTACH
+#define USE_SERIAL_OUTPUT
 #endif
 #include "port.h"
 #include "printf.h"
@@ -567,7 +567,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     rc = scsi_probe_device(chan, target, lun, periph, &failed);
     printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",
            target, lun, rc, failed);
-#ifdef NO_SERIAL_OUTPUT
+#ifndef USE_SERIAL_OUTPUT
     (void) rc;
 #endif
 

@@ -29,8 +29,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef DEBUG_SCSIPI_BASE
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_SCSIPI_BASE
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include "port.h"
@@ -84,20 +84,20 @@ scsipi_update_timeouts(struct scsipi_xfer *xs)
 	u_int8_t cmd;
 	int timeout;
 	struct scsipi_opinfo *oi;
-	
+
 	if (xs->timeout <= 0) {
-		return;	
+		return;
 	}
-	
+
 	opcs = xs->xs_periph->periph_opcs;
-	
+
 	if (opcs == NULL) {
 		return;
 	}
-	
+
 	cmd = xs->cmd->opcode;
 	oi = &opcs->opcode_info[cmd];
-	
+
 	timeout = 1000 * (int)oi->ti_timeout;
 
 
@@ -728,7 +728,7 @@ scsipi_get_resource(struct scsipi_channel *chan)
 }
 
 void
-scsipi_adapter_request(struct scsipi_channel *chan, 
+scsipi_adapter_request(struct scsipi_channel *chan,
         scsipi_adapter_req_t req, void *arg)
 
 {
@@ -1521,7 +1521,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	struct scsipi_periph *periph = xs->xs_periph;
 	u_int8_t key;
 	int error;
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 	u_int32_t info;
 	static const char *error_mes[] = {
 		"soft error (corrected)",
@@ -1613,7 +1613,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		printf(" DEFERRED ERROR, key = 0x%x\n", key);
 		/* FALLTHROUGH */
 	case 0x70:
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 		if ((sense->response_code & SSD_RCODE_VALID) != 0)
 			info = _4btol(sense->info);
 		else
@@ -1751,7 +1751,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	 * Some other code, just report it
 	 */
 	default:
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 #if    defined(SCSIDEBUG) || defined(DEBUG)
 	{
 		static const char *uc = "undecodable sense error";
@@ -1780,7 +1780,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		}
 		printf("\n");
 #endif
-#endif /* !NO_SERIAL_OUTPUT */
+#endif /* USE_SERIAL_OUTPUT */
 		return EIO;
 	}
 }

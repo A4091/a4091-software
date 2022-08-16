@@ -1,5 +1,5 @@
-#ifndef DEBUG_SD
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_SD
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include "port.h"
@@ -504,7 +504,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
     scsi_mode_sense_t *modepage = (scsi_mode_sense_t *) xs->data;
     printf("mode_page_5 complete: %d\n", rc);
 
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 {
     uint8_t *ptr = xs->data;
     int count = sizeof (*modepage);

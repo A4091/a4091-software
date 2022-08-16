@@ -1,5 +1,5 @@
-#ifndef DEBUG_CMDHANDLER
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_CMDHANDLER
+#define USE_SERIAL_OUTPUT
 #endif
 #include "port.h"
 #include "printf.h"

@@ -1,5 +1,5 @@
-#ifndef DEBUG_PORT
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_PORT
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include "port.h"
@@ -105,7 +105,7 @@ device_xname(void *ptr)
         return (dev->dv_xname);
 }
 
-#ifndef NO_SERIAL_OUTPUT
+#ifdef USE_SERIAL_OUTPUT
 unsigned int
 read_system_ticks(void)
 {

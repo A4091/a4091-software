@@ -27,8 +27,8 @@
 
 /*	ncr53cxxx.c	- SCSI SCRIPTS Assembler		*/
 
-#ifndef DEBUG_NCR53CXXX
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_NCR53CXXX
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include <stdio.h>
@@ -168,7 +168,7 @@ struct ncrregs 	regs[] = {
 	{"sbdl",	{0x0a, 0x0a,   -1,   -1,   -1}},
 	{"socl",	{  -1,   -1, 0x09, 0x09, 0x09}},
 	{"ssid", 	{  -1,   -1, 0x0a, 0x0a, 0x0a}},
-	{"sbcl",	{0x0b, 0x0b, 0x0b, 0x0b, 0x0b}}, 
+	{"sbcl",	{0x0b, 0x0b, 0x0b, 0x0b, 0x0b}},
 	{"dstat",	{0x0c, 0x0c, 0x0c, 0x0c, 0x0c}},
 	{"sstat0",	{0x0d, 0x0d, 0x0d, 0x0d, 0x0d}},
 	{"sstat1",	{0x0e, 0x0e, 0x0e, 0x0e, 0x0e}},
@@ -1112,7 +1112,7 @@ void loadstore(int i)
 	int reg, size;
 
 	reg = CheckRegister(i);
-	if (reg < 0)	
+	if (reg < 0)
 		errout ("Expected register");
 	else
 		inst0 |= reg <<  16;

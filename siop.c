@@ -66,8 +66,8 @@
 /*
  * AMIGA 53C710 scsi adaptor driver
  */
-#ifndef DEBUG_SIOP
-#define NO_SERIAL_OUTPUT
+#ifdef DEBUG_SIOP
+#define USE_SERIAL_OUTPUT
 #endif
 
 #include "port.h"
