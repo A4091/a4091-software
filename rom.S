@@ -19,7 +19,7 @@
             INCLUDE "exec/types.i"
             INCLUDE "exec/nodes.i"
             INCLUDE "exec/resident.i"
-	    INCLUDE "lvo/exec_lib.i"
+            INCLUDE "lvo/exec_lib.i"
             INCLUDE "libraries/configvars.i"
 
 *----- We'll store Version and Revision in serial number
@@ -58,17 +58,17 @@ RomStart:
 *   On the A4091 the AUTOCONFIG ROM information is encoded in nibbles across
 *   two 128 byte arrays.
 
-		* er_Type is not inverted
+                * er_Type is not inverted
                 dc.b    ER_TYPE|$0f, ~(PRODUCT_ID)|$0f, ~(ER_FLAGS), $ff
-		dc.b    (~(MANUF_ID)|$0f)&$ff, (~(MANUF_ID>>8)|$0f)&$ff, ~(VERSION>>12), ~(VERSION>>4)
-		dc.b    ~(REVISION>>12), ~(REVISION>>4), ~(ROM_VECTOR>>8)|$0f, ~(ROM_VECTOR)&$ff
-		dc.b    $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    (~(MANUF_ID)|$0f)&$ff, (~(MANUF_ID>>8)|$0f)&$ff, ~(VERSION>>12), ~(VERSION>>4)
+                dc.b    ~(REVISION>>12), ~(REVISION>>4), ~(ROM_VECTOR>>8)|$0f, ~(ROM_VECTOR)&$ff
+                dc.b    $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 
         IFNE    *-RomStart-$40
         FAIL    "Even half of ExpansionRom structure not the right size"
@@ -76,13 +76,13 @@ RomStart:
                 dc.b    ((ER_TYPE<<4)|$0f)&$ff, ~(PRODUCT_ID<<4)&$ff, ~(ER_FLAGS<<4)&$ff, $ff
                 dc.b    ~(MANUF_ID>>4), ~(MANUF_ID<<4)&$ff, ~(VERSION>>8), ~(VERSION>>0)
                 dc.b    ~(REVISION>>8), ~(REVISION>>0), ~(ROM_VECTOR>>4), ~(ROM_VECTOR<<4)&$ff
-		dc.b    $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+                dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 
         IFNE    *-RomStart-$80
         FAIL    "Odd half of ExpansionROM structure not the right size"
@@ -120,23 +120,23 @@ DiagEntry:
             movem.l d2-d7/a2-a6,-(sp)
             move.w #$0f0f,$dff180                 ; sign of life
 
-	    ; Patch up Romtag Resident Structure in memory
+            ; Patch up Romtag Resident Structure in memory
             lea.l    Romtag(pc),a4                ; find Romtag in memory
-	    move.l   a4,RT_MATCHTAG(a4)           ; pointer to itself
-	    lea.l    EndCopy(pc),a1
-	    move.l   a1,RT_ENDSKIP(a4)
+            move.l   a4,RT_MATCHTAG(a4)           ; pointer to itself
+            lea.l    EndCopy(pc),a1
+            move.l   a1,RT_ENDSKIP(a4)
             lea.l    DevName(pc),a1
-	    move.l   a1,RT_NAME(a4)
+            move.l   a1,RT_NAME(a4)
             lea.l    IdString(pc),a1
-	    move.l   a1,RT_IDSTRING(a4)
+            move.l   a1,RT_IDSTRING(a4)
 
             bsr.b    _relocate
 
             lea.l    Romtag(pc),a4                ; find Romtag in memory
-	    lea.l    _Hunks(pc),a0
-	    move.l   (a0),a2
-	    add.l   #4+RT_INIT,a2 ; skip _start and find _auto_init_tables
-	    move.l   (a2),RT_INIT(a4)
+            lea.l    _Hunks(pc),a0
+            move.l   (a0),a2
+            add.l   #4+RT_INIT,a2 ; skip _start and find _auto_init_tables
+            move.l   (a2),RT_INIT(a4)
 
             movem.l (sp)+,d2-d7/a2-a6
             moveq.l #1,d0           ; indicate "success"
@@ -148,8 +148,8 @@ DiagEntry:
 
 BootEntry:  lea     DosName(PC),a1          ; 'dos.library',0
             jsr     _LVOFindResident(a6)    ; find the DOS resident tag
-	    tst.l   d0
-	    beq.s   BadBoot
+            tst.l   d0
+            beq.s   BadBoot
             move.l  d0,a0                   ; in order to bootstrap
             move.l  RT_INIT(A0),a0          ; set vector to DOS INIT
             jsr     (a0)                    ; and initialize DOS
@@ -171,8 +171,8 @@ Romtag:
             dc.l    0                  ; APTR  RT_INIT
 
             ; After Diag patching, our romtag will point its Init function
-	    ; to the first instruction of a4091.device so that it can be
-	    ; called at Resident initialization time.
+            ; to the first instruction of a4091.device so that it can be
+            ; called at Resident initialization time.
             ; This routine will be similar to a normal expansion device
             ; initialization routine, but will MakeDosNode then set up a
             ; BootNode, and Enqueue() on eb_MountList.
@@ -182,17 +182,17 @@ Romtag:
 DevName:    dc.b    'a4091.device',0                      ; Name string
 IdString    dc.b    'A4091 scsidisk '
             dc.b    48+VERSION/10,48+VERSION//10,'.'
-	    dc.b    48+REVISION/10,48+REVISION//10,0   ; Id string
+            dc.b    48+REVISION/10,48+REVISION//10,0   ; Id string
 
 DosName:    dc.b    'dos.library',0                ; DOS library name
 
-            align 1	; word align
+            align 1     ; word align
 
 
 *******  Relocation Code  ***********************************************
 *************************************************************************
 
-	INCLUDE "reloc.S"
+        INCLUDE "reloc.S"
 
 *
 * End of the Diag copy area which is copied to RAM
