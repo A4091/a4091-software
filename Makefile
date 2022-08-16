@@ -34,7 +34,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS2 += -DEBUG_MOUNTER     # Debug mounter.c # Makes more sense when integrated
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
-#CFLAGS  += -DNO_SERIAL_OUTPUT # Turn off serial debugging for the whole driver
+CFLAGS  += -DNO_SERIAL_OUTPUT # Turn off serial debugging for the whole driver
 #CFLAGS  += -mhard-float
 CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing
