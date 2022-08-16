@@ -119,7 +119,6 @@ DiagStart:
 
 DiagEntry:
         movem.l d2-d7/a2-a6,-(sp)
-        move.w  #$0f0f,$dff180                 ; sign of life
 
         ; Patch up Romtag Resident Structure in memory
         lea.l   Romtag(pc),a4                ; find Romtag in memory
@@ -131,8 +130,11 @@ DiagEntry:
         lea.l   IdString(pc),a1
         move.l  a1,RT_IDSTRING(a4)
 
-        bsr.b   _relocate
-
+        bsr     _relocate
+	tst.l   d0
+	beq.s   ok
+        move.w  #$0f00,$dff180               ; flash screen red (error)
+ok
         lea.l   Romtag(pc),a4                ; find Romtag in memory
         lea.l   _Hunks(pc),a0
         move.l  (a0),a2
