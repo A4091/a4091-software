@@ -107,7 +107,7 @@ $(OBJDIR)/rom.o: rom.S reloc.S $(PROG)
 	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
 $(OBJDIR)/reloc.o: reloc.S $(PROG)
-	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DDEBUG=1
+	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@
