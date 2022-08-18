@@ -15,7 +15,7 @@ CC	:= m68k-amigaos-gcc
 STRIP   := m68k-amigaos-strip
 VLINK   := vlink
 VASM    := vasmm68k_mot
-NDK_PATH:= /opt/amiga-2021.05/m68k-amigaos/ndk-include
+NDK_PATH:= /opt/amiga/m68k-amigaos/ndk-include
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG             # Show basic debug
