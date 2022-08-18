@@ -18,7 +18,9 @@ CC	:= m68k-amigaos-gcc
 STRIP   := m68k-amigaos-strip
 VLINK   := vlink
 VASM    := vasmm68k_mot
-NDK_PATH:= /opt/amiga/m68k-amigaos/ndk-include
+NDK_PATHS := /opt/amiga/m68k-amigaos/ndk-include
+NDK_PATHS += /opt/amiga-2021.05/m68k-amigaos/ndk-include
+NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG             # Show basic debug
@@ -64,8 +66,16 @@ LDFLAGS3 = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-f
 #CFLAGS  += -fbbb=-
 #LDFLAGS += -fbbb=-
 
+# If verbose is specified with no other targets, then build everything
+ifeq ($(MAKECMDGOALS),verbose)
+verbose: all
+endif
+ifeq (,$(filter verbose timed, $(MAKECMDGOALS)))
 QUIET   := @
+else
 QUIET   :=
+endif
+
 SC_ASM	:= $(OBJDIR)/ncr53cxxx
 SIOP_SCRIPT := $(OBJDIR)/siop_script.out
 
@@ -103,7 +113,7 @@ $(OBJSU) $(OBJSM): Makefile | $(OBJDIR)
 $(PROG): $(OBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(OBJS) $(LDFLAGS) -o $@
-	$(STRIP) $@
+	$(QUIET)$(STRIP) $@
 
 $(PROGU): $(OBJSU)
 	@echo Building $@
@@ -115,7 +125,7 @@ $(PROGM): $(OBJSM)
 
 $(SIOP_SCRIPT): siop_script.ss $(SC_ASM)
 	@echo Building $@
-	$(SC_ASM) $(filter %.ss,$^) -p $@
+	$(QUIET)$(SC_ASM) $(filter %.ss,$^) -p $@
 
 $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
@@ -138,24 +148,28 @@ reloctest: $(OBJDIR)/reloctest.o $(OBJDIR)/reloc.o
 
 test: reloctest
 	@echo Running relocation test
-	vamos reloctest
+	$(QUIET)vamos reloctest
 
 a4091.rom: $(OBJDIR)/rom.bin
 	@echo Building $@
-	cp $< $@
+	$(QUIET)cp $< $@
 
 $(OBJDIR)/rom.bin: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
-	@test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!" || echo "ROM fits in 32k"
+	$(QUIET)test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!" || echo "ROM fits in 32k"
 
 $(OBJDIR):
 	mkdir -p $@
 
 clean:
-	rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
-	rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
+	@echo Cleaning
+	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
 
 distclean: clean
-	rm -f $(PROG) $(PROG2) $(ROM)
-	rm -r $(OBJDIR)
+	@echo $@
+	$(QUIET)rm -f $(PROG) $(PROG2) $(ROM)
+	$(QUIET)rm -r $(OBJDIR)
+
+.PHONY: verbose

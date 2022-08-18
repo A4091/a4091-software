@@ -344,6 +344,7 @@ struct DevInfo {
 };
 #endif
 
+#if 0
 static int
 Action_Die(struct MsgPort *msgport)
 {
@@ -390,6 +391,7 @@ Action_Die(struct MsgPort *msgport)
 
     return (rc);
 }
+#endif
 
 static int
 Action_Inhibit(struct MsgPort *msgport, int do_inhibit)
