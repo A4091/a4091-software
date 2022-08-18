@@ -150,11 +150,7 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-a4091.rom: $(OBJDIR)/rom.bin
-	@echo Building $@
-	$(QUIET)cp $< $@
-
-$(OBJDIR)/rom.bin: $(OBJDIR)/rom.o rom.ld
+a4091.rom: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
 	$(QUIET)test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!" || echo "ROM fits in 32k"
