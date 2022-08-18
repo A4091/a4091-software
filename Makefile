@@ -1,6 +1,5 @@
-NOW     := $(shell date)
-DATE    := $(shell date -d '$(NOW)' '+%Y-%m-%d')
-TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
+DATE    := $(shell date '+%Y-%m-%d')
+TIME    := $(shell date '+%H:%M:%S')
 
 ROM	:= a4091.rom
 PROG	:= a4091.device
