@@ -133,10 +133,10 @@ $(SC_ASM): ncr53cxxx.c
 
 $(OBJDIR)/rom.o: rom.S reloc.S $(PROG)
 	@echo Building $@
-	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloc.o: reloc.S $(PROG)
-	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1 $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1 $(ROMDRIVER)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@
