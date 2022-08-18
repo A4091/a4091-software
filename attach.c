@@ -378,12 +378,14 @@ a4091_validate(uint32_t dev_base)
         uint32_t got_scratch;
         uint32_t got_temp;
         next = (patt << 1) | (patt >> 31);
-        rp->siop_scratch = patt;
-        rp->siop_temp = next;
+        rp->siop_scratch2 = patt;
+        rp->siop_temp2 = next;
 
+#if 0
         /* 68030 cache write-allocate mode bug work-around */
         CacheClearE((void *)(&rp->siop_scratch), 4, CACRF_ClearD);
         CacheClearE((void *)(&rp->siop_temp), 4, CACRF_ClearD);
+#endif
 
         got_scratch = rp->siop_scratch;
         got_temp = rp->siop_temp;
@@ -403,8 +405,8 @@ a4091_validate(uint32_t dev_base)
             break;
         }
     }
-    rp->siop_scratch = scratch;
-    rp->siop_temp    = temp;
+    rp->siop_scratch2 = scratch;
+    rp->siop_temp2    = temp;
 
     return (fail ? ERROR_BAD_BOARD : 0);
 }

@@ -4,13 +4,16 @@ TIME    := $(shell date -d '$(NOW)' '+%H:%M:%S')
 
 ROM	:= a4091.rom
 PROG	:= a4091.device
-PROG2	:= mounter
+PROGU	:= a4091
+PROGM	:= mounter
 OBJDIR  := objs
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c
-SRCS2   := mounter.c
+SRCSU   := a4091.c
+SRCSM   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
-OBJS2   := $(SRCS2:%.c=$(OBJDIR)/%.o)
+OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
+OBJSM   := $(SRCSM:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
 STRIP   := m68k-amigaos-strip
 VLINK   := vlink
@@ -36,16 +39,17 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 #CFLAGS  += -mhard-float
-CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
+CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 CFLAGS  += -Wno-strict-aliasing
-CFLAGS2 := -Wall -Wno-pointer-sign -fomit-frame-pointer
+CFLAGS2 := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 
 # Enable to put the original Commodore driver into the ROM
 # (You will have to extract it yourself)
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
 
-LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga
-LDFLAGS2 = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2 -lgcc -lc -lamiga
+LDFLAGS = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga -ramiga-dev
+LDFLAGS2 = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2
+LDFLAGS3 = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2 -lgcc -lc -lamiga
 
 #CFLAGS  += -g
 #LDFLAGS += -g
@@ -56,13 +60,7 @@ LDFLAGS2 = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame
 # These don't work when compiled as a .device
 #CFLAGS  += -fbaserel
 #LDFLAGS += -fbaserel
-CFLAGS  += -ramiga-dev
-LDFLAGS += -ramiga-dev
 
-CFLAGS  += -Os
-LDFLAGS += -Os
-#CFLAGS  += -O0
-#LDFLAGS += -O0
 #CFLAGS  += -fbbb=-
 #LDFLAGS += -fbbb=-
 
@@ -75,7 +73,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROG2) $(ROM)
+all: $(PROG) $(PROGU) $(PROGM) $(ROM)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -83,7 +81,8 @@ define DEPEND_SRC
 $(patsubst %,$(OBJDIR)/%,$(filter-out $(OBJDIR)/%,$(basename $(1)).o)) $(filter $(OBJDIR)/%,$(basename $(1)).o): $(1)
 endef
 $(foreach SRCFILE,$(SRCS),$(eval $(call DEPEND_SRC,$(SRCFILE))))
-$(foreach SRCFILE,$(SRCS2),$(eval $(call DEPEND_SRC,$(SRCFILE))))
+$(foreach SRCFILE,$(SRCSU),$(eval $(call DEPEND_SRC,$(SRCFILE))))
+$(foreach SRCFILE,$(SRCSM),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 
 $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS))
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
@@ -97,7 +96,7 @@ $(OBJS): Makefile port.h | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -c $(filter %.c,$^) -o $@
 
-$(OBJS2): Makefile | $(OBJDIR)
+$(OBJSU) $(OBJSM): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS2) -c $(filter %.c,$^) -o $@
 
@@ -106,9 +105,13 @@ $(PROG): $(OBJS)
 	$(QUIET)$(CC) $(OBJS) $(LDFLAGS) -o $@
 	$(STRIP) $@
 
-$(PROG2): $(OBJS2)
+$(PROGU): $(OBJSU)
 	@echo Building $@
-	$(QUIET)$(CC) $(OBJS2) $(LDFLAGS2) -o $@
+	$(QUIET)$(CC) $(OBJSU) $(LDFLAGS2) -o $@
+
+$(PROGM): $(OBJSM)
+	@echo Building $@
+	$(QUIET)$(CC) $(OBJSM) $(LDFLAGS3) -o $@
 
 $(SIOP_SCRIPT): siop_script.ss $(SC_ASM)
 	@echo Building $@
@@ -150,7 +153,7 @@ $(OBJDIR):
 	mkdir -p $@
 
 clean:
-	rm -f $(OBJS) $(OBJS2) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
 
 distclean: clean

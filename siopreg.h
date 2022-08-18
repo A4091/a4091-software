@@ -102,6 +102,14 @@ typedef struct {
 /*3b*/	volatile unsigned char	siop_dmode;	/* rw: DMA Mode reg */
 
 /*3c*/	volatile unsigned long	siop_adder;
+#ifdef PORT_AMIGA
+/* Duplicate registers for write to avoid 68030 write-allocate buf */
+/*00*/	volatile unsigned long	siop_pad1[7];   /* Shadow 0x00 - 0x1b */
+/*1c*/	volatile unsigned long	siop_temp2;	/* Shadow Temporary Stack */
+/*20*/	volatile unsigned long	siop_pad2[5];   /* Shadow 0x20 - 0x33 */
+/*34*/	volatile unsigned long	siop_scratch2;	/* Shadow Scratch Register */
+/*38*/	volatile unsigned long	siop_pad3[2];   /* Shadow 0x38 - 0x3f */
+#endif
 
 #else
 

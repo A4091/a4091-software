@@ -82,7 +82,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
     /*
      * Don't allocate data buffer on stack;
      * The lower driver layer might use the same stack and
-     * if it uses region which is in the same cacheline,
+     * if it uses a region which is in the same cacheline,
      * cache flush ops against the data buffer won't work properly.
      */
     datap = AllocMem(sizeof (*datap), MEMF_PUBLIC);

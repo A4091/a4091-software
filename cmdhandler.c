@@ -64,6 +64,16 @@ void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
     if (sc->sc_flags & SIOP_INTSOFF) {
+        /*
+         * XXX: According to NCR 53C710-1 errata, polling ISTAT is not safe
+         *      when a MODE is in flight to a register with carry. This is
+         *      because during the ISTAT read, parity is briefly turned off.
+         *      A possible work-around is to not check parity when reading
+         *      the ISTAT register. Another possible work-around is to not
+         *      poll the ISTAT register. Use the IRQ pin to determine when an
+         *      interrupt has occurred. Once the interrupt has occurred, the
+         *      ISTAT register can be read without any parity corruption.
+         */
         siop_regmap_p rp    = sc->sc_siopp;
         uint8_t       istat = rp->siop_istat;
 

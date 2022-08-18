@@ -38,14 +38,6 @@ typedef uint32_t vaddr_t;
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)
 #define kvtop(x) ((uint32_t)(x))
 
-#if 0
-// int dma_cachectl(void *addr, int len);
-void callout_reset(void *cs, int to_ticks, void (*func)(void *), void *arg);
-// int callout_stop(void *cs);
-#define callout_init(x,y)
-#define callout_stop(x)
-#define callout_reset(w,x,y,z)
-#else
 typedef struct {
     int ticks;             /* ticks remaining */
     void (*func)(void *);  /* callout function at timeout */
@@ -56,7 +48,6 @@ int callout_pending(callout_t *c);
 void callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg);
 int callout_stop(callout_t *c);
 void callout_call(callout_t *c);
-#endif
 
 void delay(int usecs);
 
