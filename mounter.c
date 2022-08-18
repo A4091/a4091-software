@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #define MOUNTER_CMD_NOP     0
 #define MOUNTER_CMD_EXIT    1
@@ -180,7 +181,7 @@ rdb_chksum(void *ptr, uint32_t blksize)
 
     size = buf[1];
     if (size > (blksize >> 2)) {
-        printf("Invalid size of csum structure: %ld\n", size);
+        printf("Invalid size of csum structure: %"PRId32"\n", size);
         return (1);
     }
     for (; size > 0; size--) {
@@ -528,14 +529,14 @@ scan_partition_table_rdb(mounter_msg_t *msg, uint8_t unitno,
 
         printf("  ");
         print_id(part->pb_ID);
-        printf("  Blk=%-3u DriveName=%-4.*s DevFlags=%-4lu HostID=%lu "
-               "Next=%-3lu %s%s\n", partblk,
+        printf("  Blk=%-3u DriveName=%-4.*s DevFlags=%-4" PRIu32 " HostID=%" PRIu32 " "
+               "Next=%-3" PRIu32" %s%s\n", partblk,
                (part->pb_DriveName[0] < 32) ? part->pb_DriveName[0] : 32,
                part->pb_DriveName + 1,
                part->pb_DevFlags, part->pb_HostID, part->pb_Next,
                (part->pb_Flags & PBFF_NOMOUNT) ? "      " : "Mount ",
                (part->pb_Flags & PBFF_BOOTABLE) ? "Boot" : "");
-        printf("        DosType=%08lx ", env->de_DosType);
+        printf("        DosType=%08"PRIu32" ", env->de_DosType);
         print_id(env->de_DosType);
         di = already_mounted(msg->devname, unitno, env->de_LowCyl, env->de_HighCyl);
         if (di != NULL) {
@@ -574,7 +575,7 @@ scan_partition_table(mounter_msg_t *msg, uint8_t unitno, struct IOExtTD *tio,
 
         if ((rdb->rdb_ID == IDNAME_RIGIDDISK) &&
             (rdb_chksum(rdb, blksize) == 0)) {
-            printf(" RDB=%u HostID=%lu BlockBytes=%lu Flags=0x%04lx\n",
+            printf(" RDB=%u HostID=%"PRIu32" BlockBytes=%"PRIu32" Flags=0x%04"PRIx32"\n",
                    rdbblk, rdb->rdb_HostID, rdb->rdb_BlockBytes,
                    rdb->rdb_Flags);
             scan_partition_table_rdb(msg, unitno, tio, dg,
@@ -622,7 +623,7 @@ mounter_scan_lun(mounter_msg_t *msg, uint8_t unitno, struct IOExtTD *tio)
     tio->iotd_Req.io_Error   = 0;
     failcode = DoIO((struct IORequest *) tio);
     if (failcode == 0) {
-        printf("%s unit %-2d %lu sectors x %lu  C=%lu H=%lu S=%lu  Type=%u%s\n",
+        printf("%s unit %-2d %"PRIu32" sectors x %"PRIu32"  C=%"PRIu32" H=%"PRIu32" S=%"PRIu32"  Type=%u%s\n",
                devname, unitno,
                dg.dg_TotalSectors, dg.dg_SectorSize, dg.dg_Cylinders,
                dg.dg_Heads, dg.dg_TrackSectors, dg.dg_DeviceType,

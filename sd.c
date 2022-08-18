@@ -394,7 +394,7 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
  * Get disk write protect status (0=Not write protected)
  */
 int
-sd_get_protstatus(void *periph_p, unsigned long *status)
+sd_get_protstatus(void *periph_p, ULONG *status)
 {
     struct scsipi_periph *periph = periph_p;
     int                   flags = XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;

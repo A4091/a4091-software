@@ -20,6 +20,7 @@ const char *version = "\0$VER: A4091 0.4 ("__DATE__") © Chris Hooper";
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <libraries/expansionbase.h>
 #include <clib/expansion_protos.h>
 #include <inline/exec.h>
@@ -2957,7 +2958,7 @@ a4091_list(uint32_t addr)
                 did_header++;
                 printf("  Index Address  Size     Flags\n");
             }
-            printf("  %-3d   %08x %08lx",
+            printf("  %-3d   %08x %08"PRIx32,
                    count, (uint32_t) cdev->cd_BoardAddr, cdev->cd_BoardSize);
             if (cdev->cd_Flags & CDF_SHUTUP)
                 printf(" ShutUp");
