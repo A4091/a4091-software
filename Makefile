@@ -153,7 +153,7 @@ test: reloctest
 a4091.rom: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
-	$(QUIET)test `wc -c <$<` -gt 32768 && echo "ROM FILE EXCEEDS 32K!" || echo "ROM fits in 32k"
+	$(QUIET)test `wc -c <$<` -gt 32768 && echo "\033[0;31mROM FILE EXCEEDS 32K!\033[0m" || echo "\033[0;32mROM fits in 32k\033[0m"
 
 $(OBJDIR):
 	mkdir -p $@
