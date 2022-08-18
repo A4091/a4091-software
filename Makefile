@@ -40,6 +40,10 @@ CFLAGS  += -Wall -Wno-pointer-sign -fomit-frame-pointer
 CFLAGS  += -Wno-strict-aliasing
 CFLAGS2 := -Wall -Wno-pointer-sign -fomit-frame-pointer
 
+# Enable to put the original Commodore driver into the ROM
+# (You will have to extract it yourself)
+#ROMDRIVER := -DCOMMODORE_DEVICE=1
+
 LDFLAGS = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga
 LDFLAGS2 = -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2 -lgcc -lc -lamiga
 
@@ -116,10 +120,10 @@ $(SC_ASM): ncr53cxxx.c
 
 $(OBJDIR)/rom.o: rom.S reloc.S $(PROG)
 	@echo Building $@
-	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
+	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloc.o: reloc.S $(PROG)
-	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1
+	$(QUIET)$(VASM) -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1 $(ROMDRIVER)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@

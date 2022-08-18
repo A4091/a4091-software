@@ -139,9 +139,17 @@ ok
         lea.l   Romtag(pc),a4                ; find Romtag in memory
         lea.l   _Hunks(pc),a0
         move.l  (a0),a2
+
+        cmp.w   #$4afc,4(a2)
+        beq.s   new_style
+old_style
+        move.l  a2,RT_INIT(a4)
+        bra.s   done
+new_style
         add.l   #4+RT_INIT,a2 ; skip _start and find _auto_init_tables
         move.l  (a2),RT_INIT(a4)
 
+done
         movem.l (sp)+,d2-d7/a2-a6
         moveq.l #1,d0           ; indicate "success"
         rts
@@ -167,7 +175,11 @@ Romtag:
         dc.w    RTC_MATCHWORD      ; UWORD RT_MATCHWORD
         dc.l    0                  ; APTR  RT_MATCHTAG
         dc.l    0                  ; APTR  RT_ENDSKIP
+        IFD COMMODORE_DEVICE
+        dc.b    RTW_COLDSTART      ; UBYTE RT_FLAGS
+        ELSE
         dc.b    RTF_COLDSTART|RTF_AUTOINIT      ; UBYTE RT_FLAGS
+        ENDIF
         dc.b    VERSION            ; UBYTE RT_VERSION
         dc.b    NT_DEVICE          ; UBYTE RT_TYPE
         dc.b    10                 ; BYTE  RT_PRI
