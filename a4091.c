@@ -32,6 +32,14 @@ const char *version = "\0$VER: A4091 0.4 ("__DATE__") © Chris Hooper";
 #include <exec/lists.h>
 #include <sys/time.h>
 
+/* ULONG has changed from NDK 3.9 to NDK 3.2.
+ * However, PRI*32 did not. What is the right way to implement this?
+ */
+#if INCLUDE_VERSION < 47
+#undef PRIx32
+#define PRIx32 "lx"
+#endif
+
 #define CACHE_LINE_WRITE(addr, len) CacheClearE((void *)(addr), len, \
                                                 CACRF_ClearD)
 #define CACHE_LINE_DISCARD(addr, len) CacheClearE((void *)(addr), len, \
