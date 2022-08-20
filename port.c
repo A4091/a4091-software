@@ -9,6 +9,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
+#include <clib/alib_protos.h>
 #include <exec/execbase.h>
 #include "device.h"
 #include "printf.h"
@@ -54,6 +55,7 @@ usleep(int usecs)
 void
 delay(int usecs)
 {
+#ifdef DOS_PROCESS
     int msec = usecs / 1000;
     int ticks = TICKS_PER_SECOND * msec / 1000;
 
@@ -68,6 +70,9 @@ delay(int usecs)
 #endif
 
     Delay(ticks);
+#else
+    TimeDelay(1, 0, usecs);
+#endif
 }
 
 static int bsd_ilevel = 0;

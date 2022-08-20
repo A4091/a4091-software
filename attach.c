@@ -363,9 +363,17 @@ a4091_validate(uint32_t dev_base)
 
 #if 0
     rp->siop_istat |= SIOP_ISTAT_RST;       /* reset chip */
+#ifdef DOS_PROCESS
     Delay(1);
+#else
+    delay(20000);
+#endif
     rp->siop_istat &= ~SIOP_ISTAT_RST;
+#ifdef DOS_PROCESS
     Delay(1);
+#else
+    delay(20000);
+#endif
 #endif
 
     /*
@@ -427,6 +435,7 @@ init_chan(device_t self, UBYTE *boardnum)
         return (ERROR_NO_BOARD);
     }
 
+    printf("A4091 %u found at %x\n", *boardnum, dev_base);
     if ((rc = a4091_validate(dev_base)))
         return (rc);
 

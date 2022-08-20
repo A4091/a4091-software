@@ -160,7 +160,9 @@ static const UWORD nsd_supported_cmds[] = {
     TAG_END
 };
 
+#ifdef DOS_PROCESS
 struct DosLibrary *DOSBase;
+#endif
 static int
 cmd_do_iorequest(struct IORequest * ior)
 {
@@ -356,7 +358,9 @@ CMD_SEEK_continue:
             PRINTF_CMD("CMD_TERM\n");
             deinit_chan(&asave->as_device_self);
             close_timer();
+#ifdef DOS_PROCESS
             CloseLibrary((struct Library *) DOSBase);
+#endif
             asave->as_isr = NULL;
             FreeMem(asave, sizeof (*asave));
             asave = NULL;
@@ -394,15 +398,21 @@ CMD_SEEK_continue:
 
 void scsipi_completion_poll(struct scsipi_channel *chan);
 
+#if 0
 __asm("_geta4: lea ___a4_init,a4 \n"
       "        rts");
+#endif
 
 static void
 cmd_handler(void)
 {
     struct MsgPort        *msgport;
     struct IORequest      *ior;
+#ifdef DOS_PROCESS
     struct Process        *proc;
+#else
+    struct Task *task;
+#endif
     struct siop_softc     *sc;
     struct scsipi_channel *chan;
     int                   *active;
@@ -422,6 +432,7 @@ cmd_handler(void)
     (void) devbase;
 #endif
 
+#ifdef DOS_PROCESS
     proc = (struct Process *) FindTask((char *)NULL);
 
     /* get the startup message */
@@ -432,6 +443,15 @@ cmd_handler(void)
     DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
 
     msgport = CreatePort(NULL, 0);
+#else
+    task = (struct Task *) FindTask((char *)NULL);
+
+    while (!task->tc_UserData) putchar('.');
+    msgport = (struct MsgPort *)(task->tc_UserData);
+
+    while ((msg = (start_msg_t *) GetMsg(msgport)) == NULL)
+        WaitPort(msgport);
+#endif
     msg->msg_port = msgport;
     if (msgport == NULL) {
         msg->io_Error = ERROR_NO_MEMORY;
@@ -528,11 +548,17 @@ cmd_complete(void *ior, int8_t rc)
 int
 start_cmd_handler(uint *boardnum)
 {
+#ifdef DOS_PROCESS
     struct Process *proc;
     struct DosLibrary *DOSBase;
+#else
+    struct MsgPort *msgport;
+    struct Task *task;
+#endif
     start_msg_t msg;
 //    register long devbase asm("a6");
 
+#ifdef DOS_PROCESS
     DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
     if (DOSBase == NULL)
         return (1);
@@ -546,6 +572,15 @@ start_cmd_handler(uint *boardnum)
     CloseLibrary((struct Library *) DOSBase);
     if (proc == NULL)
         return (1);
+#else
+    msgport = CreatePort(NULL, 0);
+    task = CreateTask("a4091.device", 0, cmd_handler, 8192);
+    if (task == NULL) {
+        return (1);
+    }
+    task->tc_UserData=(APTR)msgport;
+    printf("Task created\n");
+#endif
 
     /* Send the startup message with the board to initialize */
     memset(&msg, 0, sizeof (msg));
@@ -556,7 +591,11 @@ start_cmd_handler(uint *boardnum)
     msg.cmd       = CMD_STARTUP;
     msg.boardnum  = *boardnum;
     msg.io_Error  = ERROR_OPEN_FAIL;  // Default, which should be overwritten
+#ifdef DOS_PROCESS
     PutMsg(&proc->pr_MsgPort, (struct Message *)&msg);
+#else
+    PutMsg((struct MsgPort *)(task->tc_UserData), (struct Message *)&msg);
+#endif
     WaitPort(msg.msg.mn_ReplyPort);
     DeletePort(msg.msg.mn_ReplyPort);
     myPort = msg.msg_port;
