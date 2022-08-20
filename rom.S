@@ -119,6 +119,7 @@ DiagStart:
 *
 
 DiagEntry:
+        IFND NO_DEVICE
         movem.l d2-d7/a2-a6,-(sp)
 
         ; Patch up Romtag Resident Structure in memory
@@ -151,6 +152,7 @@ new_style
 
 done
         movem.l (sp)+,d2-d7/a2-a6
+	ENDIF
         moveq.l #1,d0           ; indicate "success"
         rts
 
@@ -205,9 +207,9 @@ DosName:
 
 *******  Relocation Code  ***********************************************
 *************************************************************************
-
+        IFND NO_DEVICE
         INCLUDE "reloc.S"
-
+        ENDIF
 *
 * End of the Diag copy area which is copied to RAM
 *

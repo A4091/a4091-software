@@ -47,6 +47,7 @@ CFLAGS2 := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 # Enable to put the original Commodore driver into the ROM
 # (You will have to extract it yourself)
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
+#ROMDRIVER := -DNO_DEVICE=1
 
 LDFLAGS = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga -ramiga-dev
 LDFLAGS2 = -Os -Xlinker -Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst -fomit-frame-pointer -mcrt=clib2
