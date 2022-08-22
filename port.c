@@ -55,7 +55,6 @@ usleep(int usecs)
 void
 delay(int usecs)
 {
-#ifdef DOS_PROCESS
     int msec = usecs / 1000;
     int ticks = TICKS_PER_SECOND * msec / 1000;
 
@@ -69,9 +68,11 @@ delay(int usecs)
     printf("delay(%u)\n", usecs);
 #endif
 
+#ifdef DOS_PROCESS
     Delay(ticks);
 #else
-    TimeDelay(1, 0, usecs);
+    //TimeDelay(UNIT_MICROHZ, 0, useconds);
+    TimeDelay(UNIT_VBLANK, 0, ticks);
 #endif
 }
 
