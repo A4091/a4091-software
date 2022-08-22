@@ -12,6 +12,7 @@
 #include <libraries/dos.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
+#include <proto/expansion.h>
 #include <utility/tagitem.h>
 #include <clib/alib_protos.h>
 #include <devices/scsidisk.h>
@@ -19,6 +20,7 @@
 #include "device.h"
 #include "cmdhandler.h"
 #include "version.h"
+#include "rdb_partitions.h"
 
 #ifdef DEBUG
 #include <clib/debug_protos.h>
@@ -29,6 +31,9 @@
 
 #define DRIVER      "a4091"
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
+
+#define MANUF_ID        514 // Commodore West Chester
+#define PRODUCT_ID       84 // A4091
 
 #define DEVICE_NAME DRIVER".device"
 #define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." \
@@ -108,6 +113,24 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
+    struct Library *ExpansionBase;
+    struct ConfigDev *cd = NULL;
+
+    if (!(ExpansionBase = (struct Library*)OpenLibrary((uint8_t*)"expansion.library",0L))) {
+        return NULL;
+    }
+
+    if (cd = (struct ConfigDev*)FindConfigDev(cd,MANUF_ID,PRODUCT_ID)) {
+#ifdef DEBUG
+        printf("a4091.device found A4091 at %p.\n", cd->cd_BoardAddr);
+#endif
+    } else {
+#ifdef DEBUG
+        printf("a4091.device didn't find A4091!\n");
+#endif
+        CloseLibrary(ExpansionBase);
+        return NULL;
+    }
 
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
@@ -123,13 +146,20 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     InitSemaphore(&entry_sem);
     ObtainSemaphore(&entry_sem);
     printf("A4091 driver %s %s\n", device_name, device_id_string);
+    dev->lib_OpenCnt++;
 
     int scsi_unit = 0;
     if (start_cmd_handler(&scsi_unit)) {
         printf("Start handler failed\n");
         return (NULL);
     }
+
+    parse_rdb(ExpansionBase, cd, dev);
+
+    dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);
+
+    CloseLibrary(ExpansionBase);
 
     return (dev);
 }

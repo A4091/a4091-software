@@ -7,7 +7,7 @@ PROGU	:= a4091
 PROGM	:= mounter
 OBJDIR  := objs
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
-SRCS    += sd.c scsipi_base.c scsiconf.c
+SRCS    += sd.c scsipi_base.c scsiconf.c rdb_partitions.c
 SRCSU   := a4091.c
 SRCSM   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
@@ -35,6 +35,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG_SCSICONF    # Debug scsiconf.c
 #CFLAGS  += -DDEBUG_SD          # Debug sd.c
 #CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
+#CFLAGS  += -DDEBUG_RDB         # Debug rdb_partitions.c
 #CFLAGS2 += -DDEBUG_MOUNTER     # Debug mounter.c # Makes more sense when integrated
 #CFLAGS  += -DNO_SERIAL_OUTPUT   # Turn off serial debugging for the whole driver
 
