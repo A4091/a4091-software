@@ -147,7 +147,7 @@ int siop_no_dma = 1;  // CDH debug
 int siop_no_dma = 0;
 #endif
 
-int siop_reset_delay = 250; /* delay after reset, in milleseconds */
+int siop_reset_delay = 250; /* delay after reset, in milliseconds */
 
 int siop_cmd_wait = SCSI_CMD_WAIT;
 int siop_data_wait = SCSI_DATA_WAIT;
@@ -425,12 +425,10 @@ siop_sched(struct siop_softc *sc)
 // XXX: Might need to kick the queue processing here if it's not running
 
     if (acb == NULL) {
-#ifdef DEBUGXXX
+#ifdef DEBUG
         printf("%s: siop_sched didn't find ready command\n",
             device_xname(sc->sc_dev));
 #endif
-        printf("CDH: %s: siop_sched didn't find ready command\n",
-            device_xname(sc->sc_dev));
         return;
     }
 
@@ -642,11 +640,11 @@ siopinitialize(struct siop_softc *sc)
         inhibit_sync = (scsi_nosync >> shift_nosync) & 0xff;
         shift_nosync += 8;
 #endif
-// #ifdef DEBUG
+#ifdef DEBUG
         if (inhibit_sync)
             printf("%s: Inhibiting synchronous transfer %02x\n",
                 device_xname(sc->sc_dev), inhibit_sync);
-// #endif
+#endif
         for (i = 0; i < 8; ++i)
             if (inhibit_sync & (1 << i))
                 siop_inhibit_sync[i] = 1;
@@ -1177,10 +1175,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     rp->siop_ctest8 &= ~SIOP_CTEST8_CLF;
 #ifdef DEBUG
     ++siopints;
+#endif
     if (acb == NULL) {
-        printf("CDH: siop_checkintr() acb is NULL\n");
+        printf("ERROR: siop_checkintr() acb is NULL\n");
         goto fail_return;
     }
+#ifdef DEBUG
 #if 1
     if ((siop_debug & 0x100) && (acb != NULL))  {
 #ifdef PORT_AMIGA
@@ -1345,17 +1345,17 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 ++adjust;
             if (sstat1 & SIOP_SSTAT1_OLF)
                 ++adjust;
-            acb->iob_curlen = 
+            acb->iob_curlen =
                 *((long *)__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
             acb->iob_curlen += adjust;
-            acb->iob_curbuf = 
+            acb->iob_curbuf =
                 *((long *)__UNVOLATILE(&rp->siop_dnad)) - adjust;
 #ifdef DEBUG
             if (siop_debug & 0x100) {
                 int i;
                 printf ("Phase mismatch: curbuf %lx curlen %lx dfifo %x dbc %x sstat1 %x adjust %x sbcl %x starts %d acb %p\n",
                     acb->iob_curbuf, acb->iob_curlen, dfifo,
-                    dbc, sstat1, adjust, rp->siop_sbcl, 
+                    dbc, sstat1, adjust, rp->siop_sbcl,
                     siopstarts, acb);
                 if (acb->ds.chain[1].datalen) {
                     for (i = 0; acb->ds.chain[i].datalen; ++i)
