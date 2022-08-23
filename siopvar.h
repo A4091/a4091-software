@@ -175,10 +175,11 @@ struct	siop_softc {
 		u_char sxfer;
 #ifndef ARCH_720
 		u_char sbcl;
+	} sc_sync[8];
 #else
 		u_char scntl3;
-#endif
 	} sc_sync[16];
+#endif
 };
 
 /* sc_flags */

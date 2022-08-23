@@ -230,7 +230,7 @@ CMD_WRITE_continue:
             break;
 
         case NSCMD_TD_READ64:
-            printf("NSCMD");
+            printf("NSCMD_");
         case TD_READ64:
             printf("TD64_READ %lx:%lx %lx\n", iotd->iotd_Req.io_Actual,
                    iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
@@ -243,7 +243,7 @@ CMD_WRITE_continue:
 
         case NSCMD_TD_FORMAT64:
         case NSCMD_TD_WRITE64:
-            printf("NSCMD");
+            printf("NSCMD_");
         case TD_FORMAT64:
         case TD_WRITE64:
             printf("TD64_WRITE %lx:%lx %lx\n", iotd->iotd_Req.io_Actual,
@@ -499,34 +499,37 @@ fail_msgport:
         if (asave->as_exiting)
             break;
 
+        /* Handle incoming interrupts */
         do {
             irq_poll(mask & int_mask, sc);
         } while ((SetSignal(0, 0) & int_mask) && ((mask |= Wait(wait_mask))));
 
+        /* Process timer events */
         if (mask & timer_mask) {
             WaitIO(&asave->as_timerio->tr_node);
-//          printf("timer\n");
             scsipi_completion_timeout_check(chan);
             restart_timer();
         }
 
         if (*active > 20) {
             wait_mask = int_mask | timer_mask;
-            continue;
+            goto run_completion_queue;
         } else {
             wait_mask = int_mask | timer_mask | cmd_mask;
         }
 
+        /* Handle new requests */
         while ((ior = (struct IORequest *)GetMsg(msgport)) != NULL) {
             if (cmd_do_iorequest(ior))
                 return;  // Exit handler
             if (*active > 20) {
-                wait_mask = int_mask;
+                wait_mask = int_mask | timer_mask;
                 break;
             }
         }
 
-        /* Run the retry completion queue, if anything is present */
+        /* Process the failure completion queue, if anything is present */
+run_completion_queue:
         scsipi_completion_poll(chan);
     }
 }

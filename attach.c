@@ -232,7 +232,7 @@ a4091_add_local_irq_handler(uint32_t dev_base)
 
     asave->as_isr->is_Node.ln_Type = NT_INTERRUPT;
     asave->as_isr->is_Node.ln_Pri  = A4091_INTPRI;
-    asave->as_isr->is_Node.ln_Name = "A4091.device";
+    asave->as_isr->is_Node.ln_Name = "a4091.device";
     asave->as_isr->is_Data         = asave;
     asave->as_isr->is_Code         = (void (*)()) irq_handler;
 
@@ -468,6 +468,7 @@ init_chan(device_t self, UBYTE *boardnum)
     adapt->adapt_openings = 7;
     adapt->adapt_max_periph = 1;
     adapt->adapt_request = siop_scsipi_request;
+    adapt->adapt_asave = asave;
 
     /*
      * Fill in the scsipi_channel.

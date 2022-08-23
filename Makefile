@@ -1,16 +1,20 @@
-DATE    := $(shell date '+%Y-%m-%d')
-TIME    := $(shell date '+%H:%M:%S')
+NOW     := $(shell date '+%Y-%m-%d %H:%M:%S')
+DATE    := $(firstword $(NOW))
+TIME    := $(lastword $(NOW))
 
 ROM	:= a4091.rom
 PROG	:= a4091.device
 PROGU	:= a4091
 PROGM	:= mounter
+PROGD	:= a4091d
 OBJDIR  := objs
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c rdb_partitions.c
 SRCSU   := a4091.c
+SRCSD   := a4091d.c
 SRCSM   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
+OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 OBJSM   := $(SRCSM:%.c=$(OBJDIR)/%.o)
 CC	:= m68k-amigaos-gcc
@@ -25,6 +29,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG             # Show basic debug
 #CFLAGS  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
 #CFLAGS  += -DDEBUG_CMD         # Show handler commands received
+#CFLAGS  += -DDEBUG_CALLOUT     # Show callout (timeout abort) services
 # Per file debugging
 #CFLAGS  += -DDEBUG_ATTACH      # Debug attach.c
 #CFLAGS  += -DDEBUG_DEVICE      # Debug device.c
@@ -84,7 +89,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROGU) $(PROGM) $(ROM)
+all: $(PROG) $(PROGU) $(PROGM) $(PROGD) $(ROM)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -93,11 +98,13 @@ $(patsubst %,$(OBJDIR)/%,$(filter-out $(OBJDIR)/%,$(basename $(1)).o)) $(filter 
 endef
 $(foreach SRCFILE,$(SRCS),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 $(foreach SRCFILE,$(SRCSU),$(eval $(call DEPEND_SRC,$(SRCFILE))))
+$(foreach SRCFILE,$(SRCSD),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 $(foreach SRCFILE,$(SRCSM),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 
 $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS))
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
+$(OBJDIR)/a4091d.o:: CFLAGS2 += -D_KERNEL -DPORT_AMIGA
 $(OBJDIR)/attach.o: device.h
 
 # XXX: Need to generate real dependency files
@@ -107,7 +114,7 @@ $(OBJS): Makefile port.h | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -c $(filter %.c,$^) -o $@
 
-$(OBJSU) $(OBJSM): Makefile | $(OBJDIR)
+$(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS2) -c $(filter %.c,$^) -o $@
 
@@ -123,6 +130,10 @@ $(PROGU): $(OBJSU)
 $(PROGM): $(OBJSM)
 	@echo Building $@
 	$(QUIET)$(CC) $(OBJSM) $(LDFLAGS3) -o $@
+
+$(PROGD): $(OBJSD)
+	@echo Building $@
+	$(QUIET)$(CC) $(filter %.o,$^) $(LDFLAGS3) -o $@
 
 $(SIOP_SCRIPT): siop_script.ss $(SC_ASM)
 	@echo Building $@

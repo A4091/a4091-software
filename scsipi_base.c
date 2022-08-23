@@ -55,6 +55,7 @@
 #include "scsi_message.h"
 
 #undef SCSIPI_DEBUG
+#undef QUEUE_DEBUG
 
 
 #define ERESTART 100  // Needs restart
@@ -272,6 +273,8 @@ scsipi_put_xs(struct scsipi_xfer *xs)
     /* pool put */
     struct scsipi_periph  *periph = xs->xs_periph;
     struct scsipi_channel *chan = periph->periph_channel;
+
+    TAILQ_REMOVE(&periph->periph_xferq, xs, device_q);
 
 #ifndef PORT_AMIGA
     periph->periph_active--;
@@ -493,6 +496,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 #endif
 	}
 
+#ifdef PORT_AMIGA
         /*
          * If the XS did not complete due to timeout, then execute
          * the timeout callout, if one has been set up.
@@ -504,6 +508,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
                 callout_stop(&xs->xs_callout);  // Combine with call?
             }
         }
+#endif
 
 	/*
 	 * Command is complete.  scsipi_done() has awakened us to perform
@@ -1103,14 +1108,11 @@ scsipi_done(struct scsipi_xfer *xs)
 	 * There is an error on this xfer.  Put it on the channel's
 	 * completion queue, and wake up the completion thread.
 	 */
-// XXX: What if it's already on the completion queue?
+#ifdef QUEUE_DEBUG
         printf("(adding %p)", xs);
-	TAILQ_INSERT_TAIL(&chan->chan_complete, xs, channel_q);
-#ifdef PORT_AMIGA
-#if 0
-        scsipi_completion_poll(chan);
 #endif
-#else
+	TAILQ_INSERT_TAIL(&chan->chan_complete, xs, channel_q);
+#ifndef PORT_AMIGA
 	cv_broadcast(chan_cv_complete(chan));
 #endif
 
@@ -1154,7 +1156,9 @@ scsipi_completion_poll(struct scsipi_channel *chan)
         if (chan->chan_tflags & SCSIPI_CHANT_SHUTDOWN)
             break;
         if (xs) {
+#ifdef QUEUE_DEBUG
             printf("(removing %p)", xs);
+#endif
             TAILQ_REMOVE(&chan->chan_complete, xs, channel_q);
             mutex_exit(chan_mtx(chan));
 
@@ -2079,6 +2083,25 @@ scsipi_set_xfer_mode(struct scsipi_channel *chan, int target, int immed)
 }
 
 #ifdef PORT_AMIGA
+static void
+scsipi_check_timeout_callout(struct scsipi_xfer *xs)
+{
+    callout_t *co = &xs->xs_callout;
+    if (callout_pending(co)) {
+        printf("XS %p callout pending: %d\n", xs, co->ticks);
+        if (co->ticks == 1) {
+            callout_call(co);
+            co->ticks = 0;
+        } else if (co->ticks > 0) {
+            if (co->ticks <= TICKS_PER_SECOND) {
+                co->ticks = 1;
+            } else {
+                co->ticks -= TICKS_PER_SECOND;
+            }
+        }
+    }
+}
+
 void
 scsipi_completion_timeout_check(struct scsipi_channel *chan)
 {
@@ -2098,21 +2121,14 @@ scsipi_completion_timeout_check(struct scsipi_channel *chan)
     /* Check each xs in the channel run queue for pending callouts */
     for (xs = TAILQ_FIRST(&chan->chan_queue); xs != NULL;
          xs = TAILQ_NEXT(xs, channel_q)) {
-            if (callout_pending(&xs->xs_callout)) {
-                printf("CDH: XS callout pending\n");
-            }
+        scsipi_check_timeout_callout(xs);
     }
     /* Check each xs in the channel completion queue for pending callouts */
     for (xs = TAILQ_FIRST(&chan->chan_complete); xs != NULL;
          xs = TAILQ_NEXT(xs, channel_q)) {
-            if (callout_pending(&xs->xs_callout)) {
-                printf("CDH: XS comp callout pending\n");
-            }
+        printf("cq XS %p\n", xs);
+        scsipi_check_timeout_callout(xs);
     }
-    /*
-     * XXX: Make the callout struct also have a prev pointer so that code
-     *      can remove entries with just the callout pointer?
-     */
 }
 #endif
 

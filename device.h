@@ -75,7 +75,7 @@ struct cfdata {
 struct device {
                                     /* external name (name + unit) */
     char            dv_xname[DEVICE_XNAME_SIZE];
-#if 0
+#ifndef PORT_AMIGA
     devhandle_t     dv_handle;      /* this device's handle;
                                        new device_t's get INVALID */
     devclass_t      dv_class;       /* this device's classification */
@@ -91,15 +91,11 @@ struct device {
     int             dv_flags;       /* misc. flags; see below */
     void            *dv_private;    /* this device's private storage */
     int             *dv_locators;   /* our actual locators (optional) */
-#endif
-#if 0
     prop_dictionary_t dv_properties;/* properties dictionary */
 
     int             dv_pending;     /* config_pending count */
     TAILQ_ENTRY(device) dv_pending_list;
-#endif
 
-#if 0
     struct lwp      *dv_detaching;  /* detach lock (config_misc_lock/cv) */
 
     size_t          dv_activity_count;

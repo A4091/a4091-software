@@ -204,7 +204,9 @@ struct scsipi_adapter {
 
 	void	(*adapt_request)(struct scsipi_channel *,
 		    scsipi_adapter_req_t, void *);
-#ifndef PORT_AMIGA
+#ifdef PORT_AMIGA
+        void     *adapt_asave;  /* pointer to Amiga driver's global state */
+#else
 	void	(*adapt_minphys)(struct buf *);
 	int	(*adapt_ioctl)(struct scsipi_channel *, u_long,
 		    void *, int, struct proc *);

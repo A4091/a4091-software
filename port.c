@@ -14,6 +14,12 @@
 #include "device.h"
 #include "printf.h"
 
+#ifdef DEBUG_CALLOUT
+#define PRINTF_CALLOUT(args...) printf(args)
+#else
+#define PRINTF_CALLOUT(args...)
+#endif
+
 /* Not sure this even works for a driver */
 ulong __stack_size = 32768;
 
@@ -167,12 +173,7 @@ callout_init(callout_t *c, u_int flags)
 int
 callout_pending(callout_t *c)
 {
-#if 0
-    if (c->func != NULL)
-        printf("callout pending\n");
-    else
-        printf("callout not pending\n");
-#endif
+    PRINTF_CALLOUT("callout %spending\n", (c->func == NULL) ? "not " : "");
     return (c->func != NULL);
 }
 
@@ -180,9 +181,7 @@ int
 callout_stop(callout_t *c)
 {
     int pending = (c->func != NULL);
-#if 0
-    printf("callout_stop %p\n", c->func);
-#endif
+    PRINTF_CALLOUT("callout stop %p\n", c->func);
     c->func = NULL;
     return (pending);
 }
@@ -193,21 +192,20 @@ callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg)
     c->ticks = ticks;
     c->func = func;
     c->arg = arg;
-#if 0
-    printf("callout_reset %p(%x) at %d\n", c->func, (uint32_t) c->arg, ticks);
-#endif
+
+    PRINTF_CALLOUT("callout_reset %p(%x) at %d\n",
+                   c->func, (uint32_t) c->arg, ticks);
 }
 
 void
 callout_call(callout_t *c)
 {
     if (c->func == NULL) {
-        printf("callout to NULL function\n");
+        PRINTF_CALLOUT("callout to NULL function\n");
         return;
     }
-#if 0
-    printf("callout_call %p(%x)\n", c->func, (uint32_t) c->arg);
-#endif
+
+    PRINTF_CALLOUT("callout_call %p(%x)\n", c->func, (uint32_t) c->arg);
     c->func(c->arg);
 }
 
@@ -239,4 +237,3 @@ callout_invoking(callout_t *c);
 void
 callout_ack(callout_t *c);
 #endif
-
