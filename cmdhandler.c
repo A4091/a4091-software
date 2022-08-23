@@ -446,8 +446,8 @@ cmd_handler(void)
 #else
     task = (struct Task *) FindTask((char *)NULL);
 
-    while (!task->tc_UserData) putchar('.');
-    msgport = (struct MsgPort *)(task->tc_UserData);
+    msgport = CreatePort(NULL, 0);
+    task->tc_UserData = (APTR) msgport;
 
     while ((msg = (start_msg_t *) GetMsg(msgport)) == NULL)
         WaitPort(msgport);
@@ -576,12 +576,13 @@ start_cmd_handler(uint *boardnum)
     if (proc == NULL)
         return (1);
 #else
-    msgport = CreatePort(NULL, 0);
     task = CreateTask("a4091.device", 0, cmd_handler, 8192);
     if (task == NULL) {
         return (1);
     }
-    task->tc_UserData=(APTR)msgport;
+    while ((msgport = (struct MsgPort *)(task->tc_UserData)) == NULL) {
+        printf(".");
+    }
     printf("Task created\n");
 #endif
 
