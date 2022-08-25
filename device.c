@@ -113,6 +113,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
+    struct Library *DOSBase;
     struct Library *ExpansionBase;
     struct ConfigDev *cd = NULL;
 
@@ -154,7 +155,12 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         return (NULL);
     }
 
-    parse_rdb(ExpansionBase, cd, dev);
+    DOSBase = OpenLibrary("dos.library", 37L);
+    if (DOSBase == NULL) {
+        parse_rdb(ExpansionBase, cd, dev);
+    } else {
+        CloseLibrary(DOSBase);
+    }
 
     dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);
