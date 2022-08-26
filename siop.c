@@ -736,6 +736,7 @@ siopreset(struct siop_softc *sc)
     rp->siop_dwt = 0x00;
     rp->siop_ctest0 |= SIOP_CTEST0_BTD | SIOP_CTEST0_EAN;
     rp->siop_ctest7 |= sc->sc_ctest7;
+    // rp->siop_ctest0 |= SIOP_CTEST0_ERF;  // Set only for <= 5M transfer rate
 
     /* will need to re-negotiate sync xfers */
     memset(&sc->sc_sync, 0, sizeof (sc->sc_sync));
@@ -1100,7 +1101,8 @@ report_scsi_speed(siop_regmap_p rp, uint sbcl)
 #endif
 
 
-// CDH DEBUG
+#if 0
+/* Debug code for calculating SCSI synchronous speeds */
 static struct scsipi_syncparam {
         int     ss_factor;
         int     ss_period;      /* ns * 100 */
@@ -1113,7 +1115,6 @@ static struct scsipi_syncparam {
 };
 static const int scsipi_nsyncparams =
     sizeof(scsipi_syncparams) / sizeof(scsipi_syncparams[0]);
-// CDH DEBUG
 int
 scsipi_sync_factor_to_period(int factor)
 {
@@ -1126,7 +1127,7 @@ scsipi_sync_factor_to_period(int factor)
 
         return (factor * 4) * 100;
 }
-// CDH DEBUG
+
 int
 scsipi_sync_factor_to_freq(int factor)
 {
@@ -1139,6 +1140,7 @@ scsipi_sync_factor_to_freq(int factor)
 
         return 10000000 / ((factor * 4) * 10);
 }
+#endif
 
 /*
  * Process a DMA or SCSI interrupt from the 53C710 SIOP

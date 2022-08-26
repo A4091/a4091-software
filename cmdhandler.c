@@ -49,14 +49,12 @@ extern struct ExecBase *SysBase;
 
 a4091_save_t *asave = NULL;
 
-
-/* Structure of the startup message closely follows IOStdReq */
+/* Command handler startup structure */
 typedef struct {
-    struct Message  msg;        // io_Message
-    struct MsgPort *msg_port;   // Handler's message port (io_Unit)
-    UWORD           cmd;        // CMD_STARTUP            (io_Command)
-    UBYTE           boardnum;   // Desired board number   (io_Flags)
-    BYTE            io_Error;   // Success=0 or failure code
+    struct MsgPort        *msg_port;  // Handler's message port (io_Unit)
+    UBYTE                  boardnum;  // Desired board number   (io_Flags)
+    BYTE                   io_Error;  // Success=0 or failure code
+    struct SignalSemaphore started;   // Command handler has started
 } start_msg_t;
 
 
@@ -148,6 +146,20 @@ open_timer(void)
     return (0);
 }
 
+void
+cmd_complete(void *ior, int8_t rc)
+{
+    struct IOStdReq *ioreq = ior;
+
+    if (ior == NULL) {
+        printf("NULL ior in cmd_complete\n");
+        return;
+    }
+
+    ioreq->io_Error = rc;
+    ReplyMsg(&ioreq->io_Message);
+}
+
 static const UWORD nsd_supported_cmds[] = {
     CMD_READ, CMD_WRITE, TD_SEEK, TD_FORMAT,
     CMD_STOP, CMD_START,
@@ -160,9 +172,6 @@ static const UWORD nsd_supported_cmds[] = {
     TAG_END
 };
 
-#ifdef DOS_PROCESS
-struct DosLibrary *DOSBase;
-#endif
 static int
 cmd_do_iorequest(struct IORequest * ior)
 {
@@ -336,7 +345,7 @@ CMD_SEEK_continue:
             break;
 
         case CMD_ATTACH:  // Attach (open) a new SCSI device
-            PRINTF_CMD("CMD_ATTACH\n");
+            PRINTF_CMD("CMD_ATTACH %lu\n", iotd->iotd_Req.io_Offset);
             rc = attach(&asave->as_device_self, iotd->iotd_Req.io_Offset,
                         (struct scsipi_periph **) &ior->io_Unit);
             if (rc != 0) {
@@ -358,9 +367,6 @@ CMD_SEEK_continue:
             PRINTF_CMD("CMD_TERM\n");
             deinit_chan(&asave->as_device_self);
             close_timer();
-#ifdef DOS_PROCESS
-            CloseLibrary((struct Library *) DOSBase);
-#endif
             asave->as_isr = NULL;
             FreeMem(asave, sizeof (*asave));
             asave = NULL;
@@ -408,11 +414,7 @@ cmd_handler(void)
 {
     struct MsgPort        *msgport;
     struct IORequest      *ior;
-#ifdef DOS_PROCESS
-    struct Process        *proc;
-#else
     struct Task *task;
-#endif
     struct siop_softc     *sc;
     struct scsipi_channel *chan;
     int                   *active;
@@ -432,26 +434,13 @@ cmd_handler(void)
     (void) devbase;
 #endif
 
-#ifdef DOS_PROCESS
-    proc = (struct Process *) FindTask((char *)NULL);
-
-    /* get the startup message */
-    while ((msg = (start_msg_t *) GetMsg(&proc->pr_MsgPort)) == NULL)
-        WaitPort(&proc->pr_MsgPort);
-
-    SysBase = *(struct ExecBase **) 4UL;
-    DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
-
-    msgport = CreatePort(NULL, 0);
-#else
     task = (struct Task *) FindTask((char *)NULL);
 
     msgport = CreatePort(NULL, 0);
-    task->tc_UserData = (APTR) msgport;
+    while ((msg = (start_msg_t *)(task->tc_UserData)) == NULL) {
+        printf(".");
+    }
 
-    while ((msg = (start_msg_t *) GetMsg(msgport)) == NULL)
-        WaitPort(msgport);
-#endif
     msg->msg_port = msgport;
     if (msgport == NULL) {
         msg->io_Error = ERROR_NO_MEMORY;
@@ -477,12 +466,12 @@ fail_allocmem:
         /* Terminate handler and give up */
         DeletePort(msgport);
 fail_msgport:
-        ReplyMsg((struct Message *)msg);
+        ReleaseSemaphore(&msg->started);
         Forbid();
         return;
     }
 
-    ReplyMsg((struct Message *)msg);
+    ReleaseSemaphore(&msg->started);
     restart_timer();
 
     sc         = &asave->as_device_private;
@@ -534,74 +523,30 @@ run_completion_queue:
     }
 }
 
-void
-cmd_complete(void *ior, int8_t rc)
-{
-    struct IOStdReq *ioreq = ior;
-
-    if (ior == NULL) {
-        printf("NULL ior in cmd_complete\n");
-        return;
-    }
-
-    ioreq->io_Error = rc;
-    ReplyMsg(&ioreq->io_Message);
-}
-
 int
 start_cmd_handler(uint *boardnum)
 {
-#ifdef DOS_PROCESS
-    struct Process *proc;
-    struct DosLibrary *DOSBase;
-#else
-    struct MsgPort *msgport;
     struct Task *task;
-#endif
     start_msg_t msg;
 //    register long devbase asm("a6");
 
-#ifdef DOS_PROCESS
-    DOSBase = (struct DosLibrary *) OpenLibrary("dos.library", 37L);
-    if (DOSBase == NULL)
-        return (1);
+    /* Prepare a startup structure with the board to initialize */
+    memset(&msg, 0, sizeof (msg));
+    msg.msg_port  = NULL;
+    msg.boardnum  = *boardnum;
+    msg.io_Error  = ERROR_OPEN_FAIL;  // Default, which should be overwritten
+    InitSemaphore(&msg.started);
+    ObtainSemaphore(&msg.started);
 
-    proc = CreateNewProcTags(NP_Entry, (ULONG) cmd_handler,
-                             NP_StackSize, 8192,
-                             NP_Priority, 0,
-                             NP_Name, (ULONG) "a4091.device",
-//                           NP_CloseOutput, FALSE,
-                             TAG_DONE);
-    CloseLibrary((struct Library *) DOSBase);
-    if (proc == NULL)
-        return (1);
-#else
     task = CreateTask("a4091.device", 0, cmd_handler, 8192);
     if (task == NULL) {
         return (1);
     }
-    while ((msgport = (struct MsgPort *)(task->tc_UserData)) == NULL) {
-        printf(".");
-    }
-    printf("Task created\n");
-#endif
+    msg.started.ss_Owner = task;    // Change ownership to created task
+    task->tc_UserData = (APTR) &msg;
 
-    /* Send the startup message with the board to initialize */
-    memset(&msg, 0, sizeof (msg));
-    msg.msg.mn_Length = sizeof (start_msg_t) - sizeof (struct Message);
-    msg.msg.mn_ReplyPort = CreatePort(NULL, 0);
-    msg.msg.mn_Node.ln_Type = NT_MESSAGE;
-    msg.msg_port  = NULL;
-    msg.cmd       = CMD_STARTUP;
-    msg.boardnum  = *boardnum;
-    msg.io_Error  = ERROR_OPEN_FAIL;  // Default, which should be overwritten
-#ifdef DOS_PROCESS
-    PutMsg(&proc->pr_MsgPort, (struct Message *)&msg);
-#else
-    PutMsg((struct MsgPort *)(task->tc_UserData), (struct Message *)&msg);
-#endif
-    WaitPort(msg.msg.mn_ReplyPort);
-    DeletePort(msg.msg.mn_ReplyPort);
+    ObtainSemaphore(&msg.started);  // Wait for task to release Semaphore
+
     myPort = msg.msg_port;
     *boardnum = msg.boardnum;
 

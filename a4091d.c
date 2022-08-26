@@ -112,9 +112,8 @@ iocmd_name(uint cmd)
         case ETD_RAWREAD:       return ("ETD_RAWREAD");         // 0x8010
         case ETD_RAWWRITE:      return ("ETD_RAWWRITE");        // 0x8011
         case CMD_TERM:          return ("CMD_TERM");            // 0x2ef0
-        case CMD_STARTUP:       return ("CMD_STARTUP");         // 0x2ef1
-        case CMD_ATTACH:        return ("CMD_ATTACH");          // 0x2ff2
-        case CMD_DETACH:        return ("CMD_DETACH");          // 0x2ef3
+        case CMD_ATTACH:        return ("CMD_ATTACH");          // 0x2ff1
+        case CMD_DETACH:        return ("CMD_DETACH");          // 0x2ef2
         case NSCMD_DEVICEQUERY: return ("NSCMD_DEVICEQUERY");   // 0x4000
         case NSCMD_TD_READ64:   return ("NSCMD_TD_READ64");     // 0xc000
         case NSCMD_TD_WRITE64:  return ("NSCMD_TD_WRITE64");    // 0xc001
@@ -1478,7 +1477,7 @@ main(int argc, char *argv[])
     printf("  chan_flags=%d\n", chan->chan_flags);
     printf("  chan_openings=%d\n", chan->chan_openings);
     printf("  chan_nluns=%d\n", chan->chan_nluns);
-    printf("  chan_id=%d\n", chan->chan_id);
+    printf("  chan_id=%d (SCSI host ID)\n", chan->chan_id);
     printf("  chan_tflags=%d\n", chan->chan_tflags);
     Forbid();
     xq = &chan->chan_queue;

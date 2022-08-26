@@ -70,16 +70,9 @@ delay(int usecs)
             ;
         return;
     }
-#if 0
-    printf("delay(%u)\n", usecs);
-#endif
 
-#ifdef DOS_PROCESS
-    Delay(ticks);
-#else
     //TimeDelay(UNIT_MICROHZ, 0, useconds);
     TimeDelay(UNIT_VBLANK, 0, ticks);
-#endif
 }
 
 static int bsd_ilevel = 0;
@@ -87,10 +80,6 @@ static int bsd_ilevel = 0;
 int
 bsd_splbio(void)
 {
-#undef DEBUG_IRQ
-#ifdef DEBUG_IRQ
-    printf("splbio() = %d\n", bsd_ilevel);
-#endif
     Disable();
     return (bsd_ilevel++);
 }
@@ -102,9 +91,6 @@ bsd_splx(int ilevel)
     bsd_ilevel = ilevel;
     if (bsd_ilevel == 0)
         Enable();
-#ifdef DEBUG_IRQ
-    printf("splx(%d)\n", ilevel);
-#endif
 }
 
 const char *

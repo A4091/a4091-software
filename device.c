@@ -149,9 +149,12 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     printf("A4091 driver %s %s\n", device_name, device_id_string);
     dev->lib_OpenCnt++;
 
-    int scsi_unit = 0;
-    if (start_cmd_handler(&scsi_unit)) {
+    int board_num = 0;
+    if (start_cmd_handler(&board_num)) {
         printf("Start handler failed\n");
+        dev->lib_OpenCnt--;
+        ReleaseSemaphore(&entry_sem);
+        CloseLibrary(ExpansionBase);
         return (NULL);
     }
 

@@ -27,9 +27,8 @@ void cmd_complete(void *ior, int8_t rc);
 
 /* Internal commands */
 #define CMD_TERM     0x2ef0  // Terminate command handler (end process)
-#define CMD_STARTUP  0x2ef1  // Command handler startup message
-#define CMD_ATTACH   0x2ff2  // Attach (open) SCSI peripheral
-#define CMD_DETACH   0x2ef3  // Detach (close) SCSI peripheral
+#define CMD_ATTACH   0x2ff1  // Attach (open) SCSI peripheral
+#define CMD_DETACH   0x2ef2  // Detach (close) SCSI peripheral
 
 #endif /* _CMD_HANDLER_H */
 

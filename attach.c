@@ -363,17 +363,9 @@ a4091_validate(uint32_t dev_base)
 
 #if 0
     rp->siop_istat |= SIOP_ISTAT_RST;       /* reset chip */
-#ifdef DOS_PROCESS
-    Delay(1);
-#else
     delay(20000);
-#endif
     rp->siop_istat &= ~SIOP_ISTAT_RST;
-#ifdef DOS_PROCESS
-    Delay(1);
-#else
     delay(20000);
-#endif
 #endif
 
     /*
@@ -487,14 +479,14 @@ init_chan(device_t self, UBYTE *boardnum)
 
     /*
      * A4091 Rear-access DIP switches
-     *   SW 8 Off  SCSI LUNs Enabled
-     *   SW 7 Off  Internal Termination On
-     *   SW 6 Off  Synchronous SCSI Mode
-     *   SW 5 Off  Short Spinup
-     *   SW 4 Off  SCSI-2 Fast Bus Mode
-     *   SW 3 Off  ADR2=1
-     *   SW 2 Off  ADR1=1
-     *   SW 1 Off  ADR0=1  Controller Host ID=7
+     *   SW 8 Off  SCSI LUNs Enabled                chan->chan_nluns
+     *   SW 7 Off  Internal Termination On          Handled by hardware
+     *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync
+     *   SW 5 Off  Short Spinup                     NOT SUPPORTED YET
+     *   SW 4 Off  SCSI-2 Fast Bus Mode             NOT SUPPORTED YET
+     *   SW 3 Off  ADR2=1                           chan->chan_id
+     *   SW 2 Off  ADR1=1                           chan->chan_id
+     *   SW 1 Off  ADR0=1  Controller Host ID=7     chan->chan_id
      */
 
     scsipi_channel_init(chan);

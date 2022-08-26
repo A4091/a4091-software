@@ -477,11 +477,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
                  * interrupt message handling.
                  */
                 irq_poll(1, sc);
-#ifdef DOS_PROCESS
-                Delay(1);
-#else
                 delay(20000);
-#endif
 
                 if (timeout-- == 0) {
                     printf("SCSI completion poll timeout\n");
@@ -1349,11 +1345,7 @@ scsipi_complete(struct scsipi_xfer *xs)
                                 struct siop_softc *sc =
                                   device_private(chan->chan_adapter->adapt_dev);
                                 while (count-- > 0) {
-#ifdef DOS_PROCESS
-                                    Delay(1);
-#else
                                     delay(20000);
-#endif
 
                                     /*
                                      * Continue running interrupt processing
