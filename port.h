@@ -98,6 +98,8 @@ void *device_private(device_t dev);
      !defined(DEBUG_SCSICONF)    && \
      !defined(DEBUG_SD)          && \
      !defined(DEBUG_SIOP)        && \
+     !defined(DEBUG_RDB)         && \
+     !defined(DEBUG_BOOTMENU)    && \
      !defined(DEBUG_MOUNTER)) || defined(NO_SERIAL_OUTPUT)
 #ifdef USE_SERIAL_OUTPUT
 #undef USE_SERIAL_OUTPUT
