@@ -27,6 +27,11 @@
 #include <clib/graphics_protos.h>
 #include <clib/gadtools_protos.h>
 #include "bootmenu.h"
+#include "device.h"
+#include "scsipiconf.h"
+#include "siopreg.h"
+#include "siopvar.h"
+#include "attach.h"
 
 struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
@@ -40,15 +45,15 @@ struct Gadget *DisplayTypeGad;
 struct Gadget *LastAdded;
 struct NewGadget *NewGadget;
 
-#define DISKS_BACK_ID    1
-#define JUMPERS_BACK_ID  2
-#define ABOUT_BACK_ID    3
-#define DEBUG_BACK_ID    4
-#define MAIN_ABOUT_ID    5
-#define MAIN_DISKS_ID    6
-#define MAIN_JUMPERS_ID  7
-#define MAIN_DEBUG_ID    8
-#define MAIN_BOOT_ID     9
+#define DISKS_BACK_ID      1
+#define DIPSWITCH_BACK_ID  2
+#define ABOUT_BACK_ID      3
+#define DEBUG_BACK_ID      4
+#define MAIN_ABOUT_ID      5
+#define MAIN_DISKS_ID      6
+#define MAIN_DIPSWITCH_ID  7
+#define MAIN_DEBUG_ID      8
+#define MAIN_BOOT_ID       9
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -158,7 +163,7 @@ static void page_footer(void)
     GT_RefreshWindow(window,NULL);
 }
 
-static void PutJumper(UWORD x, UWORD y, UWORD on)
+static void draw_dipswitch(UWORD x, UWORD y, UWORD on)
 {
     struct RastPort *rp = &screen->RastPort;
 
@@ -171,7 +176,7 @@ static void PutJumper(UWORD x, UWORD y, UWORD on)
     RectFill(rp, x+12, y+2, x+30,y+6);
 }
 
-static volatile char *JumperText(int val, int num)
+static volatile char *dipswitch_text(int val, int num)
 {
     static volatile char string[24];
     string[0]=0;
@@ -205,14 +210,23 @@ static volatile char *JumperText(int val, int num)
     return  string;
 }
 
-static void PutJumpers(UWORD x, UWORD y)
+extern a4091_save_t *asave;
+static void draw_dipswitches(UWORD x, UWORD y)
 {
     struct RastPort *rp = &screen->RastPort;
     int i;
+    UBYTE dip_switches;
     volatile char *ret, *num="8", *hostid="Host ID: 7";
-
     num[0]='8';
-    UWORD jumpers = 0x5;
+
+    if (asave) {
+        dip_switches = *(uint8_t *)((asave->as_addr) + 0x008c0003);
+	printf("addr=%x\n",asave->as_addr);
+	printf("dip_switches=%x\n",dip_switches);
+	dip_switches=~dip_switches;
+    } else {
+	dip_switches = 0x00;
+    }
 
     SetAPen(rp, 1);
     SetBPen(rp, 0);
@@ -224,7 +238,7 @@ static void PutJumpers(UWORD x, UWORD y)
     RectFill(rp, x, y+2, x+70, y+90);
 
     for (i=0; i<8; i++) {
-        PutJumper(x+8, y+7+(i*10), (jumpers&(1<<(7-i))));
+        draw_dipswitch(x+8, y+7+(i*10), (dip_switches&(1<<(7-i))));
     }
 
     for (i=0; i<8; i++) {
@@ -235,11 +249,11 @@ static void PutJumpers(UWORD x, UWORD y)
 	num[0]--;
 	Move(rp, x+82,y+(i*10)+14);
         SetBPen(rp, 0);
-	ret = JumperText((jumpers&(1<<(7-i))), 8-i);
+	ret = dipswitch_text((dip_switches&(1<<(7-i))), 8-i);
         Text(rp, (char *)ret, strlen((char *)ret));
     }
 
-    hostid[9]='0'+((~jumpers)&0x7);
+    hostid[9]='0'+((~dip_switches)&0x7);
     SetAPen(rp, 1);
     SetBPen(rp, 0);
     Move(rp, x+280, y+64);
@@ -247,10 +261,10 @@ static void PutJumpers(UWORD x, UWORD y)
     BNDRYOFF(rp);
 }
 
-static void jumpers_page(void)
+static void dipswitch_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "A4091 Diagnostics - Jumpers");
+    page_header(&ng, "A4091 Diagnostics - DIP switches");
 
     SetRGB4(&screen->ViewPort,3,11,8,8);
 
@@ -258,7 +272,7 @@ static void jumpers_page(void)
     ng.ng_TopEdge    = 145;
     ng.ng_Width      = 120;
     ng.ng_GadgetText = "Back";
-    ng.ng_GadgetID   = JUMPERS_BACK_ID;
+    ng.ng_GadgetID   = DIPSWITCH_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
     DrawBevelBox(&screen->RastPort,100,52,440,115,
@@ -266,7 +280,7 @@ static void jumpers_page(void)
                                     GTBB_Recessed,  TRUE,
                                     GTBB_FrameType, BBFT_RIDGE,
                                     TAG_DONE);
-    PutJumpers(120,65);
+    draw_dipswitches(120,65);
 
     page_footer();
 }
@@ -435,8 +449,8 @@ void main_page(void)
     LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 170;
-    ng.ng_GadgetText = "Jumpers";
-    ng.ng_GadgetID   = MAIN_JUMPERS_ID;
+    ng.ng_GadgetText = "DIP Switches";
+    ng.ng_GadgetID   = MAIN_DIPSWITCH_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 150;
@@ -489,8 +503,8 @@ static void event_loop(void)
                 case MAIN_DISKS_ID:
                     disks_page();
                     break;
-                case MAIN_JUMPERS_ID:
-                    jumpers_page();
+                case MAIN_DIPSWITCH_ID:
+                    dipswitch_page();
                     break;
                 case MAIN_ABOUT_ID:
                     about_page();
@@ -499,7 +513,7 @@ static void event_loop(void)
                     debug_page();
                     break;
                 case DISKS_BACK_ID:
-                case JUMPERS_BACK_ID:
+                case DIPSWITCH_BACK_ID:
                 case ABOUT_BACK_ID:
                 case DEBUG_BACK_ID:
                     main_page();
