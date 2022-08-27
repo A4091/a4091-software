@@ -13,11 +13,12 @@
 #include <stdint.h>
 #include <string.h>
 #include "cmdhandler.h"
-
+#include "scsipiconf.h"
 // Based on https://github.com/captain-amygdala/pistorm/blob/main/platforms/amiga/piscsi/piscsi.h
 
 #define RDB_BLOCK_LIMIT 16
-#define BLOCK_SIZE 512
+#define DEFAULT_BLOCK_SIZE 512
+#define MAX_BLOCK_SIZE 2048
 // RDSK
 #define RDB_IDENTIFIER 0x5244534B
 // PART
@@ -86,10 +87,11 @@ struct PartitionBlock {
 extern struct MsgPort *myPort;
 extern struct SignalSemaphore entry_sem;
 
+int blksize = DEFAULT_BLOCK_SIZE;
+uint32_t _block[MAX_BLOCK_SIZE/4]; // shared storage for 1 block
+
 uint16_t sdcmd_read_blocks(void* registers, struct IOStdReq * ioreq, uint8_t* data, uint32_t block, uint32_t len)
 {
-    int blksize = BLOCK_SIZE; // FIXME
-
     ioreq->io_Command = CMD_READ;
     ioreq->io_Actual  = 0;
     ioreq->io_Offset  = block * blksize;
@@ -111,8 +113,7 @@ void find_partitions(struct Library* ExpansionBase, struct ConfigDev* cd, struct
     void* regs = (void*)cd->cd_BoardAddr;
     int cur_partition = 0;
     uint8_t tmp;
-
-    uint32_t block[BLOCK_SIZE/4]; // shared storage for 1 block
+    uint32_t *block = _block;
 
     if (!rdb || rdb->rdb_PartitionList == 0) {
       printf("No partitions on disk.\n");
@@ -206,7 +207,8 @@ static int safe_open(struct IOStdReq *ioreq, uint scsi_unit)
         // HFERR_SelfUnit - attempted to open our own SCSI ID
         return 1;
     }
-
+    int blkshift = ((struct scsipi_periph *) ioreq->io_Unit)->periph_blkshift;
+    blksize = (1 << blkshift);
     ioreq->io_Error = 0; // Success
 
     return 0;
@@ -223,7 +225,7 @@ int parse_rdb(struct Library* ExpansionBase, struct ConfigDev* cd, struct Librar
     int i, j;
     struct IOStdReq ior;
 
-    uint32_t block[BLOCK_SIZE/4]; // shared storage for 1 block
+    uint32_t *block=_block; // shared storage for 1 block
 
     printf("Looking for RDB!\n");
 
