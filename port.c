@@ -9,10 +9,18 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
+#ifdef USE_ALIB
 #include <clib/alib_protos.h>
+#endif
+#include <clib/exec_protos.h>
 #include <exec/execbase.h>
 #include "device.h"
 #include "printf.h"
+
+#include "scsipiconf.h"
+#include "siopreg.h"
+#include "siopvar.h"
+#include "attach.h"
 
 #ifdef DEBUG_CALLOUT
 #define PRINTF_CALLOUT(args...) printf(args)
@@ -41,9 +49,6 @@ const struct __sFILE_fake __sf_fake_stdout =
 const struct __sFILE_fake __sf_fake_stderr =
     {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
 
-
-
-
 #if 0
 void
 usleep(int usecs)
@@ -58,6 +63,7 @@ usleep(int usecs)
 }
 #endif
 
+extern a4091_save_t *asave;
 void
 delay(int usecs)
 {
@@ -71,8 +77,18 @@ delay(int usecs)
         return;
     }
 
+#ifdef USE_ALIB
     //TimeDelay(UNIT_MICROHZ, 0, useconds);
     TimeDelay(UNIT_VBLANK, 0, ticks);
+#else
+    // We opened timer.device with UNIT_VBLANK, so
+    // we use ticks here.
+    struct timerequest *TimerIO = asave->as_timerio;
+    TimerIO->tr_node.io_Command = TR_ADDREQUEST;
+    TimerIO->tr_time.tv_secs  = 0;
+    TimerIO->tr_time.tv_micro = ticks;
+    DoIO((struct IORequest *)TimerIO);
+#endif
 }
 
 static int bsd_ilevel = 0;
