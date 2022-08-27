@@ -432,7 +432,7 @@ static void draw_card(const struct drawing c[], int length)
     }
 }
 
-void main_page(void)
+static void main_page(void)
 {
     struct NewGadget ng;
 
