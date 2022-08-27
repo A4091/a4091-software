@@ -174,15 +174,32 @@ static void PutJumper(UWORD x, UWORD y, UWORD on)
 static volatile char *JumperText(int val, int num)
 {
     static volatile char string[24];
+    string[0]=0;
     switch (num) {
-      case 8: sprintf((char *)string, "SCSI LUNs %sabled", val?"En":"Dis"); break;
-      case 7: sprintf((char *)string, "External Termination %s", val?"On":"Off"); break;
-      case 6: sprintf((char *)string, "%synchronous SCSI Mode", val?"As":"S"); break;
-      case 5: sprintf((char *)string, "%s Spinup Mode", val?"Long":"Short"); break;
-      case 4: sprintf((char *)string, "%s Bus Mode", val?"SCSI-1 Slow":"SCSI-2 Fast"); break;
-      case 3: sprintf((char *)string, "SCSI Address A2 = %s", val?"0":"1"); break;
-      case 2: sprintf((char *)string, "SCSI Address A1 = %s", val?"0":"1"); break;
-      case 1: sprintf((char *)string, "SCSI Address A0 = %s", val?"0":"1"); break;
+      case 8: strcat((char *)string, "SCSI LUNs ");
+	      strcat((char *)string, val?"Enabled":"Disabled");
+	      break;
+      case 7: strcat((char *)string, "External Termination ");
+	      strcat((char *)string, val?"On":"Off");
+	      break;
+      case 6: strcat((char *)string, val?"As":"S");
+	      strcat((char *)string, "ynchronous SCSI Mode");
+	      break;
+      case 5: strcat((char *)string, val?"Long":"Short");
+	      strcat((char *)string, " Spinup Mode");
+	      break;
+      case 4: strcat((char *)string, val?"SCSI-1 Slow":"SCSI-2 Fast");
+	      strcat((char *)string, " Bus Mode");
+	      break;
+      case 3: strcat((char *)string, "SCSI Address A");
+	      strcat((char *)string, val?"2 = 0":"2 = 1");
+	      break;
+      case 2: strcat((char *)string, "SCSI Address A");
+	      strcat((char *)string, val?"1 = 0":"1 = 1");
+	      break;
+      case 1: strcat((char *)string, "SCSI Address A");
+	      strcat((char *)string, val?"0 = 0":"0 = 1");
+	      break;
     }
 
     return  string;
