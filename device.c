@@ -21,6 +21,7 @@
 #include "cmdhandler.h"
 #include "version.h"
 #include "rdb_partitions.h"
+#include "bootmenu.h"
 
 #ifdef DEBUG
 #include <clib/debug_protos.h>
@@ -161,6 +162,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     DOSBase = OpenLibrary("dos.library", 37L);
     if (DOSBase == NULL) {
         parse_rdb(ExpansionBase, cd, dev);
+        boot_menu();
     } else {
         CloseLibrary(DOSBase);
     }
