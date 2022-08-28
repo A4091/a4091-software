@@ -995,8 +995,4 @@ _4ltol(const u_int8_t *bytes)
 	return (rv);
 }
 
-#ifdef PORT_AMIGA
-void scsipi_completion_timeout_check(struct scsipi_channel *chan);
-#endif
-
 #endif /* _DEV_SCSIPI_SCSIPICONF_H_ */

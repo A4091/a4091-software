@@ -23,7 +23,11 @@
 #include "cmdhandler.h"
 
 #ifndef	SDRETRIES
-#define	SDRETRIES 4
+#define	SDRETRIES 2
+#endif
+
+#ifndef SD_IO_TIMEOUT
+#define SD_IO_TIMEOUT   (5 * 1000)  // 5 seconds
 #endif
 
 typedef struct
@@ -96,7 +100,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
     capacity = 0;
     memset(datap, 0, sizeof(datap->data));
     if (scsipi_command(periph, (void *)&cmd.cmd, sizeof(cmd.cmd),
-        (void *)datap, sizeof (datap->data), 1, 10000, NULL,
+        (void *)datap, sizeof (datap->data), 1, 4000, NULL,
         flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0) {
         goto out;
     }
@@ -119,7 +123,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
 
     memset(datap, 0, sizeof(datap->data16));
     if (scsipi_command(periph, (void *)&cmd.cmd16, sizeof(cmd.cmd16),
-        (void *)datap, sizeof(datap->data16), 1, 10000, NULL,
+        (void *)datap, sizeof(datap->data16), 1, 1000, NULL,
         flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0) {
         goto out;
     }
@@ -331,7 +335,7 @@ sd_seek(void *periph_p, uint64_t blkno, void *ior)
     flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG;
 
     xs = scsipi_make_xs_locked(periph, &cmdbuf, cmdlen, NULL, 0,
-                               SDRETRIES, SD_IO_TIMEOUT, NULL, flags);
+                               1, 1000, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
     xs->amiga_ior = ior;
@@ -404,7 +408,7 @@ sd_get_protstatus(void *periph_p, ULONG *status)
     if ((rc = scsipi_mode_sense(periph, SMS_DBD, 3, &modepage.hdr,
                           sizeof (modepage.hdr) +
                           sizeof (modepage.pg.control_params),
-                          flags, SDRETRIES, 2000)) == 0) {
+                          flags, 0, 2000)) == 0) {
         *status = !!(modepage.pg.control_params.ctl_flags3 & CTL3_SWP);
         return (0);
     } else {
@@ -434,8 +438,7 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject)
     cmd.how = (start ? SSS_START : SSS_STOP) | (load_eject ? SSS_LOEJ : 0);
 
     xs = scsipi_make_xs_locked(periph, (struct scsipi_generic *) &cmd,
-                               sizeof (cmd), NULL, 0, 1, SD_IO_TIMEOUT,
-                               NULL, flags);
+                               sizeof (cmd), NULL, 0, 1, 10000, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
     xs->amiga_ior = ior;

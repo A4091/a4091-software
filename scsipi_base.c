@@ -774,7 +774,6 @@ scsipi_grow_resources(struct scsipi_channel *chan)
 #if 0
 		scsipi_channel_freeze_locked(chan, 1);
 #endif
-printf("CDH: chan request growres\n");
 		chan->chan_tflags |= SCSIPI_CHANT_GROWRES;
 //		cv_broadcast(chan_cv_complete(chan));
 		return 0;
@@ -1000,7 +999,6 @@ scsipi_done(struct scsipi_xfer *xs)
 	struct scsipi_channel *chan = periph->periph_channel;
 	int freezecnt;
 
-// printf("CDH: scsipi_done(%p) stat=%d sstat=%u serr=%u\n", xs, xs->xs_status, xs->status, xs->error);
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_done\n"));
 #ifdef SCSIPI_DEBUG
 	if (periph->periph_dbflags & SCSIPI_DB1)
@@ -1420,6 +1418,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 
 	mutex_enter(chan_mtx(chan));
 	if (error == ERESTART) {
+                printf("restart retries left=%d\n", xs->xs_retries);
 		SDT_PROBE1(scsi, base, xfer, restart,  xs);
 		/*
 		 * If we get here, the periph has been thawed and frozen
@@ -1599,6 +1598,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
 			return 0;
 		/* XXX - display some sort of error here? */
+                printf("drive not ready after select\n");
 		return EIO;
 	case 0x20:		/* invalid command */
 		if ((xs->xs_control &
@@ -1841,7 +1841,7 @@ scsipi_inquire(struct scsipi_periph *periph, struct scsipi_inquiry_data *inqbuf,
 	cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI2;
 	error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 	    (void *)inqbuf, SCSIPI_INQUIRY_LENGTH_SCSI2, retries,
-	    10000, NULL, flags | XS_CTL_DATA_IN);
+	    3000, NULL, flags | XS_CTL_DATA_IN);
 	if (!error &&
 	    inqbuf->additional_length > SCSIPI_INQUIRY_LENGTH_SCSI2 - 4) {
 	    if (scsipi_inquiry3_ok(inqbuf)) {
@@ -1851,7 +1851,7 @@ printf("inquire: addlen=%d, retrying\n", inqbuf->additional_length);
 		cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI3;
 		error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 		    (void *)inqbuf, SCSIPI_INQUIRY_LENGTH_SCSI3, retries,
-		    10000, NULL, flags | XS_CTL_DATA_IN);
+		    1000, NULL, flags | XS_CTL_DATA_IN);
 #if 0
 printf("inquire: error=%d\n", error);
 #endif
@@ -1928,7 +1928,6 @@ scsipi_mode_sense(struct scsipi_periph *periph, int byte2, int page,
 	cmd.page = page;
 	cmd.length = len & 0xff;
 
-printf("running scsipi_command\n");
 #if 0
 	return scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 	    (void *)data, len, retries, timeout, NULL, flags | XS_CTL_DATA_IN);
@@ -1981,6 +1980,7 @@ scsipi_request_sense(struct scsipi_xfer *xs)
 	case EINTR:
 		/* REQUEST_SENSE interrupted by bus reset. */
 		xs->error = XS_RESET;
+                printf("bus reset interrupted request sense\n");
 		return;
 	case EIO:
 		 /* request sense couldn't be performed */
@@ -1989,6 +1989,7 @@ scsipi_request_sense(struct scsipi_xfer *xs)
 		 * better for now
 		 */
 		xs->error = XS_DRIVER_STUFFUP;
+                printf("request sense driver stuffup\n");
 		return;
 	default:
 		 /* Notify that request sense failed. */
@@ -2023,7 +2024,7 @@ scsipi_test_unit_ready(struct scsipi_periph *periph, int flags)
 	cmd.opcode = SCSI_TEST_UNIT_READY;
 
 	return scsipi_command(periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    retries, 10000, NULL, flags);
+	    retries, 5000, NULL, flags);
 }
 
 /*
@@ -2073,56 +2074,6 @@ scsipi_set_xfer_mode(struct scsipi_channel *chan, int target, int immed)
 		}
 	}
 }
-
-#ifdef PORT_AMIGA
-static void
-scsipi_check_timeout_callout(struct scsipi_xfer *xs)
-{
-    callout_t *co = &xs->xs_callout;
-    if (callout_pending(co)) {
-        printf("XS %p callout pending: %d\n", xs, co->ticks);
-        if (co->ticks == 1) {
-            callout_call(co);
-            co->ticks = 0;
-        } else if (co->ticks > 0) {
-            if (co->ticks <= TICKS_PER_SECOND) {
-                co->ticks = 1;
-            } else {
-                co->ticks -= TICKS_PER_SECOND;
-            }
-        }
-    }
-}
-
-void
-scsipi_completion_timeout_check(struct scsipi_channel *chan)
-{
-    struct scsipi_periph *periph;
-    uint32_t hash = 0;
-    struct scsipi_xfer *xs;
-
-    /* Check each periph for pending callouts */
-    for (hash = 0; hash < SCSIPI_CHAN_PERIPH_BUCKETS; hash++) {
-        LIST_FOREACH(periph, &chan->chan_periphtab[hash], periph_hash) {
-            if (callout_pending(&periph->periph_callout)) {
-                printf("CDH: periph %u.%u callout pending\n", periph->periph_target, periph->periph_lun);
-            }
-        }
-    }
-
-    /* Check each xs in the channel run queue for pending callouts */
-    for (xs = TAILQ_FIRST(&chan->chan_queue); xs != NULL;
-         xs = TAILQ_NEXT(xs, channel_q)) {
-        scsipi_check_timeout_callout(xs);
-    }
-    /* Check each xs in the channel completion queue for pending callouts */
-    for (xs = TAILQ_FIRST(&chan->chan_complete); xs != NULL;
-         xs = TAILQ_NEXT(xs, channel_q)) {
-        printf("cq XS %p\n", xs);
-        scsipi_check_timeout_callout(xs);
-    }
-}
-#endif
 
 #ifdef SCSIPI_DEBUG
 void

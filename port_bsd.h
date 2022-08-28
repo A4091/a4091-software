@@ -1,10 +1,6 @@
 #ifndef _PORT_BSD_H
 #define _PORT_BSD_H
 
-#ifndef	SD_IO_TIMEOUT
-#define	SD_IO_TIMEOUT	(60 * 1000)
-#endif
-
 #include <stdint.h>
 
 #undef __RCSID

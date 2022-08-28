@@ -89,10 +89,11 @@ irq_poll(uint got_int, struct siop_softc *sc)
 static void
 restart_timer(void)
 {
-    if (asave->as_timerio != NULL) {
-        asave->as_timerio->tr_time.tv_secs  = 1;
-        asave->as_timerio->tr_time.tv_micro = 0;
-        SendIO(&asave->as_timerio->tr_node);
+    if (asave->as_timerio[0] != NULL) {
+        asave->as_timerio[0]->tr_time.tv_secs  = 1;
+        asave->as_timerio[0]->tr_time.tv_micro = 0;
+        asave->as_timerio[0]->tr_node.io_Command = TR_ADDREQUEST;
+        SendIO(&asave->as_timerio[0]->tr_node);
         asave->as_timer_running = 1;
     }
 }
@@ -100,21 +101,24 @@ restart_timer(void)
 static void
 close_timer(void)
 {
-    if (asave->as_timerio != NULL) {
-        if (asave->as_timer_running)
-            WaitIO(&asave->as_timerio->tr_node);
-        CloseDevice(&asave->as_timerio->tr_node);
+    int which;
+
+    if (asave->as_timer_running) {
+        WaitIO(&asave->as_timerio[0]->tr_node);
         asave->as_timer_running = 0;
     }
 
-    if (asave->as_timerport != NULL) {
-        DeletePort(asave->as_timerport);
-        asave->as_timerport = NULL;
-    }
+    for (which = 0; which < 2; which++) {
+        if (asave->as_timerio[which] != NULL) {
+            CloseDevice(&asave->as_timerio[which]->tr_node);
+            DeleteExtIO(&asave->as_timerio[which]->tr_node);
+            asave->as_timerio[which] = NULL;
+        }
 
-    if (asave->as_timerio != NULL) {
-        DeleteExtIO(&asave->as_timerio->tr_node);
-        asave->as_timerio = NULL;
+        if (asave->as_timerport[which] != NULL) {
+            DeletePort(asave->as_timerport[which]);
+            asave->as_timerport[which] = NULL;
+        }
     }
 }
 
@@ -122,26 +126,31 @@ static int
 open_timer(void)
 {
     int rc;
-    asave->as_timerport = CreatePort(NULL, 0);
-    if (asave->as_timerport == NULL) {
-        return (ERROR_NO_MEMORY);
-    }
+    int which;
 
-    if (!(asave->as_timerio = (struct timerequest *)
-            CreateExtIO(asave->as_timerport, sizeof (struct timerequest)))) {
-        printf("Fail: CreateExtIO timer\n");
-        close_timer();
-        return (ERROR_NO_MEMORY);
-    }
+    for (which = 0; which < 2; which++) {
+        asave->as_timerport[which] = CreatePort(NULL, 0);
+        if (asave->as_timerport[which] == NULL) {
+            close_timer();
+            return (ERROR_NO_MEMORY);
+        }
+        asave->as_timerio[which] = (struct timerequest *)
+                                   CreateExtIO(asave->as_timerport[which],
+                                               sizeof (struct timerequest));
+        if (asave->as_timerio[which] == NULL) {
+            printf("Fail: CreateExtIO timer\n");
+            close_timer();
+            return (ERROR_NO_MEMORY);
+        }
 
-    rc = OpenDevice(TIMERNAME, UNIT_VBLANK, &asave->as_timerio->tr_node, 0);
-    if (rc != 0) {
-        printf("Fail: open "TIMERNAME"\n");
-        close_timer();
-        return (rc);
+        rc = OpenDevice(TIMERNAME, UNIT_VBLANK,
+                        &asave->as_timerio[which]->tr_node, 0);
+        if (rc != 0) {
+            printf("Fail: open "TIMERNAME"\n");
+            close_timer();
+            return (rc);
+        }
     }
-
-    asave->as_timerio->tr_node.io_Command = TR_ADDREQUEST;
 
     return (0);
 }
@@ -478,7 +487,7 @@ fail_msgport:
     active     = &sc->sc_channel.chan_active;
     cmd_mask   = BIT(msgport->mp_SigBit);
     int_mask   = BIT(asave->as_irq_signal);
-    timer_mask = BIT(asave->as_timerport->mp_SigBit);
+    timer_mask = BIT(asave->as_timerport[0]->mp_SigBit);
     wait_mask  = int_mask | timer_mask | cmd_mask;
     chan       = &sc->sc_channel;
 
@@ -495,8 +504,8 @@ fail_msgport:
 
         /* Process timer events */
         if (mask & timer_mask) {
-            WaitIO(&asave->as_timerio->tr_node);
-            scsipi_completion_timeout_check(chan);
+            WaitIO(&asave->as_timerio[0]->tr_node);
+            callout_run_timeouts();
             restart_timer();
         }
 

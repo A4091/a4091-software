@@ -220,8 +220,8 @@ a4091_add_local_irq_handler(uint32_t dev_base)
 
     asave->as_addr           = dev_base;
     asave->as_SysBase        = SysBase;
-    asave->as_irq_count      = 0;
     asave->as_svc_task       = task;
+    asave->as_irq_count      = 0;
     asave->as_irq_signal     = AllocSignal(-1);
     asave->as_isr            = AllocMem(sizeof (*asave->as_isr),
                                         MEMF_CLEAR | MEMF_PUBLIC);
@@ -471,6 +471,8 @@ init_chan(device_t self, UBYTE *boardnum)
     chan->chan_id = dip_switches & 7;  // SCSI ID from DIP switches
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
+
+    asave->as_callout_head = &callout_head;
 
     if ((dip_switches & BIT(5)) == 0) {
         /* Need to disable synchronous SCSI */

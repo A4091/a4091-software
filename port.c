@@ -83,7 +83,7 @@ delay(int usecs)
 #else
     // We opened timer.device with UNIT_VBLANK, so
     // we use ticks here.
-    struct timerequest *TimerIO = asave->as_timerio;
+    struct timerequest *TimerIO = asave->as_timerio[1];
     TimerIO->tr_node.io_Command = TR_ADDREQUEST;
     TimerIO->tr_time.tv_secs  = 0;
     TimerIO->tr_time.tv_micro = ticks;
@@ -166,11 +166,57 @@ ffs(int i)
 }
 #endif
 
+callout_t *callout_head = NULL;
+
+static void
+callout_add(callout_t *c)
+{
+    c->co_next = callout_head;
+    c->co_prev = NULL;
+    if (callout_head != NULL) {
+        callout_head->co_next->co_prev = c;
+    }
+    callout_head = c;
+}
+
+static void
+callout_remove(callout_t *c)
+{
+    if (c == callout_head) {
+        if (c->co_prev != NULL) {
+            printf("CALLOUT head %p has non-NULL prev %p\n",
+                   callout_head, c->co_prev);
+            c->co_prev = NULL;
+        }
+        callout_head = c->co_next;
+    } else if (c->co_prev != NULL) {
+        c->co_prev->co_next = c->co_next;
+    } else if (c->co_next != NULL) {
+        printf("CALLOUT list corrupt head=%p c=%p\n", callout_head, c);
+    }
+
+    if (c->co_next != NULL)
+        c->co_next->co_prev = c->co_prev;
+}
+
 void
 callout_init(callout_t *c, u_int flags)
 {
     c->func = NULL;
 }
+
+#ifdef DEBUG
+void
+callout_list(void)
+{
+    callout_t *cur;
+
+    for (cur = callout_head; cur != NULL; cur = cur->co_next) {
+        printf("%c %d %p(%p)\n", (cur == callout_head) ? '>' : ' ',
+               cur->ticks, cur->func, cur->arg);
+    }
+}
+#endif
 
 int
 callout_pending(callout_t *c)
@@ -185,6 +231,7 @@ callout_stop(callout_t *c)
     int pending = (c->func != NULL);
     PRINTF_CALLOUT("callout stop %p\n", c->func);
     c->func = NULL;
+    callout_remove(c);
     return (pending);
 }
 
@@ -195,6 +242,8 @@ callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg)
     c->func = func;
     c->arg = arg;
 
+    callout_remove(c);
+    callout_add(c);
     PRINTF_CALLOUT("callout_reset %p(%x) at %d\n",
                    c->func, (uint32_t) c->arg, ticks);
 }
@@ -211,6 +260,22 @@ callout_call(callout_t *c)
     c->func(c->arg);
 }
 
+void
+callout_run_timeouts(void)
+{
+    callout_t *cur;
+
+    for (cur = callout_head; cur != NULL; cur = cur->co_next) {
+        if (cur->ticks == 1) {
+            cur->ticks = 0;
+            callout_call(cur);
+        } else if (cur->ticks != 0) {
+            cur->ticks -= TICKS_PER_SECOND;
+            if (cur->ticks < 1)
+                cur->ticks = 1;
+        }
+    }
+}
 
 #if 0
 void

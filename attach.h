@@ -16,9 +16,10 @@ typedef struct {
     volatile uint8_t      as_exiting;
     struct device         as_device_self;
     struct siop_softc     as_device_private;
-    struct MsgPort       *as_timerport;
-    struct timerequest   *as_timerio;
+    struct MsgPort       *as_timerport[2];
+    struct timerequest   *as_timerio[2];
     int                   as_timer_running;
+    callout_t           **as_callout_head;
 } a4091_save_t;
 
 #endif /* _ATTACH_H */

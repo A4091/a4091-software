@@ -451,7 +451,7 @@ siop_scsidone(struct siop_acb *acb, int stat)
     int dosched = 0;
 
     if (acb == NULL || (xs = acb->xs) == NULL) {
-        printf("CDH: siop_scsidone: NULL acb %p or scsipi_xfer\n", acb);
+        printf("siop_scsidone: NULL acb %p or scsipi_xfer\n", acb);
 #ifdef DIAGNOSTIC
         printf("siop_scsidone: NULL acb or scsipi_xfer\n");
 #if defined(DEBUG) && defined(DDB)
@@ -1690,7 +1690,6 @@ printf("CDH: set2 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[acb->xs-
         rp->siop_dsa = kvtop((void *)&sc->sc_nexus->ds);
         rp->siop_sxfer = sc->sc_sync[target].sxfer;
         rp->siop_sbcl = sc->sc_sync[target].sbcl;
-printf("CDH: set3 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[target].sbcl);
         rp->siop_dsp = sc->sc_scriptspa;
         return (0);
     }
@@ -1806,7 +1805,6 @@ siop_select(struct siop_softc *sc)
             rp->siop_sien = 0;
             rp->siop_dien = 0;
         }
-printf("CDH: force intsoff\n");
         sc->sc_flags |= SIOP_INTSOFF;
 #if 0
     } else if ((sc->sc_flags & SIOP_INTDEFER) == 0) {

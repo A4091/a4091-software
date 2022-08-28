@@ -24,17 +24,12 @@
 #include "scsi_disk.h"
 #include "scsipi_disk.h"
 #include "scsipi_all.h"
+#include "callout.h"
 
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
 
 #define PAGE_SIZE NBPG
 typedef struct device *device_t;
-
-typedef struct {
-    int ticks;             /* ticks remaining */
-    void (*func)(void *);  /* callout function at timeout */
-    void *arg;             /* callout function argument */
-} callout_t;
 
 #include "device.h"
 
@@ -62,7 +57,8 @@ usage(void)
 {
     printf("This tool is used to show a4091.device driver internal state.\n"
            "It does not work on any other driver.\n"
-           "Usage:  a4091d [<unit>]\n");
+           "Usage:  a4091d [<unit>]\n"
+           "        a4091d -x <xs address>\n");
 }
 
 static const char *
@@ -1195,9 +1191,14 @@ print_xs(struct scsipi_xfer *xs, int indent_count)
 static void
 decode_acb(struct siop_acb *acb)
 {
-    printf(" %d.%d flags=%x len=%02d",
-           acb->xs->xs_periph->periph_target,
-           acb->xs->xs_periph->periph_lun, acb->flags, acb->clen);
+    if (acb->xs == NULL) {
+        printf(" NULL xs");
+    } else {
+        printf(" %p %d.%d", acb->xs,
+               acb->xs->xs_periph->periph_target,
+               acb->xs->xs_periph->periph_lun);
+    }
+    printf(" flags=%x len=%02d", acb->flags, acb->clen);
     decode_scsi_command("", (uint8_t *) &acb->cmd, acb->clen);
 }
 
@@ -1213,21 +1214,44 @@ show_sc_list(int indent_count, struct siop_acb *acb)
         return;
     }
     while (acb != NULL) {
-        if (newline > 0) {
+        if (newline > 0)
             printf("%s", indent);
-        }
-        printf("%p", acb);
         if (acb->xs != NULL) {
+            if (newline == 0)
+                printf("\n%s", indent);
+            printf("%p", acb);
             decode_acb(acb);
             newline = 1;
         } else {
-            printf(" ");
+            printf("%p ", acb);
             newline = 0;
         }
         acb = acb->chain.tqe_next;
     }
     if (newline == 0)
         printf("\n");
+}
+
+typedef const char * const bitdesc_t;
+
+static bitdesc_t bits_periph_flags[] = {
+    "REMOVABLE", "MEDIA_LOADED", "WAITING", "OPEN",
+        "WAITDRAIN", "GROW_OPENINGS", "MODE_VALID", "RECOVERING",
+    "RECOVERING_ACTIVE", "KEEP_LABEL", "SENSE", "UNTAG",
+};
+
+static void
+print_bits(bitdesc_t *bits, uint nbits, uint value)
+{
+    uint bit;
+    for (bit = 0; value != 0; value >>= 1, bit++) {
+        if (value & 1) {
+            if ((bit >= nbits) || (bits[bit] == NULL))
+                printf(" bit%d", bit);
+            else
+                printf(" %s", bits[bit]);
+        }
+    }
 }
 
 static void
@@ -1249,13 +1273,30 @@ main(int argc, char *argv[])
     struct IOExtTD     *tio;
     struct MsgPort     *mp;
     struct IOStdReq    *ior;
-    struct scsipi_xfer *xs;
+    struct scsipi_xfer *xs = NULL;
     char               *devname = DEVNAME;
 
     for (arg = 1; arg < argc; arg++) {
         char *ptr = argv[arg];
         if (*ptr == '-') {
-            printf("Invalid argument -%s\n", ptr);
+            while (*(++ptr) != '\0') {
+                switch (*ptr) {
+                    case 'x':
+                        if (++arg > argc) {
+                            printf("-%c requires an argument\n", *ptr);
+                            exit(1);
+                        }
+                        if ((sscanf(argv[arg], "%x%n", (uint *) &xs, &pos) != 1) ||
+                            (argv[arg][pos] != '\0')) {
+                            printf("Invalid xs address '%s'\n", argv[arg]);
+                        }
+                        break;
+                    default:
+                        printf("Invalid argument -%s\n", ptr);
+                        usage();
+                        exit(1);
+                }
+            }
         } else {
             if ((sscanf(ptr, "%d%n", &unitno, &pos) != 1) ||
                 (ptr[pos] != '\0')) {
@@ -1264,6 +1305,11 @@ main(int argc, char *argv[])
                 exit(1);
             }
         }
+    }
+
+    if (xs != NULL) {
+        print_xs(xs, 1);
+        exit(0);
     }
 
     if (unitno == -1) {
@@ -1347,7 +1393,10 @@ main(int argc, char *argv[])
     printf("  periph_type=%u\n", periph->periph_type);
     printf("  periph_cap=0x%x\n", periph->periph_cap);
     printf("  periph_quirks=%x\n", periph->periph_quirks);
-    printf("  periph_flags=%x\n", periph->periph_flags);
+    printf("  periph_flags=%x", periph->periph_flags);
+    print_bits(bits_periph_flags, ARRAY_SIZE(bits_periph_flags),
+               periph->periph_flags);
+    printf("\n");
     printf("  periph_dbflags=%x\n", periph->periph_dbflags);
     printf("  periph_target=%d\n", periph->periph_target);
     printf("  periph_lun=%d\n", periph->periph_lun);
@@ -1413,66 +1462,6 @@ main(int argc, char *argv[])
     printf("    adapt_flags=%d\n", adapt->adapt_flags);
     printf("    adapt_runnings=%d\n", adapt->adapt_running);
     printf("    adapt_asave=%p\n", adapt->adapt_asave);
-    a4091_save_t *asave = adapt->adapt_asave;
-    if (asave != NULL) {
-        printf("      as_addr=%x\n", asave->as_addr);
-        printf("      as_SysBase=%p\n", asave->as_SysBase);
-        printf("      as_irq_count=%x\n", asave->as_irq_count);
-        printf("      as_svc_task=%p\n", asave->as_svc_task);
-        struct Interrupt *isr = asave->as_isr;
-        printf("      as_isr=%p is_Code=%p(%p)\n",
-               asave->as_isr, isr->is_Code, isr->is_Data);
-        printf("        is_Node.ln_Type=%x\n", isr->is_Node.ln_Type);
-        printf("        is_Node.ln_Pri=%x\n", isr->is_Node.ln_Pri);
-        printf("        is_Node.ln_Name=%p %.30s\n",
-               isr->is_Node.ln_Name, isr->is_Node.ln_Name);
-        printf("      as_irq_signal=%x\n", asave->as_irq_signal);
-        printf("      as_exiting=%x\n", asave->as_exiting);
-        printf("      as_device_self=%p\n", &asave->as_device_self);
-        printf("      as_device_private=%p\n", &asave->as_device_private);
-        struct siop_softc *sc = &asave->as_device_private;
-        printf("        sc_siop_si=%p\n", sc->sc_siop_si);
-        printf("        sc_istat=%u sc_dstate=%u sc_sstat0=%u sc_sstat1=%u\n",
-               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);
-        printf("        sc_intcode=%lu\n", sc->sc_intcode);
-        printf("        sc_adapter=%p\n", &sc->sc_adapter);
-        printf("        sc_channel=%p\n", &sc->sc_channel);
-        printf("        sc_scriptspa=%lx\n", sc->sc_scriptspa);
-        printf("        sc_siopp=%p\n", sc->sc_siopp);
-        printf("        sc_active=%lu sc_nosync=%lu\n",
-               sc->sc_active, sc->sc_nosync);
-        printf("        free_list=");
-        show_sc_list(10, sc->free_list.tqh_first);
-        printf("        ready_list=");
-        show_sc_list(10, sc->ready_list.tqh_first);
-        printf("        nexus_list=");
-        show_sc_list(10, sc->nexus_list.tqh_first);
-        printf("        sc_nexus=");
-        decode_acb(sc->sc_nexus);
-        printf("        sc_acb=  ");
-        decode_acb(sc->sc_acb);
-        for (pos = 0; pos < ARRAY_SIZE(sc->sc_tinfo); pos++) {
-            printf("        sc_tinfo[%d] ", pos);
-            show_sc_tinfo(20, &sc->sc_tinfo[pos]);
-        }
-        printf("        sc_clock_freq=%d MHz\n", sc->sc_clock_freq);
-        printf("        sc_dcntl=%02x sc_ctest7=%02x sc_tcp[]=%04x %04x "
-               "%04x %04x\n",
-               sc->sc_dcntl, sc->sc_ctest7, sc->sc_tcp[0],
-               sc->sc_tcp[1], sc->sc_tcp[2], sc->sc_tcp[3]);
-        printf("        sc_flags=%02x sc_dien=%02x sc_minsync=%02x "
-               "sc_sien=%02x\n",
-               sc->sc_flags, sc->sc_dien, sc->sc_minsync, sc->sc_sien);
-        for (pos = 0; pos < ARRAY_SIZE(sc->sc_sync); pos++) {
-            printf("        sc_sync[%d] state=%u sxfer=%u sbcl=%u\n",
-                   pos, sc->sc_sync[pos].state, sc->sc_sync[pos].sxfer,
-                   sc->sc_sync[pos].sbcl);
-        }
-
-        printf("      as_timerport=%p\n", asave->as_timerport);
-        printf("      as_timerio=%p\n", asave->as_timerio);
-        printf("      as_timer_running=%x\n", asave->as_timer_running);
-    }
     printf("  chan_periphtab[]=%p\n", chan->chan_periphtab);
     printf("  chan_flags=%d\n", chan->chan_flags);
     printf("  chan_openings=%d\n", chan->chan_openings);
@@ -1500,6 +1489,78 @@ main(int argc, char *argv[])
         xs = TAILQ_NEXT(xs, channel_q);
     }
     Permit();
+    a4091_save_t *asave = adapt->adapt_asave;
+    if (asave != NULL) {
+        printf("Driver globals %p\n", asave);
+        printf("  as_SysBase=%p\n", asave->as_SysBase);
+        printf("  as_irq_count=%x\n", asave->as_irq_count);
+        printf("  as_svc_task=%p\n", asave->as_svc_task);
+        struct Interrupt *isr = asave->as_isr;
+        printf("  as_isr=%p is_Code=%p(%p)\n",
+               asave->as_isr, isr->is_Code, isr->is_Data);
+        printf("    is_Node.ln_Type=%x\n", isr->is_Node.ln_Type);
+        printf("    is_Node.ln_Pri=%x\n", isr->is_Node.ln_Pri);
+        printf("    is_Node.ln_Name=%p %.30s\n",
+               isr->is_Node.ln_Name, isr->is_Node.ln_Name);
+        printf("  as_irq_signal=%x\n", asave->as_irq_signal);
+        printf("  as_exiting=%x\n", asave->as_exiting);
+        printf("  as_device_self=%p\n", &asave->as_device_self);
+        printf("  as_device_private=%p\n", &asave->as_device_private);
+        struct siop_softc *sc = &asave->as_device_private;
+        printf("    sc_siop_si=%p\n", sc->sc_siop_si);
+        printf("    sc_istat=%u sc_dstate=%u sc_sstat0=%u sc_sstat1=%u\n",
+               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);
+        printf("    sc_intcode=%lu\n", sc->sc_intcode);
+        printf("    sc_adapter=%p\n", &sc->sc_adapter);
+        printf("    sc_channel=%p\n", &sc->sc_channel);
+        printf("    sc_scriptspa=%lx\n", sc->sc_scriptspa);
+        printf("    sc_siopp=%p\n", sc->sc_siopp);
+        printf("    sc_active=%lu sc_nosync=%lu\n",
+               sc->sc_active, sc->sc_nosync);
+        printf("    free_list=");
+        show_sc_list(6, sc->free_list.tqh_first);
+        printf("    ready_list=");
+        show_sc_list(6, sc->ready_list.tqh_first);
+        printf("    nexus_list=");
+        show_sc_list(6, sc->nexus_list.tqh_first);
+        printf("    sc_nexus=");
+        decode_acb(sc->sc_nexus);
+        if ((sc->sc_active != 0) && (sc->sc_nexus->xs != NULL)) {
+            /* Do full decode of ACB */
+            print_xs(sc->sc_nexus->xs, 6);
+        }
+        printf("    sc_acb[0]=%p\n", sc->sc_acb);
+        for (pos = 0; pos < ARRAY_SIZE(sc->sc_tinfo); pos++) {
+            printf("    sc_tinfo[%d] ", pos);
+            show_sc_tinfo(16, &sc->sc_tinfo[pos]);
+        }
+        printf("    sc_clock_freq=%d MHz\n", sc->sc_clock_freq);
+        printf("    sc_dcntl=%02x sc_ctest7=%02x sc_tcp[]=%04x %04x "
+               "%04x %04x\n",
+               sc->sc_dcntl, sc->sc_ctest7, sc->sc_tcp[0],
+               sc->sc_tcp[1], sc->sc_tcp[2], sc->sc_tcp[3]);
+        printf("    sc_flags=%02x sc_dien=%02x sc_minsync=%02x "
+               "sc_sien=%02x\n",
+               sc->sc_flags, sc->sc_dien, sc->sc_minsync, sc->sc_sien);
+        for (pos = 0; pos < ARRAY_SIZE(sc->sc_sync); pos++) {
+            printf("    sc_sync[%d] state=%u sxfer=%u sbcl=%u\n",
+                   pos, sc->sc_sync[pos].state, sc->sc_sync[pos].sxfer,
+                   sc->sc_sync[pos].sbcl);
+        }
+
+        printf("  as_timerport[0]=%p as_timerport[1]=%p\n",
+                asave->as_timerport[0], asave->as_timerport[1]);
+        printf("  as_timerio[0]=%p   as_timerio[1]=%p\n",
+               asave->as_timerio[0], asave->as_timerio[1]);
+        printf("  as_timer_running=%x\n", asave->as_timer_running);
+        callout_t *callout_head = *(asave->as_callout_head);
+        callout_t *cur;
+        printf("  as_callout_head=%p\n", callout_head);
+        for (cur = callout_head; cur != NULL; cur = cur->co_next) {
+            printf("    %p ticks=%d func=%p(%p)\n",
+                   cur, cur->ticks, cur->func, cur->arg);
+        }
+    }
 
     CloseDevice((struct IORequest *) tio);
 

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "printf.h"
+#include "callout.h"
 #include <proto/exec.h>
 #include <exec/execbase.h>
 #include <inline/exec.h>
@@ -37,17 +38,6 @@ typedef uint32_t paddr_t;
 typedef uint32_t vaddr_t;
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)
 #define kvtop(x) ((uint32_t)(x))
-
-typedef struct {
-    int ticks;             /* ticks remaining */
-    void (*func)(void *);  /* callout function at timeout */
-    void *arg;             /* callout function argument */
-} callout_t;
-void callout_init(callout_t *c, u_int flags);
-int callout_pending(callout_t *c);
-void callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg);
-int callout_stop(callout_t *c);
-void callout_call(callout_t *c);
 
 void delay(int usecs);
 
