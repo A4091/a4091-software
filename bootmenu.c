@@ -108,14 +108,14 @@ static void cleanup_bootmenu(void)
     CloseLibrary(GadToolsBase);
 }
 
-static struct Gadget *create_gadget_x(UWORD kind, ULONG tag1, ...)
+static struct Gadget *create_gadget_custom(UWORD kind, ULONG tag1, ...)
 {
     return(CreateGadgetA(kind,LastAdded,NewGadget,(struct TagItem *)&tag1));
 }
 
 static struct Gadget *create_gadget(UWORD kind)
 {
-    return(create_gadget_x(kind,TAG_DONE));
+    return(create_gadget_custom(kind,TAG_DONE));
 }
 
 static void Print(STRPTR text, UWORD x, UWORD y, int center)
@@ -337,7 +337,7 @@ static void debug_page(void)
     struct NewGadget ng;
     page_header(&ng, "A4091 Diagnostics - Debug");
 
-    SetRGB4(&screen->ViewPort,3,11,8,8);
+    SetRGB4(&screen->ViewPort,3,6,8,11);
     SetAPen(&screen->RastPort,3);
     Print("DEBUG - TBD",0,120,TRUE);
 
@@ -462,7 +462,9 @@ static void main_page(void)
     ng.ng_TopEdge= 170;
     ng.ng_GadgetText = "Debug";
     ng.ng_GadgetID   = MAIN_DEBUG_ID;
-    LastAdded = create_gadget(BUTTON_KIND);
+    LastAdded = create_gadget_custom(BUTTON_KIND,
+                                     GA_Disabled, TRUE,
+                                     TAG_DONE);
 
     ng.ng_TopEdge= 200;
     ng.ng_GadgetText = "Boot";
