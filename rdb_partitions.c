@@ -14,10 +14,11 @@
 #include <string.h>
 #include "cmdhandler.h"
 #include "scsipiconf.h"
+#include "scsimsg.h"
+
 // Based on https://github.com/captain-amygdala/pistorm/blob/main/platforms/amiga/piscsi/piscsi.h
 
 #define RDB_BLOCK_LIMIT 16
-#define DEFAULT_BLOCK_SIZE 512
 #define MAX_BLOCK_SIZE 2048
 // RDSK
 #define RDB_IDENTIFIER 0x5244534B
@@ -84,33 +85,10 @@ struct PartitionBlock {
     uint32_t   pb_EReserved[12];
 };
 
-extern struct MsgPort *myPort;
-extern struct SignalSemaphore entry_sem;
-
-int blksize = DEFAULT_BLOCK_SIZE;
 uint32_t _block[MAX_BLOCK_SIZE/4]; // shared storage for 1 block
 
-uint16_t sdcmd_read_blocks(void* registers, struct IOStdReq * ioreq, uint8_t* data, uint32_t block, uint32_t len)
+void find_partitions(struct Library *ExpansionBase, struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
 {
-    ioreq->io_Command = CMD_READ;
-    ioreq->io_Actual  = 0;
-    ioreq->io_Offset  = block * blksize;
-    ioreq->io_Length  = blksize * len;
-    ioreq->io_Data    = data;
-    ioreq->io_Flags   = 0;
-    ioreq->io_Error   = 0;
-    ioreq->io_Message.mn_ReplyPort=CreateMsgPort();
-
-    PutMsg(myPort, &ioreq->io_Message);
-    WaitPort(ioreq->io_Message.mn_ReplyPort);
-    DeleteMsgPort(ioreq->io_Message.mn_ReplyPort);
-
-    return 0;
-}
-
-void find_partitions(struct Library* ExpansionBase, struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
-{
-    void* regs = (void*)cd->cd_BoardAddr;
     int cur_partition = 0;
     uint8_t tmp;
     uint32_t *block = _block;
@@ -126,7 +104,7 @@ next_partition:
 #ifdef DEBUG
     printf("\nBlock: %d\n", cur_block);
 #endif
-    sdcmd_read_blocks(regs, ioreq, (uint8_t*)block, cur_block, 1);
+    sdcmd_read_blocks(ioreq, (uint8_t*)block, cur_block, 1);
 
     uint32_t first = block[0];
     if (first != PART_IDENTIFIER) {
@@ -197,31 +175,8 @@ next_partition:
     return;
 }
 
-static int safe_open(struct IOStdReq *ioreq, uint scsi_unit)
+int parse_rdb(struct Library *ExpansionBase, struct ConfigDev* cd, struct Library *dev)
 {
-    ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-
-    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
-        printf("No unit at %d.%d\n", scsi_unit % 10, scsi_unit / 10);
-        ioreq->io_Error = HFERR_SelTimeout;
-        // HFERR_SelfUnit - attempted to open our own SCSI ID
-        return 1;
-    }
-    int blkshift = ((struct scsipi_periph *) ioreq->io_Unit)->periph_blkshift;
-    blksize = (1 << blkshift);
-    ioreq->io_Error = 0; // Success
-
-    return 0;
-}
-
-static void safe_close(struct IOStdReq *ioreq)
-{
-    close_unit((void *) ioreq->io_Unit);
-}
-
-int parse_rdb(struct Library* ExpansionBase, struct ConfigDev* cd, struct Library *dev)
-{
-    void* regs = (void*)cd->cd_BoardAddr;
     int i, j;
     struct IOStdReq ior;
 
@@ -236,7 +191,7 @@ int parse_rdb(struct Library* ExpansionBase, struct ConfigDev* cd, struct Librar
 	    continue;
 
         for (j = 0; j < RDB_BLOCK_LIMIT; j++) {
-            sdcmd_read_blocks(regs, &ior, (uint8_t*)block, j, 1);
+            sdcmd_read_blocks(&ior, (uint8_t*)block, j, 1);
             uint32_t first = block[0];
             if (first == RDB_IDENTIFIER) {
 		found=1;
