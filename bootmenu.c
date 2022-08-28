@@ -32,6 +32,7 @@
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
+#include "scsimsg.h"
 
 struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
@@ -312,22 +313,115 @@ static void about_page(void)
     page_footer();
 }
 
+static const char *
+devtype_str(uint dtype)
+{
+    static const char * const dt_list[] = {
+        "Disk", "Tape", "Printer", "Proc",
+        "Worm", "CDROM", "Scanner", "Optical",
+        "Changer", "Comm", "ASCIT81", "ASCIT82",
+    };
+    if (dtype < ARRAY_SIZE(dt_list))
+        return (dt_list[dtype]);
+    return ("Unknown");
+}
+
+int scan_disks(void)
+{
+    int i;
+    int cnt=0;
+    int erc;
+    struct IOExtTD tio;
+    int unit=0;
+    struct RastPort *rp = &screen->RastPort;
+
+    int x,y;
+    printf("Looking for disks!\n");
+
+    for (i=0; i<7; i++) { // FIXME LUNs?
+        x=72;
+	if (safe_open((struct IOStdReq *)&tio, i))
+	    continue;
+
+	scsi_inquiry_data_t *inq_res;
+	erc = do_scsi_inquiry(&tio, unit, &inq_res);
+
+	if (erc == 0) {
+	    y=82+(cnt*10);
+	    volatile char unit_str[]="0.0";
+	    unit_str[0]='0'+i;
+            Move(rp,x,y);
+	    Text(rp, (char *)unit_str, 3);
+	    x+=48;
+	    Move(rp,x,y);
+	    Text(rp, inq_res->vendor, 8);
+	    x+=96;
+	    Move(rp,x,y);
+	    Text(rp, inq_res->product, 16);
+	    x+=176;
+	    Move(rp,x,y);
+	    Text(rp, inq_res->revision, 4);
+	    x+=48;
+	    Move(rp,x,y);
+	    const char *dtype=devtype_str(inq_res->device & SID_TYPE);
+	    Text(rp,dtype,strlen(dtype));
+            cnt++;
+	}
+        safe_close((struct IOStdReq *)&tio);
+	memset(&tio, 0, sizeof(tio));
+    }
+
+    return 0;
+}
+
+static const struct Rectangle disk_table[] =
+{
+    {60, 58,576,176},
+    {62, 59,111,71}, // Unit
+    {62, 72,111,175},
+    {112,59,207,71}, // Vendor
+    {112,72,207,175},
+    {208,59,383,71}, // Device
+    {208,72,383,175},
+    {384,59,433,71}, // Revision
+    {384,72,433,175},
+    {434,59,574,71},
+    {434,72,574,175}
+};
+
 static void disks_page(void)
 {
     struct NewGadget ng;
+    int i;
+    ULONG tag;
     page_header(&ng, "A4091 Diagnostics - Disks");
 
+    SetRGB4(&screen->ViewPort,3,6,8,11);
 
-    SetRGB4(&screen->ViewPort,3,11,8,8);
-    SetAPen(&screen->RastPort,3);
-    Print("DISKS - TBD",0,120,TRUE);
+    SetAPen(&screen->RastPort,2);
+    Print("Unit  Vendor      Device                Rev.   Type ",72,68,FALSE);
+    SetAPen(&screen->RastPort,1);
 
     ng.ng_LeftEdge   = 400;
-    ng.ng_TopEdge    = 145;
+    ng.ng_TopEdge    = 185;
     ng.ng_Width      = 120;
     ng.ng_GadgetText = "Back";
     ng.ng_GadgetID   = DISKS_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
+
+    tag=GTBB_Recessed;
+    for (i = 0; i < 11; i++)
+    {
+        DrawBevelBox(&screen->RastPort,disk_table[i].MinX,disk_table[i].MinY,
+                                       disk_table[i].MaxX-disk_table[i].MinX+1,
+                                       disk_table[i].MaxY-disk_table[i].MinY+1,
+                                       GT_VisualInfo,  visualInfo,
+                                       tag,            TRUE,
+                                       TAG_DONE);
+        tag = TAG_IGNORE;
+    }
+
+    scan_disks();
 
     page_footer();
 }
