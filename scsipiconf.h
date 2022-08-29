@@ -477,8 +477,10 @@ struct scsipi_periph {
 	/* Bitmap of free command tags. */
 	u_int32_t periph_freetags[PERIPH_NTAGWORDS];
 
+#ifndef PORT_AMIGA
 	/* Pending scsipi_xfers on this peripheral. */
 	struct scsipi_xfer_queue periph_xferq;
+#endif
 
 	callout_t periph_callout;
 

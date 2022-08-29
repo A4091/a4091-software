@@ -1191,12 +1191,20 @@ print_xs(struct scsipi_xfer *xs, int indent_count)
 static void
 decode_acb(struct siop_acb *acb)
 {
+    if (acb == NULL) {
+        printf(" NULL acb\n");
+        return;
+    }
     if (acb->xs == NULL) {
         printf(" NULL xs");
     } else {
-        printf(" %p %d.%d", acb->xs,
-               acb->xs->xs_periph->periph_target,
-               acb->xs->xs_periph->periph_lun);
+        if (acb->xs->xs_periph == NULL) {
+            printf(" %p <NO PERIPH>", acb->xs);
+        } else {
+            printf(" %p %d.%d", acb->xs,
+                   acb->xs->xs_periph->periph_target,
+                   acb->xs->xs_periph->periph_lun);
+        }
     }
     printf(" flags=%x len=%02d", acb->flags, acb->clen);
     decode_scsi_command("", (uint8_t *) &acb->cmd, acb->clen);
@@ -1403,9 +1411,21 @@ main(int argc, char *argv[])
     printf("  periph_blkshift=%d\n", periph->periph_blkshift);
     printf("  periph_version=%d\n", periph->periph_version);
 //  printf("  periph_freetags[]=\n", periph->periph_freetags[i]);
+//  printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
+
+    /*
+     * periph_xferq is not being tracked in AmigaOS driver,
+     * so it is simulated here using the channel xferq.
+     */
     Forbid();
-    struct scsipi_xfer_queue *xq = &periph->periph_xferq;
+    struct scsipi_channel *chan = periph->periph_channel;
+    struct scsipi_xfer_queue *xq;
+    xq = &chan->chan_queue;
     xs = TAILQ_FIRST(xq);
+    while ((xs != NULL) && (xs->xs_periph != periph)) {
+        /* Channel queue might have other XS than just this periph */
+        xs = TAILQ_NEXT(xs, channel_q);
+    }
     printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
     while (xs != NULL) {
         printf("    xs=%p\n", xs);
@@ -1418,6 +1438,7 @@ main(int argc, char *argv[])
             print_xs(xs, 6);
     }
     Permit();
+
     if (periph->periph_callout.func == NULL) {
         printf("  periph_callout NONE\n");
     } else {
@@ -1430,7 +1451,6 @@ main(int argc, char *argv[])
     if (periph->periph_xscheck != NULL)
         print_xs(periph->periph_xscheck, 6);
     Permit();
-    struct scsipi_channel *chan = periph->periph_channel;
     printf("Chan %p\n", chan);
     Forbid();
     xs = chan->chan_xs_free;

@@ -532,7 +532,10 @@ scsipi_alloc_periph(int flags)
     for (i = 0; i < PERIPH_NTAGWORDS; i++)
             periph->periph_freetags[i] = 0xffffffff;
 
+#if 0
+    /* Not tracked for AmigaOS */
     TAILQ_INIT(&periph->periph_xferq);
+#endif
     return (periph);
 }
 
@@ -568,7 +571,6 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
     periph->periph_dbflags  = 0;
     periph->periph_channel = chan;  // Not sure this is needed
-    TAILQ_INIT(&periph->periph_xferq);
 
     rc = scsi_probe_device(chan, target, lun, periph, &failed);
     printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",

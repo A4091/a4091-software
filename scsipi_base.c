@@ -257,6 +257,8 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
     xs->amiga_ior = NULL;
 
 #ifndef PORT_AMIGA
+    TAILQ_INSERT_TAIL(&periph->periph_xferq, xs, device_q);
+
     periph->periph_active++;
 #endif
     chan->chan_active++;
@@ -274,7 +276,9 @@ scsipi_put_xs(struct scsipi_xfer *xs)
     struct scsipi_periph  *periph = xs->xs_periph;
     struct scsipi_channel *chan = periph->periph_channel;
 
+#ifndef PORT_AMIGA
     TAILQ_REMOVE(&periph->periph_xferq, xs, device_q);
+#endif
 
 #ifndef PORT_AMIGA
     periph->periph_active--;
