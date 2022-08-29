@@ -85,7 +85,7 @@ struct PartitionBlock {
     uint32_t   pb_EReserved[12];
 };
 
-uint32_t _block[MAX_BLOCK_SIZE/4]; // shared storage for 1 block
+static uint32_t *_block; // shared storage for 1 block
 
 void find_partitions(struct Library *ExpansionBase, struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
 {
@@ -180,6 +180,12 @@ int parse_rdb(struct Library *ExpansionBase, struct ConfigDev* cd, struct Librar
     int i, j;
     struct IOStdReq ior;
 
+    _block = AllocMem(MAX_BLOCK_SIZE, MEMF_PUBLIC);
+    if (!_block) {
+        printf("RDB: Out of memory\n");
+	return 1;
+    }
+
     uint32_t *block=_block; // shared storage for 1 block
 
     printf("Looking for RDB!\n");
@@ -219,6 +225,6 @@ int parse_rdb(struct Library *ExpansionBase, struct ConfigDev* cd, struct Librar
         safe_close(&ior);
 	memset(&ior, 0, sizeof(ior));
     }
-
+    FreeMem(_block, MAX_BLOCK_SIZE);
     return 0;
 }
