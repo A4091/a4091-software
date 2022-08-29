@@ -52,8 +52,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <unistd.h>
-// #include "main.h"
-// #include "uart.h"
 
 /* Compatibility types */
 #define INTMAX_T      int64_t  // Signed largest integer
