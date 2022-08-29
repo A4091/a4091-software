@@ -38,6 +38,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG_PORT        # Debug port.c
 #CFLAGS  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
 #CFLAGS  += -DDEBUG_SCSICONF    # Debug scsiconf.c
+#CFLAGS  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
 #CFLAGS  += -DDEBUG_SD          # Debug sd.c
 #CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
 #CFLAGS  += -DDEBUG_RDB         # Debug rdb_partitions.c

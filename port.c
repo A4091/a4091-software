@@ -142,6 +142,35 @@ ticks_since_last(void)
 }
 #endif
 
+char *itoa(int value, char *string, int radix)
+{
+    int n,r,a,b = 0;
+    n = (value<0)?-value:value;
+    b = 0;
+    while (n)
+    {
+        r = n % radix;
+        if (r >= 10)
+            string[b++] = 'a' + (r - 10);
+        else
+            string[b++] = '0' + r;
+        n /= radix;
+    }
+    if (b == 0)
+        string[b++] = '0';
+    if (value < 0 && radix == 10)
+        string[b++] = '-';
+    string[b] = '\0';
+    a=0; b--;
+    while (a < b) {
+        char temp = string[a];
+        string[a] = string[b];
+        string[b] = temp;
+        a++;b--;
+    }
+    return string;
+}
+
 #if 0
 /* Return the index of the lowest set bit. (Counted from one) */
 int

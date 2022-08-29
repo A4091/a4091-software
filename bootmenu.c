@@ -3,8 +3,8 @@
 #endif
 
 #include "port.h"
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <exec/execbase.h>
 #include <exec/types.h>
@@ -313,6 +313,34 @@ static void about_page(void)
     page_footer();
 }
 
+#ifdef DEBUG_BOOTMENU
+static char *
+trim_spaces(char *str, size_t len)
+{
+    size_t olen = len;
+    char *ptr;
+
+    for (ptr = str; len > 0; ptr++, len--)
+        if (*ptr != ' ')
+            break;
+
+    if (len == 0) {
+        /* Completely empty name */
+        *str = '\0';
+        return (str);
+    } else {
+        memmove(str, ptr, len);
+
+        while ((len > 0) && (str[len - 1] == ' '))
+            len--;
+
+        if (len < olen)  /* Is there space for a NIL character? */
+            str[len] = '\0';
+        return (str);
+    }
+    return (str);
+}
+#endif
 static const char *
 devtype_str(uint dtype)
 {
@@ -326,6 +354,7 @@ devtype_str(uint dtype)
     return ("Unknown");
 }
 
+static char _itoabuf[12]; // MAXINT
 int scan_disks(void)
 {
     int i;
@@ -339,16 +368,16 @@ int scan_disks(void)
     printf("Looking for disks!\n");
 
     for (i=0; i<7; i++) { // FIXME LUNs?
-        x=72;
+	//unit=i;
+        x=52;
+	y=82+(cnt*10);
 	if (safe_open((struct IOStdReq *)&tio, i))
 	    continue;
 
 	scsi_inquiry_data_t *inq_res;
 	erc = do_scsi_inquiry(&tio, unit, &inq_res);
-
 	if (erc == 0) {
-	    y=82+(cnt*10);
-	    volatile char unit_str[]="0.0";
+	    char unit_str[]="0.0";
 	    unit_str[0]='0'+i;
             Move(rp,x,y);
 	    Text(rp, (char *)unit_str, 3);
@@ -365,10 +394,61 @@ int scan_disks(void)
 	    Move(rp,x,y);
 	    const char *dtype=devtype_str(inq_res->device & SID_TYPE);
 	    Text(rp,dtype,strlen(dtype));
-            cnt++;
+	    printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
+               sizeof (inq_res->vendor),
+               sizeof (inq_res->vendor),
+               trim_spaces(inq_res->vendor, sizeof (inq_res->vendor)),
+               sizeof (inq_res->product),
+               sizeof (inq_res->product),
+               trim_spaces(inq_res->product, sizeof (inq_res->product)),
+               sizeof (inq_res->revision),
+               sizeof (inq_res->revision),
+               trim_spaces(inq_res->revision, sizeof (inq_res->revision)),
+               devtype_str(inq_res->device & SID_TYPE));
+
+	    FreeMem(inq_res, sizeof (*inq_res));
 	}
+
+        scsi_read_capacity_10_data_t *cap10;
+        cap10 = do_scsi_read_capacity_10(&tio, unit);
+        if (cap10 != NULL) {
+            uint ssize = *(uint32_t *) &cap10->length;
+            uint cap   = (*(uint32_t *) &cap10->addr + 1) / 1000;
+            uint cap_c = 0;  // KMGTPEZY
+            if (cap > 100000) {
+                cap /= 1000;
+                cap_c++;
+            }
+            cap *= ssize;
+            while (cap > 9999) {
+                cap /= 1000;
+                cap_c++;
+            }
+            printf("%5u %5u %cB\n", ssize, cap, "KMGTPEZY"[cap_c]);
+
+            x+=76;
+            Move(rp,x,y);
+            if (ssize<1000)
+                Text(rp," ",1);
+            itoa(ssize,_itoabuf,10);
+            Text(rp,_itoabuf,strlen(_itoabuf));
+
+            x+=48;
+            Move(rp,x,y);
+            if(cap<1000)
+                Text(rp," ",1);
+            if(cap<100)
+                Text(rp," ",1);
+            itoa(cap,_itoabuf,10);
+            Text(rp,_itoabuf,strlen(_itoabuf));
+            const char caps[]="KMGTPEZY";
+            Text(rp,&caps[cap_c],1);
+            Text(rp,"B",1);
+            FreeMem(cap10, sizeof (*cap10));
+        }
+        cnt++;
         safe_close((struct IOStdReq *)&tio);
-	memset(&tio, 0, sizeof(tio));
+        memset(&tio, 0, sizeof(tio));
     }
 
     return 0;
@@ -376,17 +456,21 @@ int scan_disks(void)
 
 static const struct Rectangle disk_table[] =
 {
-    {60, 58,576,176},
-    {62, 59,111,71}, // Unit
-    {62, 72,111,175},
-    {112,59,207,71}, // Vendor
-    {112,72,207,175},
-    {208,59,383,71}, // Device
-    {208,72,383,175},
-    {384,59,433,71}, // Revision
-    {384,72,433,175},
-    {434,59,574,71},
-    {434,72,574,175}
+    {40, 58,560,118},
+    {42, 59,49,12}, // Unit
+    {42, 72,49,103},
+    {92,59,95,12}, // Vendor
+    {92,72,95,103},
+    {188,59,175,12}, // Device
+    {188,72,175,103},
+    {364,59,49,12}, // Revision
+    {364,72,49,103},
+    {414,59,71,12}, // Type
+    {414,72,71,103},
+    {486,59,47,12}, // ssize
+    {486,72,47,103},
+    {534,59,64,12}, // Cap
+    {534,72,64,103}
 };
 
 static void disks_page(void)
@@ -399,7 +483,7 @@ static void disks_page(void)
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
     SetAPen(&screen->RastPort,2);
-    Print("Unit  Vendor      Device                Rev.   Type ",72,68,FALSE);
+    Print("Unit  Vendor      Device                Rev.  Type     Blk   Size",52,68,FALSE);
     SetAPen(&screen->RastPort,1);
 
     ng.ng_LeftEdge   = 400;
@@ -410,20 +494,20 @@ static void disks_page(void)
     LastAdded = create_gadget(BUTTON_KIND);
 
     tag=GTBB_Recessed;
-    for (i = 0; i < 11; i++)
+    for (i = 0; i < 15; i++)
     {
         DrawBevelBox(&screen->RastPort,disk_table[i].MinX,disk_table[i].MinY,
-                                       disk_table[i].MaxX-disk_table[i].MinX+1,
-                                       disk_table[i].MaxY-disk_table[i].MinY+1,
+                                       disk_table[i].MaxX+1,
+                                       disk_table[i].MaxY+1,
                                        GT_VisualInfo,  visualInfo,
                                        tag,            TRUE,
                                        TAG_DONE);
         tag = TAG_IGNORE;
     }
 
-    scan_disks();
-
     page_footer();
+
+    scan_disks();
 }
 
 static void debug_page(void)

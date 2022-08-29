@@ -86,6 +86,7 @@ void *device_private(device_t dev);
      !defined(DEBUG_PORT)        && \
      !defined(DEBUG_SCSIPI_BASE) && \
      !defined(DEBUG_SCSICONF)    && \
+     !defined(DEBUG_SCSIMSG)     && \
      !defined(DEBUG_SD)          && \
      !defined(DEBUG_SIOP)        && \
      !defined(DEBUG_RDB)         && \

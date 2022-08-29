@@ -41,8 +41,15 @@ typedef struct scsi_generic {
     uint8_t bytes[15];
 } __packed scsi_generic_t;
 
+#define READ_CAPACITY_10        0x25
+typedef struct scsi_read_capacity_10_data {
+    uint8_t addr[4];
+    uint8_t length[4];
+} __packed scsi_read_capacity_10_data_t;
+
 uint16_t sdcmd_read_blocks(struct IOStdReq * ioreq, uint8_t* data, uint32_t block, uint32_t len);
 int do_scsi_inquiry(struct IOExtTD *tio, uint lun, scsi_inquiry_data_t **inq);
+scsi_read_capacity_10_data_t * do_scsi_read_capacity_10(struct IOExtTD *tio, uint lun);
 
 int safe_open(struct IOStdReq *ioreq, uint scsi_unit);
 void safe_close(struct IOStdReq *ioreq);

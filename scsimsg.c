@@ -1,3 +1,7 @@
+#ifdef DEBUG_SCSIMSG
+#define USE_SERIAL_OUTPUT
+#endif
+
 #include "port.h"
 #include "printf.h"
 #include <exec/types.h>
@@ -7,6 +11,7 @@
 #include <string.h>
 #include "cmdhandler.h"
 #include "scsipiconf.h"
+#include "scsipi_disk.h"
 #include "scsimsg.h"
 
 extern struct MsgPort *myPort;
@@ -87,6 +92,72 @@ int do_scsi_inquiry(struct IOExtTD *tio, uint lun, scsi_inquiry_data_t **inq)
     }
     *inq = res;
     return (rc);
+}
+
+static int
+do_scsidirect_cmd(struct IOExtTD *tio, scsi_generic_t *cmd, uint cmdlen,
+               void *res, uint reslen)
+{
+    struct SCSICmd scmd;
+    int rc;
+
+    memset(&scmd, 0, sizeof (scmd));
+    scmd.scsi_Data = (UWORD *) res;
+    scmd.scsi_Length = reslen;
+    // scmd.scsi_Actual = 0;
+    scmd.scsi_Command = (UBYTE *) cmd;
+    scmd.scsi_CmdLength = cmdlen;  // sizeof (cmd);
+    // scmd.scsi_CmdActual = 0;
+    scmd.scsi_Flags = SCSIF_READ | SCSIF_AUTOSENSE;
+    // scmd.scsi_Status = 0;
+    scmd.scsi_SenseData = sense_data;
+    scmd.scsi_SenseLength = sizeof (sense_data);
+    // scmd.scsi_SenseActual = 0;
+
+    tio->iotd_Req.io_Command = HD_SCSICMD;
+    tio->iotd_Req.io_Length  = sizeof (scmd);
+    tio->iotd_Req.io_Data    = &scmd;
+
+    tio->iotd_Req.io_Message.mn_ReplyPort=CreateMsgPort();
+
+    PutMsg(myPort, &tio->iotd_Req.io_Message);
+    WaitPort(tio->iotd_Req.io_Message.mn_ReplyPort);
+    DeleteMsgPort(tio->iotd_Req.io_Message.mn_ReplyPort);
+
+    rc = 0; // FIXME how do I get rc?
+
+    return (rc);
+}
+
+static void *
+do_scsidirect_alloc(struct IOExtTD *tio, scsi_generic_t *cmd, uint cmdlen,
+                    uint reslen)
+{
+    void *res = AllocMem(reslen, MEMF_PUBLIC | MEMF_CLEAR);
+    if (res == NULL) {
+        printf("AllocMem ");
+    } else {
+	printf("do_scsidirect_alloc\n");
+        if (do_scsidirect_cmd(tio, cmd, cmdlen, res, reslen)) {
+            FreeMem(res, reslen);
+            res = NULL;
+        }
+    }
+    printf("do_scsidirect_alloc %p\n", res);
+    return (res);
+}
+
+scsi_read_capacity_10_data_t *
+do_scsi_read_capacity_10(struct IOExtTD *tio, uint lun)
+{
+    scsi_generic_t cmd;
+
+    memset(&cmd, 0, sizeof (cmd));
+    cmd.opcode = READ_CAPACITY_10;
+    cmd.bytes[0] = lun << 5;
+
+    return (do_scsidirect_alloc(tio, &cmd, 10,
+                                sizeof (scsi_read_capacity_10_data_t)));
 }
 
 int safe_open(struct IOStdReq *ioreq, uint scsi_unit)
