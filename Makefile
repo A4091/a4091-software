@@ -87,6 +87,11 @@ endif
 SC_ASM	:= $(OBJDIR)/ncr53cxxx
 SIOP_SCRIPT := $(OBJDIR)/siop_script.out
 
+red=\033[1;31m
+green=\033[1;32m
+yellow=\033[1;33m
+end=\033[0m
+
 ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
@@ -124,6 +129,7 @@ $(PROG): $(OBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(OBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
+	@printf "${yellow}$@ is $(shell echo `wc -c < "$@"`) bytes${end}\n"
 
 $(PROGU): $(OBJSU)
 	@echo Building $@
@@ -167,7 +173,7 @@ test: reloctest
 a4091.rom: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
-	$(QUIET)test `wc -c <$<` -gt 32768 && echo "\033[0;31mROM FILE EXCEEDS 32K!\033[0m" || echo "\033[0;32mROM fits in 32k\033[0m"
+	$(QUIET)test `wc -c <$<` -gt 32768 && printf "${red}ROM FILE EXCEEDS 32K!${end}\n" || printf "${green}ROM fits in 32k${end}\n"
 
 $(OBJDIR):
 	mkdir -p $@
