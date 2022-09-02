@@ -47,8 +47,6 @@ typedef struct device *device_t;
 
 #define BIT(x)        (1 << (x))
 
-// extern struct ExecBase *SysBase;
-
 extern a4091_save_t *asave;
 
 #define DEVNAME "a4091.device"

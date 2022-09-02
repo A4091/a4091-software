@@ -21,11 +21,8 @@
 #include <exec/lists.h>
 #include <dos/dostags.h>
 #include <devices/scsidisk.h>
-// #include <inline/exec.h>
-// #include <inline/dos.h>
 
 #include "device.h"
-
 #include "scsi_all.h"
 #include "scsipiconf.h"
 #include "sd.h"
@@ -34,7 +31,6 @@
 #include "siopvar.h"
 #include "attach.h"
 #include "cmdhandler.h"
-#include "device.h"
 #include "nsd.h"
 #include "ndkcompat.h"
 
