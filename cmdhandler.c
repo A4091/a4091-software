@@ -36,6 +36,7 @@
 #include "cmdhandler.h"
 #include "device.h"
 #include "nsd.h"
+#include "ndkcompat.h"
 
 #ifdef DEBUG_CMD
 #define PRINTF_CMD(args...) printf(args)
@@ -193,7 +194,7 @@ cmd_do_iorequest(struct IORequest * ior)
     switch (ior->io_Command) {
         case ETD_READ:
         case CMD_READ:
-            PRINTF_CMD("CMD_READ %lx %lx\n",
+            PRINTF_CMD("CMD_READ %"PRIx32" %"PRIx32"\n",
                        iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
@@ -218,7 +219,7 @@ io_done:
         case CMD_WRITE:
         case ETD_FORMAT:
         case TD_FORMAT:
-            PRINTF_CMD("CMD_WRITE %lx %lx\n",
+            PRINTF_CMD("CMD_WRITE %"PRIx32" %"PRIx32"\n",
                        iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
@@ -250,7 +251,7 @@ CMD_WRITE_continue:
         case NSCMD_TD_READ64:
             printf("NSCMD_");
         case TD_READ64:
-            printf("TD64_READ %lx:%lx %lx\n", iotd->iotd_Req.io_Actual,
+            printf("TD64_READ %"PRIx32":%"PRIx32" %"PRIx32"\n", iotd->iotd_Req.io_Actual,
                    iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
@@ -264,7 +265,7 @@ CMD_WRITE_continue:
             printf("NSCMD_");
         case TD_FORMAT64:
         case TD_WRITE64:
-            printf("TD64_WRITE %lx:%lx %lx\n", iotd->iotd_Req.io_Actual,
+            printf("TD64_WRITE %"PRIx32":%"PRIx32" %"PRIx32"\n", iotd->iotd_Req.io_Actual,
                    iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
@@ -354,7 +355,7 @@ CMD_SEEK_continue:
             break;
 
         case CMD_ATTACH:  // Attach (open) a new SCSI device
-            PRINTF_CMD("CMD_ATTACH %lu\n", iotd->iotd_Req.io_Offset);
+            PRINTF_CMD("CMD_ATTACH %"PRIu32"\n", iotd->iotd_Req.io_Offset);
             rc = attach(&asave->as_device_self, iotd->iotd_Req.io_Offset,
                         (struct scsipi_periph **) &ior->io_Unit);
             if (rc != 0) {

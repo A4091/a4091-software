@@ -21,6 +21,7 @@
 #include "device.h"
 #include "attach.h"
 #include "cmdhandler.h"
+#include "ndkcompat.h"
 
 #ifndef	SDRETRIES
 #define	SDRETRIES 2
@@ -540,7 +541,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
         if (geom->dg_TotalSectors == 0)
             geom->dg_TotalSectors = geom->dg_TrackSectors * geom->dg_Heads *
                                     geom->dg_Cylinders;
-        printf("final bs=%lu C=%lu H=%lu S=%lu Capacity=%lu\n",
+        printf("final bs=%"PRIu32" C=%"PRIu32" H=%"PRIu32" S=%"PRIu32" Capacity=%"PRIu32"\n",
                geom->dg_SectorSize, geom->dg_Cylinders, geom->dg_Heads,
                geom->dg_TrackSectors, geom->dg_TotalSectors);
     } else if (xs->cmdstore.bytes[0] == SMS_DBD) {
@@ -573,7 +574,7 @@ geom_done_mode_page_4(struct scsipi_xfer *xs)
         if (geom->dg_TotalSectors == 0)
             geom->dg_TotalSectors = geom->dg_TrackSectors * geom->dg_Heads *
                                     geom->dg_Cylinders;
-        printf("mode4 bs=%lu C=%lu H=%lu S=%lu Capacity=%lu\n",
+        printf("mode4 bs=%"PRIu32" C=%"PRIu32" H=%"PRIu32" S=%"PRIu32" Capacity=%"PRIu32"\n",
                geom->dg_SectorSize, geom->dg_Cylinders, geom->dg_Heads,
                geom->dg_TrackSectors, geom->dg_TotalSectors);
     } else if (xs->cmdstore.bytes[0] == SMS_DBD) {
@@ -609,7 +610,7 @@ geom_done_mode_page_3(struct scsipi_xfer *xs)
 
         geom->dg_Flags |= (flags & DISK_FMT_RMB) ? DGF_REMOVABLE : 0;
         geom->dg_TrackSectors = _2btol(modepage->pg.disk_format.ph_sec_t);
-        printf("mode_page_3 drive_type=%u ts=%lu blksize=%u\n",
+        printf("mode_page_3 drive_type=%u ts=%"PRIu32" blksize=%u\n",
                flags, geom->dg_TrackSectors, blksize);
     } else if (xs->cmdstore.bytes[0] == SMS_DBD) {
         /* Failed to get page. If DBD was on, try again with DBD off */
@@ -660,7 +661,7 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
             periph->periph_blkshift = calc_blkshift(blksize);
         }
 #if 0
-        printf("TotalSectors=%lu C=%lu H=%lu S=%lu %p\n", geom->dg_TotalSectors,
+        printf("TotalSectors=%"PRIu32" C=%"PRIu32" H=%"PRIu32" S=%"PRIu32" %p\n", geom->dg_TotalSectors,
                geom->dg_Cylinders, geom->dg_Heads, geom->dg_TrackSectors, xs);
 #endif
         cmd_complete(xs->amiga_ior, 0);
@@ -735,7 +736,7 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     struct scsipi_generic *cmdp;
     struct SCSICmd *scmd = scmd_p;
 #if 0
-    printf("scsidirect dlen=%lu clen=%u slen=%u flags=%x [",
+    printf("scsidirect dlen=%"PRIu32" clen=%u slen=%u flags=%x [",
            scmd->scsi_Length, scmd->scsi_CmdLength, scmd->scsi_SenseLength,
            scmd->scsi_Flags);
 

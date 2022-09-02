@@ -40,6 +40,7 @@ typedef struct device *device_t;
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
+#include "ndkcompat.h"
 
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile uint32_t *)(x)
@@ -230,8 +231,8 @@ decode_io_command(int indent_count, struct IOStdReq *ior)
             if (sc == NULL)
                 return;
             printf("%sscsi_Data=%p\n", indent, sc->scsi_Data);
-            printf("%sscsi_Length=%08lx\n", indent, sc->scsi_Length);
-            printf("%sscsi_Actual=%08lx\n", indent, sc->scsi_Actual);
+            printf("%sscsi_Length=%08"PRIx32"\n", indent, sc->scsi_Length);
+            printf("%sscsi_Actual=%08"PRIx32"\n", indent, sc->scsi_Actual);
             printf("%sscsi_Command=%p\n", indent, sc->scsi_Command);
             if (sc->scsi_CmdLength > 0) {
                 decode_scsi_command(indent, (uint8_t *)sc->scsi_Command,
