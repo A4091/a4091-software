@@ -3,7 +3,6 @@
 #endif
 #include "port.h"
 #include "printf.h"
-// // // // // // // // // #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
@@ -22,8 +21,6 @@
 #include <exec/lists.h>
 #include <dos/dostags.h>
 #include <devices/scsidisk.h>
-// #include <inline/exec.h>
-// #include <inline/dos.h>
 
 #include "device.h"
 
@@ -436,9 +433,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
     memset(sc, 0, sizeof (*sc));
     dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
-#ifdef DEBUG_ATTACH
     printf("DIP switches = %02x\n", dip_switches);
-#endif
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
@@ -563,9 +558,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     *periph_p = periph;
     if (periph == NULL)
         return (ERROR_NO_MEMORY);
-#ifdef DEBUG_ATTACH
     printf("attach(%p, %d)\n", periph, scsi_target);
-#endif
     periph->periph_openings = 4;  // Max # of outstanding commands
     periph->periph_target   = scsi_target % 10;         // SCSI target ID
     periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
@@ -593,9 +586,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
 void
 detach(struct scsipi_periph *periph)
 {
-#ifdef DEBUG_ATTACH
     printf("detach(%p)\n", periph);
-#endif
 
     if (periph != NULL) {
         struct scsipi_channel *chan = periph->periph_channel;
