@@ -30,14 +30,13 @@
 #define STR(s) #s      // Turn s into a string literal without macro expansion
 #define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
 
-#define DRIVER      "a4091"
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
 #define MANUF_ID        514 // Commodore West Chester
 #define PRODUCT_ID       84 // A4091
 
-#define DEVICE_NAME DRIVER".device"
-#define DEVICE_ID_STRING DRIVER " " XSTR(DEVICE_VERSION) "." \
+#define DEVICE_NAME "a4091.device"
+#define DEVICE_ID_STRING "a4091 " XSTR(DEVICE_VERSION) "." \
         XSTR(DEVICE_REVISION) " (" BUILD_DATE ")"
         /* format: "name version.revision (yyyy-mm-dd)" */
 
