@@ -49,12 +49,12 @@ typedef struct device *device_t;
 
 extern a4091_save_t *asave;
 
-#define DEVNAME "a4091.device"
+#define DEVICE_NAME "a4091.device"
 
 static void
 usage(void)
 {
-    printf("This tool is used to show a4091.device driver internal state.\n"
+    printf("This tool is used to show " DEVICE_NAME " driver internal state.\n"
            "It does not work on any other driver.\n"
            "Usage:  a4091d [<unit>]\n"
            "        a4091d -x <xs address>\n");
@@ -1281,7 +1281,7 @@ main(int argc, char *argv[])
     struct MsgPort     *mp;
     struct IOStdReq    *ior;
     struct scsipi_xfer *xs = NULL;
-    char               *devname = DEVNAME;
+    char   *devname = DEVICE_NAME;
 
     for (arg = 1; arg < argc; arg++) {
         char *ptr = argv[arg];
