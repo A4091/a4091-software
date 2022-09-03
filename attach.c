@@ -14,6 +14,7 @@
 #include <inline/expansion.h>
 #include <exec/io.h>
 #include <proto/dos.h>
+#include <proto/expansion.h>
 #include <exec/memory.h>
 #include <exec/interrupts.h>
 #include <exec/execbase.h>
@@ -140,8 +141,6 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 
 #define BIT(x)        (1 << (x))
 
-static const char * const expansion_library_name = "expansion.library";
-
 extern struct ExecBase *SysBase;
 
 extern a4091_save_t *asave;
@@ -265,13 +264,12 @@ a4091_remove_local_irq_handler(void)
 static uint32_t
 a4091_find(UBYTE *boardnum)
 {
-    struct Library   *ExpansionBase;
     struct ConfigDev *cdev  = NULL;
     uint32_t          as_addr  = 0;  /* Default to not found */
     int               count = 0;
 
-    if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
-        printf("Could not open %s\n", expansion_library_name);
+    if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library", 0)) == 0) {
+        printf("Could not open expansion.library\n");
         return (0);
     }
 
@@ -315,7 +313,7 @@ a4091_find(UBYTE *boardnum)
 }
 #endif
 
-    CloseLibrary(ExpansionBase);
+    CloseLibrary((struct Library *)ExpansionBase);
 
     return (as_addr);
 }
@@ -326,8 +324,8 @@ a4091_release(uint32_t as_addr)
     struct Library   *ExpansionBase;
     struct ConfigDev *cdev  = NULL;
 
-    if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
-        printf("Could not open %s\n", expansion_library_name);
+    if ((ExpansionBase = OpenLibrary("expansion.library", 0)) == 0) {
+        printf("Could not open expansion.library\n");
         return;
     }
 

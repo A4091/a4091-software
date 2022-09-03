@@ -15,6 +15,7 @@
 #include "cmdhandler.h"
 #include "scsipiconf.h"
 #include "scsimsg.h"
+#include "rdb_partitions.h"
 
 // Based on https://github.com/captain-amygdala/pistorm/blob/main/platforms/amiga/piscsi/piscsi.h
 
@@ -87,7 +88,7 @@ struct PartitionBlock {
 
 static uint32_t *_block; // shared storage for 1 block
 
-void find_partitions(struct Library *ExpansionBase, struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
+void find_partitions(struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
 {
     int cur_partition = 0;
     uint8_t tmp;
@@ -175,7 +176,7 @@ next_partition:
     return;
 }
 
-int parse_rdb(struct Library *ExpansionBase, struct ConfigDev* cd, struct Library *dev)
+int parse_rdb(struct ConfigDev* cd, struct Library *dev)
 {
     int i, j;
     struct IOStdReq ior;
@@ -217,7 +218,7 @@ int parse_rdb(struct Library *ExpansionBase, struct ConfigDev* cd, struct Librar
             printf("\n PartitionList:\t%x\n", (uint32_t)rdb->rdb_PartitionList);
 #endif
 
-            find_partitions(ExpansionBase, cd, rdb, &ior, i);
+            find_partitions(cd, rdb, &ior, i);
 	} else {
             printf("RDB not found!\n");
 	}

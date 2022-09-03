@@ -41,6 +41,7 @@
         /* format: "name version.revision (yyyy-mm-dd)" */
 
 struct ExecBase *SysBase;
+struct ExpansionBase *ExpansionBase;
 struct MsgPort *myPort;
 
 BPTR saved_seg_list;
@@ -114,10 +115,9 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
     struct Library *DOSBase;
-    struct Library *ExpansionBase;
     struct ConfigDev *cd = NULL;
 
-    if (!(ExpansionBase = (struct Library*)OpenLibrary((uint8_t*)"expansion.library",0L))) {
+    if (!(ExpansionBase = (struct ExpansionBase *)OpenLibrary((uint8_t*)"expansion.library",0L))) {
         return NULL;
     }
 
@@ -129,7 +129,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 #ifdef DEBUG
         printf("a4091.device didn't find A4091!\n");
 #endif
-        CloseLibrary(ExpansionBase);
+        CloseLibrary((struct Library *)ExpansionBase);
         return NULL;
     }
 
@@ -154,13 +154,13 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         printf("Start handler failed\n");
         dev->lib_OpenCnt--;
         ReleaseSemaphore(&entry_sem);
-        CloseLibrary(ExpansionBase);
+        CloseLibrary((struct Library *)ExpansionBase);
         return (NULL);
     }
 
     DOSBase = OpenLibrary("dos.library", 37L);
     if (DOSBase == NULL) {
-        parse_rdb(ExpansionBase, cd, dev);
+        parse_rdb(cd, dev);
         boot_menu();
     } else {
         CloseLibrary(DOSBase);
@@ -169,7 +169,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);
 
-    CloseLibrary(ExpansionBase);
+    CloseLibrary((struct Library *)ExpansionBase);
 
     return (dev);
 }
