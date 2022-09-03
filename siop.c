@@ -132,7 +132,9 @@ void siop_poll(struct siop_softc *, struct siop_acb *);
 void siopintr(struct siop_softc *);
 void scsi_period_to_siop(struct siop_softc *, int);
 void siop_start(struct siop_softc *, int, int, u_char *, int, u_char *, int);
+#ifdef DEBUG_SIOP
 void siop_dump_acb(struct siop_acb *);
+#endif
 
 /* 53C710 script */
 const
@@ -1999,6 +2001,7 @@ siop_dump_trace(void)
 }
 #endif
 
+#ifdef DEBUG_SIOP
 void
 siop_dump_acb(struct siop_acb *acb)
 {
@@ -2071,4 +2074,5 @@ siop_dump(struct siop_softc *sc)
     }
     bsd_splx(s);
 }
+#endif
 #endif
