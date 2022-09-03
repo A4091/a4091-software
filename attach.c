@@ -34,6 +34,7 @@
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
+#include "ndkcompat.h"
 
 void scsipi_free_all_xs(struct scsipi_channel *chan);
 
@@ -306,7 +307,7 @@ a4091_find(UBYTE *boardnum)
     ULONG res;
     struct CurrentBinding cb;
     res = GetCurrentBinding(&cb, sizeof (cb));
-    printf("gcb=%lu fn='%s' ps='%s'\n", res, (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
+    printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res, (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
     if (cb.cb_ConfigDev != NULL) {
         struct ConfigDev *cd = cb.cb_ConfigDev;
         do {
