@@ -25,8 +25,10 @@
 #define PRINTF_CALLOUT(args...)
 #endif
 
+#if 0
 /* Not sure this even works for a driver */
 ulong __stack_size = 32768;
+#endif
 
 void
 panic(const char *s)
@@ -34,6 +36,7 @@ panic(const char *s)
     printf("PANIC: %s", s);
 }
 
+#if 0
 /*
  * I don't know what is dragging this junk in from libc, but stubbing
  * them here reduces the object size by ~12k
@@ -44,6 +47,7 @@ const struct __sFILE_fake __sf_fake_stdout =
     {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
 const struct __sFILE_fake __sf_fake_stderr =
     {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
+#endif
 
 extern a4091_save_t *asave;
 
