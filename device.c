@@ -88,7 +88,7 @@ asm("romtag:                                \n"
 const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
 struct SignalSemaphore entry_sem;
-
+int romboot = FALSE;
 extern a4091_save_t *asave;
 
 /*
@@ -117,7 +117,11 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
-    struct Library *DOSBase;
+    struct Library *DOSBase = OpenLibrary("dos.library",0);
+    if (DOSBase == NULL)
+        romboot = TRUE;
+    else
+        CloseLibrary(DOSBase);
 
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
@@ -144,16 +148,9 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         return (NULL);
     }
 
-    DOSBase = OpenLibrary("dos.library",0);
-    if (DOSBase == NULL) {
-        struct ConfigDev *cd = asave->as_cd;
-        if (cd == NULL)
-            return NULL;
-
-        parse_rdb(cd, dev);
+    if (romboot) {
+        parse_rdb(asave->as_cd, dev);
         boot_menu();
-    } else {
-        CloseLibrary(DOSBase);
     }
 
     dev->lib_OpenCnt--;

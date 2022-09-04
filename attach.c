@@ -143,6 +143,7 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 
 extern struct ExecBase *SysBase;
 extern a4091_save_t *asave;
+extern int romboot;
 struct ExpansionBase *ExpansionBase;
 
 /*
@@ -271,45 +272,47 @@ a4091_find(UBYTE *boardnum)
         return (0);
     }
 
-    do {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if ((cdev != NULL) && (cdev->cd_Flags & CDB_CONFIGME)) {
-            cdev->cd_Flags &= ~CDB_CONFIGME;
+    if (romboot){
+        /*
+         * ROM code needs to be using GetCurrentBinding() rather
+         * than FindConfigDev() to get the current board.
+         */
+        ULONG res;
+        struct CurrentBinding cb;
+        res = GetCurrentBinding(&cb, sizeof (cb));
+        printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res,
+		(char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
+        if (cb.cb_ConfigDev != NULL) {
+            struct ConfigDev *cd = cb.cb_ConfigDev;
+	    cdev = cd;
             as_addr = (uint32_t) (cdev->cd_BoardAddr);
-            *boardnum = count;
-            break;
+            do {
+                printf("configdev %p board=%08x flags=%02x configme=%x driver=%p\n",
+			cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
+                cd = cd->cd_NextCD;
+            } while (cd != NULL);
         }
-        count++;
-    } while (cdev != NULL);
-
-    if (cdev == NULL) {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if (cdev != NULL) {
-            /* Just take the first board found */
-            as_addr = (uint32_t) (cdev->cd_BoardAddr);
-            *boardnum = 0;
-        }
-    }
-
-#if 0
-    /*
-     * XXX: ROM code probably needs to be using GetCurrentBinding()
-     *      rather than FindConfigDev() to get the current board.
-     */
-{
-    ULONG res;
-    struct CurrentBinding cb;
-    res = GetCurrentBinding(&cb, sizeof (cb));
-    printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res, (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
-    if (cb.cb_ConfigDev != NULL) {
-        struct ConfigDev *cd = cb.cb_ConfigDev;
+    } else {
         do {
-            printf("configdev %p board=%08x flags=%02x configme=%x driver=%p\n", cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
-            cd = cd->cd_NextCD;
-        } while (cd != NULL);
+            cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+            if ((cdev != NULL) && (cdev->cd_Flags & CDB_CONFIGME)) {
+                cdev->cd_Flags &= ~CDB_CONFIGME;
+                as_addr = (uint32_t) (cdev->cd_BoardAddr);
+                *boardnum = count;
+                break;
+            }
+            count++;
+        } while (cdev != NULL);
+
+        if (cdev == NULL) {
+            cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+            if (cdev != NULL) {
+                /* Just take the first board found */
+                as_addr = (uint32_t) (cdev->cd_BoardAddr);
+                *boardnum = 0;
+            }
+        }
     }
-}
-#endif
 
     CloseLibrary((struct Library *)ExpansionBase);
 
@@ -406,11 +409,11 @@ init_chan(device_t self, UBYTE *boardnum)
 
     dev_base = a4091_find(boardnum);
     if (dev_base == 0) {
-        printf("A4091 #%u not found\n", *boardnum);
+        printf("A4091: board #%u not found\n",*boardnum);
         return (ERROR_NO_BOARD);
     }
 
-    printf("A4091 %u found at %x\n", *boardnum, dev_base);
+    printf("A4091: board #%u found at 0x%x\n", *boardnum, dev_base);
     if ((rc = a4091_validate(dev_base)))
         return (rc);
 
