@@ -142,9 +142,8 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 #define BIT(x)        (1 << (x))
 
 extern struct ExecBase *SysBase;
-
 extern a4091_save_t *asave;
-
+struct ExpansionBase *ExpansionBase;
 
 /*
  * irq_handler_core
@@ -215,7 +214,6 @@ a4091_add_local_irq_handler(uint32_t dev_base)
     if (task == NULL)
         return (ERROR_OPEN_FAIL);
 
-    asave->as_addr           = dev_base;
     asave->as_SysBase        = SysBase;
     asave->as_svc_task       = task;
     asave->as_irq_count      = 0;
@@ -269,7 +267,7 @@ a4091_find(UBYTE *boardnum)
     int               count = 0;
 
     if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library", 0)) == 0) {
-        printf("Could not open expansion.library\n");
+        printf("Can't open expansion.library.\n");
         return (0);
     }
 
@@ -315,29 +313,18 @@ a4091_find(UBYTE *boardnum)
 
     CloseLibrary((struct Library *)ExpansionBase);
 
+    asave->as_addr = as_addr;
+    asave->as_cd = cdev;
+
     return (as_addr);
 }
 
 static void
 a4091_release(uint32_t as_addr)
 {
-    struct Library   *ExpansionBase;
-    struct ConfigDev *cdev  = NULL;
-
-    if ((ExpansionBase = OpenLibrary("expansion.library", 0)) == 0) {
-        printf("Could not open expansion.library\n");
-        return;
-    }
-
-    do {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if ((cdev != NULL) && ((uint32_t) cdev->cd_BoardAddr == as_addr)) {
-            cdev->cd_Flags |= CDB_CONFIGME;
-            break;
-        }
-    } while (cdev != NULL);
-
-    CloseLibrary(ExpansionBase);
+    if (asave->as_addr != as_addr)
+        printf("Releasing wrong card.\n");
+    asave->as_cd->cd_Flags |= CDB_CONFIGME;
 }
 
 int
@@ -419,7 +406,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
     dev_base = a4091_find(boardnum);
     if (dev_base == 0) {
-        printf("A4091 %u not found\n", *boardnum);
+        printf("A4091 #%u not found\n", *boardnum);
         return (ERROR_NO_BOARD);
     }
 

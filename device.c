@@ -22,6 +22,11 @@
 #include "version.h"
 #include "rdb_partitions.h"
 #include "bootmenu.h"
+#include "sys_queue.h"
+#include "scsipiconf.h"
+#include "siopreg.h"
+#include "siopvar.h"
+#include "attach.h"
 
 #ifdef DEBUG
 #include <clib/debug_protos.h>
@@ -32,16 +37,12 @@
 
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
-#define MANUF_ID        514 // Commodore West Chester
-#define PRODUCT_ID       84 // A4091
-
 #define DEVICE_NAME "a4091.device"
 #define DEVICE_ID_STRING "a4091 " XSTR(DEVICE_VERSION) "." \
         XSTR(DEVICE_REVISION) " (" BUILD_DATE ")"
         /* format: "name version.revision (yyyy-mm-dd)" */
 
 struct ExecBase *SysBase;
-struct ExpansionBase *ExpansionBase;
 struct MsgPort *myPort;
 
 BPTR saved_seg_list;
@@ -88,6 +89,8 @@ const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
 struct SignalSemaphore entry_sem;
 
+extern a4091_save_t *asave;
+
 /*
  * ------- init_device ---------------------------------------
  * FOR RTF_AUTOINIT:
@@ -115,23 +118,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
     struct Library *DOSBase;
-    struct ConfigDev *cd = NULL;
-
-    if (!(ExpansionBase = (struct ExpansionBase *)OpenLibrary((uint8_t*)"expansion.library",0L))) {
-        return NULL;
-    }
-
-    if (cd = (struct ConfigDev*)FindConfigDev(cd,MANUF_ID,PRODUCT_ID)) {
-#ifdef DEBUG
-        printf("a4091.device found A4091 at %p.\n", cd->cd_BoardAddr);
-#endif
-    } else {
-#ifdef DEBUG
-        printf("a4091.device didn't find A4091!\n");
-#endif
-        CloseLibrary((struct Library *)ExpansionBase);
-        return NULL;
-    }
 
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
@@ -146,7 +132,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     /* Start thread to manage board and process commands */
     InitSemaphore(&entry_sem);
     ObtainSemaphore(&entry_sem);
-    printf("A4091 driver %s %s\n", device_name, device_id_string);
+    printf("A4091: %s %s\n", device_name, device_id_string);
     dev->lib_OpenCnt++;
 
     int board_num = 0;
@@ -158,8 +144,12 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         return (NULL);
     }
 
-    DOSBase = OpenLibrary("dos.library", 37L);
+    DOSBase = OpenLibrary("dos.library",0);
     if (DOSBase == NULL) {
+        struct ConfigDev *cd = asave->as_cd;
+        if (cd == NULL)
+            return NULL;
+
         parse_rdb(cd, dev);
         boot_menu();
     } else {
@@ -168,8 +158,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 
     dev->lib_OpenCnt--;
     ReleaseSemaphore(&entry_sem);
-
-    CloseLibrary((struct Library *)ExpansionBase);
 
     return (dev);
 }
