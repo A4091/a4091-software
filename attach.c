@@ -283,6 +283,8 @@ a4091_find(UBYTE *boardnum)
         res = GetCurrentBinding(&cb, sizeof (cb));
         printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res,
 		(char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
+        if (!res)
+            return (0);
         if (cb.cb_ConfigDev != NULL) {
             struct ConfigDev *cd = cb.cb_ConfigDev;
 	    cdev = cd;
