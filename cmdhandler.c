@@ -43,6 +43,7 @@
 #define BIT(x)        (1 << (x))
 
 extern struct ExecBase *SysBase;
+extern char real_device_name[];
 
 a4091_save_t *asave = NULL;
 
@@ -544,7 +545,7 @@ start_cmd_handler(uint *boardnum)
     InitSemaphore(&msg.started);
     ObtainSemaphore(&msg.started);
 
-    task = CreateTask("a4091.device", 0, cmd_handler, 8192);
+    task = CreateTask(real_device_name, 0, cmd_handler, 8192); // a4091.device
     if (task == NULL) {
         return (1);
     }

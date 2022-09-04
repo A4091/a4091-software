@@ -144,6 +144,7 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 extern struct ExecBase *SysBase;
 extern a4091_save_t *asave;
 extern int romboot;
+extern char real_device_name[];
 struct ExpansionBase *ExpansionBase;
 
 /*
@@ -228,7 +229,7 @@ a4091_add_local_irq_handler(uint32_t dev_base)
 
     asave->as_isr->is_Node.ln_Type = NT_INTERRUPT;
     asave->as_isr->is_Node.ln_Pri  = A4091_INTPRI;
-    asave->as_isr->is_Node.ln_Name = "a4091.device";
+    asave->as_isr->is_Node.ln_Name = real_device_name; // a4091.device
     asave->as_isr->is_Data         = asave;
     asave->as_isr->is_Code         = (void (*)()) irq_handler;
 

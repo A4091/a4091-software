@@ -16,6 +16,7 @@
 #include <utility/tagitem.h>
 #include <clib/alib_protos.h>
 #include <devices/scsidisk.h>
+#include <string.h>
 
 #include "device.h"
 #include "cmdhandler.h"
@@ -87,9 +88,37 @@ asm("romtag:                                \n"
 
 const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
+char real_device_name[17] = DEVICE_NAME;
 struct SignalSemaphore entry_sem;
 int romboot = FALSE;
 extern a4091_save_t *asave;
+
+static char *get_device_name(void)
+{
+    char *name = real_device_name;
+    for (int i=0; i<8; i++) {
+	if (i) {
+	    name[0]='0'+i+1;
+	    if (i==1)         name[1]='n';
+	    else if (i==2)    name[1]='r';
+	    else              name[1]='t';
+	    if (i==1 || i==2) name[2]='d';
+	    else              name[2]='h';
+	    name[3]='.';
+	    name[4]=0;
+	} else
+            name[0]=0;
+	strcat(name, device_name);
+
+#ifdef TEST_2ND_DEVICE
+	if (i==1)
+#else
+	if (FindName(&SysBase->DeviceList, name)==NULL)
+#endif
+	    break;
+    }
+    return name;
+}
 
 /*
  * ------- init_device ---------------------------------------
@@ -126,8 +155,9 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
 
+    get_device_name();
     dev->lib_Node.ln_Type = NT_DEVICE;
-    dev->lib_Node.ln_Name = (char *) device_name;
+    dev->lib_Node.ln_Name = real_device_name;
     dev->lib_Flags = LIBF_SUMUSED | LIBF_CHANGED;
     dev->lib_Version = DEVICE_VERSION;
     dev->lib_Revision = DEVICE_REVISION;

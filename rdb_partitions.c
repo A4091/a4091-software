@@ -87,6 +87,7 @@ struct PartitionBlock {
 };
 
 static uint32_t *_block; // shared storage for 1 block
+extern char real_device_name[];
 
 void find_partitions(struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
 {
@@ -125,7 +126,7 @@ next_partition:
     printf(" Part %2d: %s ", cur_partition, (char*)pb->pb_DriveName + 1);
 #endif
 
-    char execName[] = "a4091.device";
+    char *execName = real_device_name;
     char* dosName = pb->pb_DriveName + 1;
 
     ULONG parmPkt[] = {
