@@ -181,7 +181,7 @@ $(OBJDIR):
 
 clean:
 	@echo Cleaning
-	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
 
 distclean: clean
