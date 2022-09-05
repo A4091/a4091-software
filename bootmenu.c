@@ -531,7 +531,7 @@ static void debug_page(void)
 
 struct drawing {
     BYTE type, pen; // 1: rectangle filled 2: rectangle empty -1: end
-    USHORT x, y, w, h;
+    SHORT x, y, w, h;
 };
 
 static const struct drawing card[] = {
@@ -585,27 +585,24 @@ static void draw_card(const struct drawing c[], int length)
 
     for (i=0; i<length; i++) {
         struct drawing d = c[i];
-        switch (d.type) {
+        UBYTE type=d.type, pen=d.pen;
+        SHORT x1=x+d.x, y1=y+d.y/2, x2=x+d.x+d.w, y2=y+d.y/2+d.h/2;
+        SetAPen(rp, pen);
+        switch (type) {
         case 1:
-            SetAPen(rp, d.pen);
-            RectFill(rp, x + d.x,
-                     y + d.y/2,
-                     x + d.x + d.w,
-                     y + d.y/2 + d.h/2
-            );
+            RectFill(rp, x1, y1, x2, y2);
             break;
         case 2:
-            SetAPen(rp, d.pen);
-            Move(rp, x + d.x, y + d.y/2);
-            Draw(rp, x + d.x + d.w, y + d.y/2);
-            Draw(rp, x + d.x + d.w, y + d.y/2 + d.h/2);
-            Draw(rp, x + d.x, y + d.y/2 + d.h/2);
-            Draw(rp, x + d.x, y + d.y/2);
+            Move(rp, x1, y1);
+            Draw(rp, x2, y1);
+            Draw(rp, x2, y2);
+            Draw(rp, x1, y2);
+            Draw(rp, x1, y1);
             break;
         case 3:
             SetAPen(rp, 2);
-            for(j=d.x; j<(d.x + d.w); j+=4) {
-                RectFill(rp, x+j, y + d.y/2, x+j+1, y + d.y/2 + d.h/2);
+            for(j=x1; j<x2; j+=4) {
+                RectFill(rp, j, y1, j+1, y2);
             }
         }
     }
