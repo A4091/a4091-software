@@ -374,7 +374,6 @@ decode_autoconfig(void)
         printf(" SizeExt");
     printf(" %s\n", config_subsizes[value & 0x0f]);
 
-
     if (autoconfig_reserved(0x0c))
         rc = 1;
 

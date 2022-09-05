@@ -34,7 +34,7 @@
 #include "attach.h"
 #include "scsimsg.h"
 
-struct ExecBase *SysBase;
+extern struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *IntuitionBase;

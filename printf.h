@@ -163,36 +163,6 @@ int printf(const char *fmt, ...);
 __attribute__((format(__scanf__, 1, 3)))
 int sscanf(const char *str, char const *fmt, ...);
 
-
-/**
- * errx() is a stdio compatible function which operates on a format
- *        string and variable argument list.  Output is directed to
- *        the serial console.
- *
- * @param [in]  rc  - Ignored.
- * @param [in]  fmt - A string describing the format of the output.  This
- *                    format string is compatible with that of printf().
- * @param [in]  ... - A variable list of arguments.
- *
- * @return      This function does not return.
- */
-__attribute__((format(__printf__, 2, 3))) __attribute__((noreturn))
-void errx(int rc, const char *fmt, ...);
-
-/**
- * warnx() is a stdio compatible function which operates on a format
- *         string and variable argument list.  Output is directed to
- *         the serial console.
- *
- * @param [in]  fmt - A string describing the format of the output.  This
- *                    format string is compatible with that of printf().
- * @param [in]  ... - A variable list of arguments.
- *
- * @return      None.
- */
-__attribute__((format(__printf__, 1, 2)))
-void warnx(const char *fmt, ...);
-
 int putchar(int ch);
 int puts(const char *str);
 

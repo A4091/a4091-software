@@ -43,7 +43,7 @@
  * Scaled down version of printf(3).
  */
 
-// #include "printf.h"
+#include "printf.h"
 #define USE_SERIAL_OUTPUT
 #include "port.h"
 #include <clib/debug_protos.h>
@@ -565,56 +565,6 @@ int printf(const char *fmt, ...)
     va_end(args);
 
     return (rc);
-}
-
-/**
- * warnx() is a stdio compatible function which operates on a format
- *        string and variable argument list.  Output is directed to
- *        the serial console.
- *
- * @param [in]  fmt - A string describing the format of the output.  This
- *                    format string is compatible with that of printf().
- * @param [in]  ... - A variable list of arguments.
- *
- * @return      None.
- */
-__attribute__((format(__printf__, 1, 2)))
-void warnx(const char *fmt, ...)
-{
-    va_list args;
-
-    va_start(args, fmt);
-    (void) vprintf(fmt, args);
-    va_end(args);
-    putchar('\n');
-}
-
-/**
- * errx() is a stdio compatible function which operates on a format
- *        string and variable argument list.  Output is directed to
- *        the serial console.
- *
- * @param [in]  rc  - Ignored.
- * @param [in]  fmt - A string describing the format of the output.  This
- *                    format string is compatible with that of printf().
- * @param [in]  ... - A variable list of arguments.
- *
- * @return      This function does not return.
- */
-__attribute__((format(__printf__, 2, 3))) __attribute__((noreturn))
-void errx(int rc, const char *fmt, ...)
-{
-    (void) rc;
-    va_list args;
-
-    va_start(args, fmt);
-    (void) vprintf(fmt, args);
-    va_end(args);
-    putchar('\n');
-
-    /* This function does not return */
-    while (1)
-        ;
 }
 #endif /* USE_SERIAL_OUTPUT */
 

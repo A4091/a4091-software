@@ -188,11 +188,10 @@ int aprint_error_dev(device_t self, const char *fmt, ...)
     int rc;
     va_list args;
 
-    printf("SCSI\n");
+    printf("%s: ", device_xname(self));
     va_start(args, fmt);
     rc = vprintf(fmt, args);
     va_end(args);
-
     return (rc);
 }
 

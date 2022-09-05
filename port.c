@@ -25,11 +25,6 @@
 #define PRINTF_CALLOUT(args...)
 #endif
 
-#if 0
-/* Not sure this even works for a driver */
-ulong __stack_size = 32768;
-#endif
-
 void
 panic(const char *s)
 {

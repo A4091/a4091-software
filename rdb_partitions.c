@@ -89,15 +89,16 @@ struct PartitionBlock {
 static uint32_t *_block; // shared storage for 1 block
 extern char real_device_name[];
 
-void find_partitions(struct ConfigDev* cd, struct RigidDiskBlock* rdb, struct IOStdReq *ioreq, int unit)
+void
+find_partitions(struct ConfigDev *cd, struct RigidDiskBlock *rdb, struct IOStdReq *ioreq, int unit)
 {
     int cur_partition = 0;
     uint8_t tmp;
     uint32_t *block = _block;
 
     if (!rdb || rdb->rdb_PartitionList == 0) {
-      printf("No partitions on disk.\n");
-      return;
+        printf("No partitions on disk.\n");
+        return;
     }
 
     uint32_t cur_block = rdb->rdb_PartitionList;
@@ -110,8 +111,8 @@ next_partition:
 
     uint32_t first = block[0];
     if (first != PART_IDENTIFIER) {
-      printf("Not a valid partition: %d\n", first);
-      return;
+        printf("Not a valid partition: %d\n", first);
+        return;
     }
 
     struct PartitionBlock *pb = (struct PartitionBlock *)block;
@@ -154,7 +155,7 @@ next_partition:
 
     if (node) {
 #ifdef DEBUG
-      printf(" GlobalVec: %08x\n", (uint32_t)node->dn_GlobalVec);
+        printf(" GlobalVec: %08x\n", (uint32_t)node->dn_GlobalVec);
 #endif
 
       node->dn_GlobalVec = -1; // yet unclear if needed
@@ -177,7 +178,8 @@ next_partition:
     return;
 }
 
-int parse_rdb(struct ConfigDev* cd, struct Library *dev)
+int
+parse_rdb(struct ConfigDev *cd, struct Library *dev)
 {
     int i, j;
     struct IOStdReq ior;

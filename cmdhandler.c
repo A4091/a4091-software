@@ -411,11 +411,6 @@ CMD_SEEK_continue:
 
 void scsipi_completion_poll(struct scsipi_channel *chan);
 
-#if 0
-__asm("_geta4: lea ___a4_init,a4 \n"
-      "        rts");
-#endif
-
 static void
 cmd_handler(void)
 {
@@ -431,15 +426,6 @@ cmd_handler(void)
     ULONG                  wait_mask;
     ULONG                  timer_mask;
     uint32_t               mask;
-#if 0
-    register long devbase asm("a6");
-
-    /* Builtin compiler function to set A4 to the global data area */
-    geta4();
-
-    devbase = msg->devbase;
-    (void) devbase;
-#endif
 
     task = (struct Task *) FindTask((char *)NULL);
 
@@ -535,7 +521,6 @@ start_cmd_handler(uint *boardnum)
 {
     struct Task *task;
     start_msg_t msg;
-//    register long devbase asm("a6");
 
     /* Prepare a startup structure with the board to initialize */
     memset(&msg, 0, sizeof (msg));
