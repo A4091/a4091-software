@@ -584,27 +584,28 @@ static void draw_card(const struct drawing c[], int length)
     int x=106, y=50, i,j;
 
     for (i=0; i<length; i++) {
-        switch (c[i].type) {
+        struct drawing d = c[i];
+        switch (d.type) {
         case 1:
-            SetAPen(rp, c[i].pen);
-            RectFill(rp, x + c[i].x,
-                     y + c[i].y/2,
-                     x + c[i].x + c[i].w,
-                     y + c[i].y/2 + c[i].h/2
+            SetAPen(rp, d.pen);
+            RectFill(rp, x + d.x,
+                     y + d.y/2,
+                     x + d.x + d.w,
+                     y + d.y/2 + d.h/2
             );
             break;
         case 2:
-            SetAPen(rp, c[i].pen);
-            Move(rp, x + c[i].x, y + c[i].y/2);
-            Draw(rp, x + c[i].x + c[i].w, y + c[i].y/2);
-            Draw(rp, x + c[i].x + c[i].w, y + c[i].y/2 + c[i].h/2);
-            Draw(rp, x + c[i].x, y + c[i].y/2 + c[i].h/2);
-            Draw(rp, x + c[i].x, y + c[i].y/2);
+            SetAPen(rp, d.pen);
+            Move(rp, x + d.x, y + d.y/2);
+            Draw(rp, x + d.x + d.w, y + d.y/2);
+            Draw(rp, x + d.x + d.w, y + d.y/2 + d.h/2);
+            Draw(rp, x + d.x, y + d.y/2 + d.h/2);
+            Draw(rp, x + d.x, y + d.y/2);
             break;
         case 3:
             SetAPen(rp, 2);
-            for(j=c[i].x; j<(c[i].x + c[i].w); j+=4) {
-                RectFill(rp, x+j, y + c[i].y/2, x+j+1, y + c[i].y/2 + c[i].h/2);
+            for(j=d.x; j<(d.x + d.w); j+=4) {
+                RectFill(rp, x+j, y + d.y/2, x+j+1, y + d.y/2 + d.h/2);
             }
         }
     }
