@@ -223,7 +223,7 @@ typedef struct {
 
 static a4091_save_t a4091_save;
 
-BOOL __check_abort_enabled = 0;
+extern BOOL __check_abort_enabled;
 
 static void
 check_break(void)
@@ -3117,6 +3117,8 @@ main(int argc, char **argv)
     uint     test_flags     = 0;  /* Test flags (0-9) */
     uint32_t addr           = 0;  /* Card physical address or index number */
     uint32_t dma[3];              /* DMA source, destination, length */
+
+    __check_abort_enabled = 0;
 
     for (arg = 1; arg < argc; arg++) {
         char *ptr = argv[arg];
