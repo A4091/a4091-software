@@ -101,6 +101,7 @@ void *device_private(device_t dev);
 #define printf(x...)   do { } while (0)
 #define vfprintf(x...) do { } while (0)
 #define putchar(x...)  do { } while (0)
+#define panic(x) panic((const char *)0)
 #endif
 
 #endif /* _PORT_H */

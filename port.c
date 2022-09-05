@@ -25,6 +25,7 @@
 #define PRINTF_CALLOUT(args...)
 #endif
 
+#undef panic
 void
 panic(const char *s)
 {
