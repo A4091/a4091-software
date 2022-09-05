@@ -87,6 +87,7 @@ bsd_splx(int ilevel)
         Enable();
 }
 
+#ifdef USE_SERIAL_OUTPUT
 const char *
 device_xname(void *ptr)
 {
@@ -97,7 +98,6 @@ device_xname(void *ptr)
         return (dev->dv_xname);
 }
 
-#ifdef USE_SERIAL_OUTPUT
 unsigned int
 read_system_ticks(void)
 {
