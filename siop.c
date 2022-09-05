@@ -142,18 +142,20 @@ const
 
 /* default to not inhibit sync negotiation on any drive */
 u_char siop_inhibit_sync[8] = { 0, 0, 0, 0, 0, 0, 0 }; /* initialize, so patchable */
-u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
+const u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
 #if 0
 int siop_no_dma = 1;  // CDH debug
 #else
 int siop_no_dma = 0;
 #endif
 
-int siop_reset_delay = 250; /* delay after reset, in milliseconds */
+const int siop_reset_delay = 250; /* delay after reset, in milliseconds */
 
+#if 0
 int siop_cmd_wait = SCSI_CMD_WAIT;
 int siop_data_wait = SCSI_DATA_WAIT;
 int siop_init_wait = SCSI_INIT_WAIT;
+#endif
 
 #ifdef DEBUG_SYNC
 #define P_NS(x) ((x) / 4)

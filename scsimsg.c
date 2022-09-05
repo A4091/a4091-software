@@ -15,9 +15,8 @@
 #include "scsimsg.h"
 
 extern struct MsgPort *myPort;
-#define DEFAULT_BLOCK_SIZE 512
 
-static int blksize = DEFAULT_BLOCK_SIZE;
+static int blksize;
 UBYTE sense_data[255];
 
 uint16_t sdcmd_read_blocks(struct IOStdReq *ioreq, uint8_t *data, uint32_t block, uint32_t len)

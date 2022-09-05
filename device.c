@@ -88,7 +88,7 @@ asm("romtag:                                \n"
 
 const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
-char real_device_name[17] = DEVICE_NAME;
+char real_device_name[17];
 struct SignalSemaphore entry_sem;
 int romboot = FALSE;
 extern a4091_save_t *asave;
@@ -310,7 +310,7 @@ drv_abort_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
     return (IOERR_NOCMD);
 }
 
-static ULONG device_vectors[] =
+static const ULONG device_vectors[] =
 {
     (ULONG) drv_open,
     (ULONG) drv_close,
