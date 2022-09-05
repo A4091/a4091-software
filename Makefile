@@ -185,7 +185,7 @@ clean:
 
 distclean: clean
 	@echo $@
-	$(QUIET)rm -f $(PROG) $(PROG2) $(ROM)
+	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGM) $(PROGD) $(ROM)
 	$(QUIET)rm -r $(OBJDIR)
 
 .PHONY: verbose
