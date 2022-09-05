@@ -54,8 +54,9 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 #CFLAGS  += -mhard-float
-CFLAGS  += -Os -fomit-frame-pointer
+CFLAGS  += -Os -fomit-frame-pointer -noixemul
 CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
+CFLAGS += -mcpu=68020
 
 CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 #CFLAGS_TOOLS += -DDEBUG_MOUNTER     # Debug mounter.c # Makes more sense when integrated
@@ -66,7 +67,7 @@ CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 #ROMDRIVER := -DNO_DEVICE=1
 
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
-LDFLAGS        = -nostartfiles -ldebug -nostdlib -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
+LDFLAGS        = -nostartfiles -nostdlib -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
 LDFLAGS_TOOLS  = -mcrt=clib2 -lgcc -lc -lamiga $(LDFLAGS_COMMON)
 
 #CFLAGS  += -g
