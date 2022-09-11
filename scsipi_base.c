@@ -465,38 +465,36 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * Not an asynchronous command; wait for it to complete.
 	 */
 #ifdef PORT_AMIGA
+        /*
+         * XXX: More can be done to improve the completion poll timeout.
+         *      It could instead call into an enhanced cmdhandler function
+         *      which would choose to only wait on interrupts and timer
+         *      messages. That would increase efficiency by not having
+         *      the driver poll for 53C710 interrupt status every tick.
+         */
         timeout = xs->timeout * TICKS_PER_SECOND / 1000;
         if (timeout == 0) {
-            printf("Timeout was 0\n");
-            timeout = 1;
+            timeout = 1;  // Run at least one poll iteration
         }
+
         struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
-#endif
+        irq_poll(1, sc);
 
 	while ((xs->xs_status & XS_STS_DONE) == 0) {
-#ifdef PORT_AMIGA
                 /*
                  * Need to run interrupt message handling here because
                  * this code is running in the same thread as the normal
                  * interrupt message handling.
                  */
-                irq_poll(1, sc);
-                delay(20000);
-
                 if (timeout-- == 0) {
-                    printf("SCSI completion poll timeout\n");
+                    printf("SCSI completion poll timeout: %d\n", xs->timeout);
                     break;
                 }
-#else
-		if (poll) {
-			scsipi_printaddr(periph);
-			panic("scsipi_execute_xs");
-		}
-		cv_wait(xs_cv(xs), chan_mtx(chan));
-#endif
+
+                delay(1000000 / TICKS_PER_SECOND);  // 1 tick
+                irq_poll(1, sc);
 	}
 
-#ifdef PORT_AMIGA
         /*
          * If the XS did not complete due to timeout, then execute
          * the timeout callout, if one has been set up.
@@ -508,6 +506,14 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
                 callout_stop(&xs->xs_callout);  // Combine with call?
             }
         }
+#else  /* !PORT_AMIGA */
+	while ((xs->xs_status & XS_STS_DONE) == 0) {
+		if (poll) {
+			scsipi_printaddr(periph);
+			panic("scsipi_execute_xs");
+		}
+		cv_wait(xs_cv(xs), chan_mtx(chan));
+	}
 #endif
 
 	/*
@@ -1511,6 +1517,26 @@ scsipi_print_sense(struct scsipi_xfer * xs, int verbosity)
 }
 #endif
 
+#ifdef PORT_AMIGA
+void
+periph_media_unloaded(struct scsipi_periph *periph)
+{
+    if (periph->periph_flags & PERIPH_MEDIA_LOADED) {
+        periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+        periph->periph_changenum++;
+    }
+}
+
+void
+periph_media_loaded(struct scsipi_periph *periph)
+{
+    if ((periph->periph_flags & PERIPH_MEDIA_LOADED) == 0) {
+        periph->periph_flags |= PERIPH_MEDIA_LOADED;
+        periph->periph_changenum++;
+    }
+}
+#endif
+
 /*
  * scsipi_interpret_sense:
  *
@@ -1597,12 +1623,22 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	case 0x00:		/* no error (command completed OK) */
 		return 0;
 	case 0x04:		/* drive not ready after it was selected */
+#ifdef PORT_AMIGA
+		if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+			periph_media_unloaded(periph);
+#else
 		if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 			periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+#endif
 		if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
 			return 0;
 		/* XXX - display some sort of error here? */
+#ifdef PORT_AMIGA
+                printf("Drive not ready after select: asc=%02x ascq=%02x\n",
+                       sense->asc, sense->ascq);
+#else
                 printf("drive not ready after select\n");
+#endif
 		return EIO;
 	case 0x20:		/* invalid command */
 		if ((xs->xs_control &
@@ -1645,11 +1681,20 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			error = 0;
 			break;
 		case SKEY_NOT_READY:
+#ifdef PORT_AMIGA
+                        printf("SKEY_NOT_READY: asc=%02x ascq=%02x\n",
+                               sense->asc, sense->ascq);
+#else
 			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+#endif
 			if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
 				return 0;
 			if (sense->asc == 0x3A) {
+#ifdef PORT_AMIGA
+				if (periph->periph_flags & PERIPH_REMOVABLE)
+					periph_media_unloaded(periph);
+#endif
 				error = ENODEV; /* Medium not present */
 				if (xs->xs_control & XS_CTL_SILENT_NODEV)
 					return error;
@@ -1680,8 +1725,13 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 				/* device or bus reset */
 				return ERESTART;
 			}
+#ifdef PORT_AMIGA
+			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+				periph_media_unloaded(periph);
+#else
 			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+#endif
 			if ((xs->xs_control &
 			     XS_CTL_IGNORE_MEDIA_CHANGE) != 0 ||
 				/* XXX Should reupload any transient state. */

@@ -38,20 +38,22 @@ typedef struct
 } scsi_mode_sense_t;
 
 static void sd_complete(struct scsipi_xfer *xs);
+static void sd_startstop_complete(struct scsipi_xfer *xs);
+static void sd_tur_complete(struct scsipi_xfer *xs);
 static void scsidirect_complete(struct scsipi_xfer *xs);
 static void geom_done_inquiry(struct scsipi_xfer *xs);
 
 static const int8_t error_code_mapping[] = {
-    0,                // XS_NOERROR           There is no error, (invalid sense)
-    HFERR_BadStatus,  // XS_SENSE             Check returned sense for the error
-    HFERR_BadStatus,  // XS_SHORTSENSE        Check ATAPI sense for the error
-    HFERR_DMA,        // XS_DRIVER_STUFFUP    Driver failed operation
-    HFERR_BadStatus,  // XS_RESOURCE_SHORTAGE Adapter resource shortage
-    HFERR_SelTimeout, // XS_SELTIMEOUT        Device timed out.. turned off?
-    HFERR_SelTimeout, // XS_TIMEOUT           Timeout was caught by SW
-    IOERR_UNITBUSY,   // XS_BUSY              Device busy, try again later?
-    HFERR_Phase,      // XS_RESET             Bus reset; possible retry command
-    HFERR_Phase,      // XS_REQUEUE           Requeue this command
+    0,                // 0 XS_NOERROR           No error, (invalid sense)
+    HFERR_BadStatus,  // 1 XS_SENSE             Check returned sense for error
+    HFERR_BadStatus,  // 2 XS_SHORTSENSE        Check ATAPI sense for the error
+    HFERR_DMA,        // 3 XS_DRIVER_STUFFUP    Driver failed operation
+    HFERR_BadStatus,  // 4 XS_RESOURCE_SHORTAGE Adapter resource shortage
+    HFERR_SelTimeout, // 5 XS_SELTIMEOUT        Device timed out.. turned off?
+    HFERR_SelTimeout, // 6 XS_TIMEOUT           Timeout was caught by SW
+    IOERR_UNITBUSY,   // 7 XS_BUSY              Device busy, try again later?
+    HFERR_Phase,      // 8 XS_RESET             Bus reset; possible retry cmd
+    HFERR_Phase,      // 9 XS_REQUEUE           Requeue this command
 };
 
 /* Translate error code to AmigaOS code */
@@ -72,12 +74,12 @@ static uint64_t
 sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
 {
     union {
-        struct scsipi_read_capacity_10 cmd;
-        struct scsipi_read_capacity_16 cmd16;
+        struct scsipi_read_capacity_10 cmd;          // 10 bytes
+        struct scsipi_read_capacity_16 cmd16;        // 16 bytes
     } cmd;
     union {
-        struct scsipi_read_capacity_10_data data;
-        struct scsipi_read_capacity_16_data data16;
+        struct scsipi_read_capacity_10_data data;    // 8 bytes
+        struct scsipi_read_capacity_16_data data16;  // 32 bytes
     } *datap;
     uint64_t capacity;
 
@@ -118,8 +120,8 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
      */
 
     memset(&cmd, 0, sizeof(cmd));
-    cmd.cmd16.opcode = READ_CAPACITY_16;
-    cmd.cmd16.byte2 = SRC16_SERVICE_ACTION;
+    cmd.cmd16.opcode = SERVICE_ACTION_IN;
+    cmd.cmd16.byte2 = SRC16_READ_CAPACITY;
     _lto4b(sizeof(datap->data16), cmd.cmd16.len);
 
     memset(datap, 0, sizeof(datap->data16));
@@ -219,6 +221,40 @@ got_blocksize:
     return (blksize);
 }
 
+int
+sd_testunitready(void *periph_p, void *ior)
+{
+    struct scsipi_periph *periph = periph_p;
+    struct scsi_test_unit_ready cmd;
+    struct scsipi_xfer *xs;
+    int    flags;
+
+    if (periph->periph_quirks & PQUIRK_NOTUR) {
+        /* Device does not support TEST_UNIT_READY */
+        struct IOExtTD *iotd = (struct IOExtTD *) ior;
+        iotd->iotd_Req.io_Actual = 0;  // Assume drive is present
+        cmd_complete(ior, 0);
+        return (0);
+    }
+
+    memset(&cmd, 0, sizeof (cmd));
+    cmd.opcode = SCSI_TEST_UNIT_READY;
+
+    flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG | XS_CTL_IGNORE_ILLEGAL_REQUEST |
+            XS_CTL_IGNORE_NOT_READY | XS_CTL_IGNORE_MEDIA_CHANGE;
+
+    /* No buffer, no retries, timeout 2 seconds */
+    xs = scsipi_make_xs_locked(periph, (struct scsipi_generic *) &cmd,
+                               sizeof (cmd), NULL, 0, 0, 2000, NULL, flags);
+    if (__predict_false(xs == NULL))
+        return (TDERR_NoMem);  // out of memory
+
+    xs->amiga_ior = ior;
+    xs->xs_done_callback = sd_tur_complete;
+
+    return (scsipi_execute_xs(xs));
+}
+
 /*
  * sd_readwrite
  * ------------
@@ -284,6 +320,7 @@ sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
                                SDRETRIES, SD_IO_TIMEOUT, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
+
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
@@ -339,6 +376,7 @@ sd_seek(void *periph_p, uint64_t blkno, void *ior)
                                1, 1000, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
+
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
 
@@ -383,7 +421,7 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
     xs = scsipi_make_xs_locked(periph,
                                (struct scsipi_generic *) &cmd, sizeof (cmd),
                                (uint8_t *) inq, sizeof (*inq),
-                               1, 6000, NULL, flags);
+                               1, 8000, NULL, flags);
     if (__predict_false(xs == NULL))
         return (1);  // out of memory
     xs->amiga_ior = ior;
@@ -425,25 +463,43 @@ sd_get_protstatus(void *periph_p, ULONG *status)
  * Send SCSI start or stop command (1=Start, 0=Stop)
  */
 int
-sd_startstop(void *periph_p, void *ior, int start, int load_eject)
+sd_startstop(void *periph_p, void *ior, int start, int load_eject, int immed)
 {
+    struct IOExtTD *iotd = (struct IOExtTD *) ior;
     struct scsipi_periph *periph = periph_p;
     struct scsipi_xfer *xs;
-    struct scsipi_start_stop cmd;
+    struct scsipi_start_stop  cmd;
     int flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG;
+    int timeout;
+    int cmdlen = sizeof (cmd);
 
     memset(&cmd, 0, sizeof (cmd));
     cmd.opcode = START_STOP;
-    cmd.byte2 = 0;
-    cmd.how = 0;
+
+    if (immed)
+        cmd.byte2 = SSS_IMMEDIATE;  // Return before operation is complete
+    else
+        cmd.byte2 = 0;
+
     cmd.how = (start ? SSS_START : SSS_STOP) | (load_eject ? SSS_LOEJ : 0);
 
+    /* Allow more time for start */
+    timeout = load_eject ?
+                  (start ? 20000 : 5000) :
+                  (start ? 6000 : 3000);
+
+    flags |= XS_CTL_IGNORE_MEDIA_CHANGE | XS_CTL_IGNORE_NOT_READY;
+
     xs = scsipi_make_xs_locked(periph, (struct scsipi_generic *) &cmd,
-                               sizeof (cmd), NULL, 0, 1, 10000, NULL, flags);
+                               cmdlen, NULL, 0, 1, timeout, NULL, flags);
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
+
     xs->amiga_ior = ior;
-    xs->xs_done_callback = sd_complete;
+    xs->xs_done_callback = sd_startstop_complete;
+
+    /* Return previous media state in io_Actual 0=Present, 1=Removed */
+    iotd->iotd_Req.io_Actual = !(periph->periph_flags & PERIPH_MEDIA_LOADED);
 
 #if 0
     printf("sd%d.%d %p %s\n",
@@ -451,6 +507,7 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject)
            load_eject ? (start ? "load" : "eject") :
            (start ? "start" : "stop"));
 #endif
+
     return (scsipi_execute_xs(xs));
 }
 
@@ -810,14 +867,78 @@ sd_complete(struct scsipi_xfer *xs)
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs,
            (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', rc);
 #endif
+#ifdef DEBUG_SD
     if (xs->error == XS_SENSE) {
+        uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
         printf("got sense:");
         for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
             printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
-        printf("\n");
+        printf("\nkey=%x asc=%02x ascq=%02x\n",
+               key, xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+    }
+#endif
+    cmd_complete(xs->amiga_ior, rc);
+}
+
+static void
+sd_startstop_complete(struct scsipi_xfer *xs)
+{
+    int rc = translate_xs_error(xs->error);
+
+    if (xs->error != 0)
+        printf("startstop complete xs->error=%d\n", xs->error);
+    if (xs->error == XS_SENSE) {
+        uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
+        printf("sense key=%02x asc=%02x ascq=%02x\n", key,
+               xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+        if ((key == SKEY_NOT_READY) && (xs->sense.scsi_sense.asc == 4)) {
+            /* "Not ready" status is fine for eject / load / stop / start */
+            cmd_complete(xs->amiga_ior, 0);
+            return;
+        }
     }
     cmd_complete(xs->amiga_ior, rc);
 }
+
+/* Called when disk test unit ready is complete */
+static void
+sd_tur_complete(struct scsipi_xfer *xs)
+{
+    struct IOExtTD *iotd = (struct IOExtTD *) xs->amiga_ior;
+    struct scsipi_periph *periph = xs->xs_periph;
+
+    int rc = translate_xs_error(xs->error);
+
+    if (xs->error == XS_SENSE) {
+        uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
+
+        if (key == SKEY_NOT_READY) {
+            if (xs->sense.scsi_sense.asc == 0x3a) {
+                periph_media_unloaded(periph);
+                iotd->iotd_Req.io_Actual = -1;  // Drive is not present
+            } else {
+                iotd->iotd_Req.io_Actual = 0;   // Drive present, but not ready
+                periph_media_loaded(periph);
+            }
+            cmd_complete(xs->amiga_ior, 0);
+        } else {
+            iotd->iotd_Req.io_Actual = 0;      // Assume drive is present
+            cmd_complete(xs->amiga_ior, key);  // Return error code
+        }
+#if 0
+        printf("got sense:");
+        for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
+            printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
+        printf("\nkey=%x asc=%02x ascq=%02x\n",
+               key, xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+#endif
+        return;
+    }
+    iotd->iotd_Req.io_Actual = 0;  // Drive is present (and ready)
+    periph_media_loaded(periph);
+    cmd_complete(xs->amiga_ior, rc);
+}
+
 
 static void
 scsidirect_complete(struct scsipi_xfer *xs)

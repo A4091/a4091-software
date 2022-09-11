@@ -2494,7 +2494,9 @@ test_dma(void)
              * multiple errors may be captured and reported.
              */
             if (rc2++ < 10) {
-                printf("\n  Addr %08x to scratch %08x: %08x != expected %08x "
+                if (rc2 == 1)
+                    printf("\n");
+                printf("  Addr %08x to scratch %08x: %08x != expected %08x "
                        "(diff %08x)\n",
                        saddr, a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH,
                        scratch, *(uint32_t *)saddr, diff);
@@ -3236,7 +3238,7 @@ main(int argc, char **argv)
         exit(1);
     }
 
-    if (!flag_force && enforcer_check())
+    if ((addr >= 0x10) && !flag_force && enforcer_check())
         exit(1);
 
     if (addr < 0x10)

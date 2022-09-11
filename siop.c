@@ -340,14 +340,13 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
     int to;
 
     s = bsd_splbio();
-    to = xs->timeout / 1000;
-//    to = 4; // CDH DEBUG (original code waits for 60 seconds)
+    to = xs->timeout / 1000;  // to is in seconds
     if (sc->nexus_list.tqh_first)
         printf("%s: siop_poll called with disconnected device\n",
             device_xname(sc->sc_dev));
     for (;;) {
         /* use cmd_wait values? */
-#define WAIT_ITERS 50  // 50000 was original value
+#define WAIT_ITERS 1000  // Decrement to once per second
         i = WAIT_ITERS;
         /* XXX spl0(); */
         while (((istat = rp->siop_istat) &
@@ -367,7 +366,7 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
                     return;
                 }
             }
-            delay(20000);  // 1 AmigaOS tick
+            delay(1000);  // 1 ms
         }
         sstat0 = rp->siop_sstat0;
         dstat = rp->siop_dstat;
@@ -418,7 +417,6 @@ siop_sched(struct siop_softc *sc)
 
             TAILQ_REMOVE(&sc->ready_list, acb, chain);
             sc->sc_nexus = acb;
-// printf("CDH: siop_sched new nexus %p\n", acb);
             periph = acb->xs->xs_periph;
             ti = &sc->sc_tinfo[periph->periph_target];
             ti->lubusy |= (1 << periph->periph_lun);
@@ -927,16 +925,11 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         acb->ds.chain[nchain].databuf = (char *)
                 CachePreDMA((APTR) addr, &tcount, flags);
         flags |= DMA_Continue;
-#if 0
-        printf("CDH: siop_start sg addr=%p count=%lu\n",
-               acb->ds.chain[nchain].databuf, tcount);
-#endif
 #else
         /* original PAGESIZE scatter gather */
         acb->ds.chain[nchain].databuf = (char *) kvtop (addr);
         if (count < (tcount = PAGE_SIZE - ((int) addr & PGOFSET)))
             tcount = count;
-        printf("CDH: siop_start sg count=%d %d PS=%d PO=%d\n", count, tcount, PAGE_SIZE, PGOFSET);
 #endif
         acb->ds.chain[nchain].datalen = tcount;
         addr += tcount;
@@ -990,6 +983,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #ifdef DDB
         /*Debugger();*/
 #endif
+        siopreset(sc);
     }
 #endif
     if (sc->nexus_list.tqh_first == NULL) {
@@ -1182,12 +1176,19 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #ifdef DEBUG
     ++siopints;
 #endif
+#if 0
+    /*
+     * It appears the following code is invalid, as this function might
+     * be called with acb being NULL, such as the case where an I/O
+     * has timed out and needs to be restarted.
+     */
     if (acb == NULL) {
         printf("ERROR: siop_checkintr() acb is NULL\n");
         goto fail_return;
     }
+#endif
 #ifdef DEBUG
-#if 1
+#if 0
     if ((siop_debug & 0x100) && (acb != NULL))  {
 #ifdef PORT_AMIGA
         ULONG length = 1;
@@ -1320,7 +1321,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
             rp->siop_sxfer = sc->sc_sync[target].sxfer;
             rp->siop_sbcl = sc->sc_sync[target].sbcl;
-// printf("CDH: set1 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[target].sbcl);
 #ifdef DEBUG_SYNC
             report_scsi_speed(rp, sc->sc_sync[target].sbcl);
 #endif
@@ -1644,7 +1644,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 sc->sc_sync[acb->xs->xs_periph->periph_target].sxfer;
             rp->siop_sbcl =
                 sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl;
-printf("CDH: set2 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl);
             break;
         }
         if (acb == NULL) {
@@ -1754,7 +1753,6 @@ printf("CDH: set2 sxfer=%02x scntl=%02x\n", rp->siop_sxfer, sc->sc_sync[acb->xs-
         *status = -1;
         return 0;   /* siopreset has cleaned up */
     }
-    printf("CDH: siop_checkintr cont5\n");
     if (sstat0 & SIOP_SSTAT0_SGE)
         printf ("SIOP: SCSI Gross Error\n");
     if (sstat0 & SIOP_SSTAT0_PAR)
@@ -1870,13 +1868,6 @@ siopintr(register struct siop_softc *sc)
             device_xname(sc->sc_dev), istat, dstat, sstat0,
             sc->sc_nexus, sc->sc_nexus ? sc->sc_nexus->stat[0] : 0);
     }
-#endif
-
-#if 0
-printf("CDH: sc=%p rp=%p\n", sc, rp);
-if (sc != NULL) {
-    printf("CDH: sc_nexus=%p sc_dev=%p\n", sc->sc_nexus, sc->sc_dev);
-}
 #endif
 
 #ifdef DEBUG

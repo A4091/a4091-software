@@ -44,98 +44,6 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 #define A4091_INTPRI 30
 #define A4091_IRQ    3
 
-/* NCR53C710 registers */
-#define REG_SCNTL0  0x03  // SCSI control 0
-#define REG_SCNTL1  0x02  // SCSI control 1
-#define REG_SDID    0x01  // SCSI destination ID
-#define REG_SIEN    0x00  // SCSI interrupt enable
-#define REG_SCID    0x07  // SCSI chip ID
-#define REG_SCFER   0x06  // SCSI transfer
-#define REG_SODL    0x05  // SCSI output data latch
-#define REG_SOCL    0x04  // SCSI output control latch
-#define REG_SFBR    0x0b  // SCSI first byte received
-#define REG_SIDL    0x0a  // SCSI input data latch
-#define REG_SBDL    0x09  // SCSI bus data lines
-#define REG_SBCL    0x08  // SCSI bus control lines
-#define REG_DSTAT   0x0f  // DMA status
-#define REG_SSTAT0  0x0e  // SCSI status 0
-#define REG_SSTAT1  0x0d  // SCSI status 1
-#define REG_SSTAT2  0x0c  // SCSI status 2
-#define REG_DSA     0x10  // Data structure address
-#define REG_CTEST0  0x17  // Chip test 0
-#define REG_CTEST1  0x16  // Chip test 1
-#define REG_CTEST2  0x15  // Chip test 2
-#define REG_CTEST3  0x14  // Chip test 3
-#define REG_CTEST4  0x1b  // Chip test 4: MUX ZMOD SZM SLBE SFWR FBL2-FBL0
-#define REG_CTEST5  0x1a  // Chip test 5
-#define REG_CTEST6  0x19  // Chip test 6: DMA FIFO
-#define REG_CTEST7  0x18  // Chip test 7
-#define REG_TEMP    0x1c  // Temporary stack
-#define REG_DFIFO   0x23  // DMA FIFO
-#define REG_ISTAT   0x22  // Interrupt status
-#define REG_CTEST8  0x21  // Chip test 8
-#define REG_LCRC    0x20  // Longitudinal parity
-#define REG_DBC     0x25  // DMA byte counter
-#define REG_DCMD    0x24  // DMA command
-#define REG_DNAD    0x28  // DMA next address for data
-#define REG_DSP     0x2c  // DMA SCRIPTS pointer
-#define REG_DSPS    0x30  // DMA SCRIPTS pointer save
-#define REG_SCRATCH 0x34  // General purpose scratch pad
-#define REG_DMODE   0x3b  // DMA mode
-#define REG_DIEN    0x3a  // DMA interrupt enable
-#define REG_DWT     0x39  // DMA watchdog timer
-#define REG_DCNTL   0x38  // DMA control
-#define REG_ADDER   0x3c  // Sum output of internal adder
-
-#define REG_SIEN_PAR    BIT(0)  // Interrupt on parity error
-#define REG_SIEN_RST    BIT(1)  // Interrupt on SCSI reset received
-#define REG_SIEN_UDC    BIT(2)  // Interrupt on Unexpected disconnect
-#define REG_SIEN_SGE    BIT(3)  // Interrupt on SCSI gross error
-#define REG_SIEN_SEL    BIT(4)  // Interrupt on Selected or reselected
-#define REG_SIEN_STO    BIT(5)  // Interrupt on SCSI bus timeout
-#define REG_SIEN_FCMP   BIT(6)  // Interrupt on Function complete
-#define REG_SIEN_PM     BIT(7)  // Interrupt on Unexpected Phase mismatch
-
-#define REG_DIEN_BF     BIT(5)  // DMA interrupt on Bus Fault
-#define REG_DIEN_ABRT   BIT(4)  // DMA interrupt on Aborted
-#define REG_DIEN_SSI    BIT(3)  // DMA interrupt on SCRIPT Step Interrupt
-#define REG_DIEN_SIR    BIT(2)  // DMA interrupt on SCRIPT Interrupt Instruction
-#define REG_DIEN_WTD    BIT(1)  // DMA interrupt on Watchdog Timeout Detected
-#define REG_DIEN_ILD    BIT(0)  // DMA interrupt on Illegal Instruction Detected
-
-#define REG_ISTAT_DIP   BIT(0)  // DMA interrupt pending
-#define REG_ISTAT_SIP   BIT(1)  // SCSI interrupt pending
-#define REG_ISTAT_RST   BIT(6)  // Reset the 53C710
-#define REG_ISTAT_ABRT  BIT(7)  // Abort
-
-#define REG_DMODE_MAN   BIT(0)  // DMA Manual start mode
-#define REG_DMODE_U0    BIT(1)  // DMA User programmable transfer type
-#define REG_DMODE_FAM   BIT(2)  // DMA Fixed Address mode (set avoids DNAD inc)
-#define REG_DMODE_PD    BIT(3)  // When set: FC0=0 for data & FC0=1 for program
-#define REG_DMODE_FC1   BIT(4)  // Value driven on FC1 when bus mastering
-#define REG_DMODE_FC2   BIT(5)  // Value driven on FC2 when bus mastering
-#define REG_DMODE_BLE0  0                  // Burst length 1-transfer
-#define REG_DMODE_BLE1  BIT(6)             // Burst length 2-transfers
-#define REG_DMODE_BLE2  BIT(7)             // Burst length 4-transfers
-#define REG_DMODE_BLE3  (BIT(6) | BIT(7))  // Burst length 8-transfers
-
-#define REG_DCNTL_COM   BIT(0)  // Enable 53C710 mode
-#define REG_DCNTL_SSM   BIT(4)  // SCRIPTS single-step mode
-#define REG_DCNTL_EA    BIT(5)  // Enable Ack
-#define REG_DCNTL_CFD0  BIT(7)             // SCLK 16.67-25.00 MHz
-#define REG_DCNTL_CFD1  BIT(6)             // SCLK 25.01-37.50 MHz
-#define REG_DCNTL_CFD2  0                  // SCLK 37.50-50.00 MHz
-#define REG_DCNTL_CFD3  (BIT(7) | BIT(6))  // SCLK 50.01-66.67 MHz
-
-#define REG_DSTAT_SSI   BIT(3)  // SCRIPTS single-step interrupt
-#define REG_DSTAT_ABRT  BIT(4)  // SCRIPTS single-step interrupt
-#define REG_DSTAT_DFE   BIT(7)  // DMA FIFO empty
-
-#define REG_CTEST4_FBL2 BIT(2)  // Send CTEST6 register to lane of the DMA FIFO
-#define REG_CTEST4_SLBE BIT(4)  // SCSI loopback mode enable
-
-#define REG_CTEST4_CDIS BIT(7)  // Cache burst disable
-
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile uint32_t *)(x)
 
@@ -545,17 +453,21 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     int rc;
     int failed = 0;
 
+    if ((scsi_target % 10) == chan->chan_id)
+        return (ERROR_SELF_UNIT);
+
     periph = scsipi_alloc_periph(0);
     *periph_p = periph;
     if (periph == NULL)
         return (ERROR_NO_MEMORY);
     printf("attach(%p, %d)\n", periph, scsi_target);
-    periph->periph_openings = 4;  // Max # of outstanding commands
-    periph->periph_target   = scsi_target % 10;         // SCSI target ID
-    periph->periph_lun      = (scsi_target / 10) % 10;  // SCSI LUN
-    periph->periph_dbflags  = SCSIPI_DEBUG_FLAGS;       // Full debugging
-    periph->periph_dbflags  = 0;
-    periph->periph_channel = chan;  // Not sure this is needed
+    periph->periph_openings  = 4;  // Max # of outstanding commands
+    periph->periph_target    = scsi_target % 10;         // SCSI target ID
+    periph->periph_lun       = (scsi_target / 10) % 10;  // SCSI LUN
+    periph->periph_dbflags   = SCSIPI_DEBUG_FLAGS;       // Full debugging
+    periph->periph_dbflags   = 0;
+    periph->periph_changenum = 1;
+    periph->periph_channel   = chan;
 
     rc = scsi_probe_device(chan, target, lun, periph, &failed);
     printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",

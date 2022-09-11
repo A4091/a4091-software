@@ -975,13 +975,16 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	case SID_QUAL_reserved:
 	case SID_QUAL_LU_NOT_SUPP:
 #ifdef PORT_AMIGA
-                *failed = ERROR_BAD_DRIVE_TYPE;
+                *failed = ERROR_BAD_UNIT;
 #endif
 		goto bad;
 
 	default:
 		break;
 	}
+#ifdef PORT_AMIGA
+        periph->periph_flags |= PERIPH_MEDIA_LOADED;
+#endif
 
 #ifndef PORT_AMIGA
 	/* Let the adapter driver handle the device separately if it wants. */
@@ -1009,12 +1012,13 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		case T_SIMPLE_DIRECT:
 		case T_OPTIC_CARD_RW:
 		case T_OBJECT_STORED:
+		case T_AUTOMATION_DRIVE:
+		case T_WELL_KNOWN_LUN:
 		default:
 			break;
 		case T_NODEVICE:
-printf("CDH: probe nodevice\n");
 #ifdef PORT_AMIGA
-                        *failed = ERROR_BAD_DRIVE_TYPE;
+                        *failed = ERROR_BAD_UNIT;
 #endif
 			goto bad;
 		}

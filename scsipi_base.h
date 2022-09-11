@@ -16,4 +16,7 @@ int scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
     int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
     struct buf *bp, int flags);
 
+void periph_media_unloaded(struct scsipi_periph *periph);
+void periph_media_loaded(struct scsipi_periph *periph);
+
 #endif /* _SCSIPI_BASE */

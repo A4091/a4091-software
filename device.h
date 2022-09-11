@@ -8,7 +8,9 @@
 #define ERROR_UNKNOWN_COMMAND -3  // IOERR_NOCMD
 #define ERROR_BAD_LENGTH      -4  // IOERR_BADLENGTH
 #define ERROR_NO_MEMORY       31  // TDERR_NoMem
+#define ERROR_BAD_UNIT        32  // TDERR_BadUnitNum
 #define ERROR_BAD_DRIVE_TYPE  33  // TDERR_BadDriveType
+#define ERROR_SELF_UNIT       40  // HFERR_SelfUnit
 #define ERROR_INQUIRY_FAILED  46  // (HFERR_BadStatus + 1)
 #define ERROR_NO_BOARD        50  // HFERR_NoBoard
 #define ERROR_BAD_BOARD       51  // (HFERR_NoBoard + 1)

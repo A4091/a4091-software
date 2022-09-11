@@ -68,6 +68,7 @@ struct scsipi_inquiry {
 struct scsipi_start_stop {
 	u_int8_t opcode;
 	u_int8_t byte2;
+#define SSS_IMMEDIATE 1
 	u_int8_t unused[2];
 	u_int8_t how;
 #define SSS_STOP		0x00
@@ -75,6 +76,19 @@ struct scsipi_start_stop {
 #define SSS_LOEJ		0x02
 	u_int8_t control;
 };
+
+#ifdef PORT_AMIGA
+/* Load / unload for CD changers */
+#define LOAD_UNLOAD     0xa6
+struct scsipi_load_unload {
+        u_int8_t opcode;
+        u_int8_t unused1[3];
+        u_int8_t options;
+        u_int8_t unused2[3];
+        u_int8_t slot;
+        u_int8_t unused3[3];
+} __packed;
+#endif
 
 /*
  * inquiry data format
@@ -114,7 +128,9 @@ struct scsipi_inquiry_data {
 #define	T_SIMPLE_DIRECT		0x0E	/* Simplified direct-access device */
 #define	T_OPTIC_CARD_RW		0x0F	/* Optical card reader/writer device */
 #define	T_OBJECT_STORED		0x11	/* Object-based Storage Device */
-#define	T_NODEVICE		0x1f
+#define	T_AUTOMATION_DRIVE	0x12    /* Automation drive interface */
+#define	T_WELL_KNOWN_LUN	0x1e    /* Well known logical unit */
+#define	T_NODEVICE		0x1f    /* Unknown or no device type */
 
 	u_int8_t dev_qual2;
 #define	SID_QUAL2		0x7F

@@ -93,6 +93,24 @@ iocmd_name(uint cmd)
         "TD_SEEK64",        // 26
         "TD_FORMAT64",      // 27
         "HD_SCSICMD",       // 28
+        "29",               // 29
+        "30",               // 30
+        "31",               // 31
+        "CD_INFO",          // 32
+        "CD_CONFIG",        // 33
+        "CD_TOCMSF",        // 34
+        "CD_TOCLSN",        // 35
+        "CD_READXL",        // 36
+        "CD_PLAYTRACK",     // 37
+        "CD_PLAYMSF",       // 38
+        "CD_PLAYLSN",       // 39
+        "CD_PAUSE",         // 40
+        "CD_SEARCH",        // 41
+        "CD_QCODEMSF",      // 42
+        "CD_QCODELSN",      // 43
+        "CD_ATTENUATE",     // 44
+        "CD_ADDFRAMEINT",   // 45
+        "CD_REMFRAMEINT",   // 45
     };
     if (cmd < ARRAY_SIZE(cmds))
         return (cmds[cmd]);
@@ -122,6 +140,64 @@ iocmd_name(uint cmd)
     }
 }
 
+struct ioerr {
+    uint        ie_code;
+    const char *ie_name;
+} ioerrs[] = {
+    { -1, "IOERR_OPENFAIL" },
+    { -2, "IOERR_ABORTED" },
+    { -3, "IOERR_NOCMD" },
+    { -4, "IOERR_BADLENGTH" },
+    { -5, "IOERR_BADADDRESS" },
+    { -6, "IOERR_UNITBUSY" },
+    { -7, "IOERR_SELFTEST" },
+    { 20, "TDERR_NotSpecified" },
+    { 21, "TDERR_NoSecHdr" },
+    { 22, "TDERR_BadSecPreamble" },
+    { 23, "TDERR_BadSecID" },
+    { 24, "TDERR_BadHdrSum" },
+    { 25, "TDERR_BadSecSum" },
+    { 26, "TDERR_TooFewSecs" },
+    { 27, "TDERR_BadSecHdr" },
+    { 28, "TDERR_WriteProt" },
+    { 29, "TDERR_DiskChanged" },
+    { 30, "TDERR_SeekError" },
+    { 31, "TDERR_NoMem" },
+    { 32, "TDERR_BadUnitNum" },
+    { 33, "TDERR_BadDriveType" },
+    { 34, "TDERR_DriveInUse" },
+    { 35, "TDERR_PostReset" },
+    { 40, "HFERR_SelfUnit" },
+    { 41, "HFERR_DMA" },
+    { 42, "HFERR_Phase" },
+    { 43, "HFERR_Parity" },
+    { 44, "HFERR_SelTimeout" },
+    { 45, "HFERR_BadStatus" },
+    { 46, "ERROR_INQUIRY_FAILED" },
+    { 56, "HFERR_NoBoard" },
+    { 51, "ERROR_BAD_BOARD" },
+};
+
+static void
+decode_io_error(uint code)
+{
+    int pos;
+    printf(" code=%u", code);
+    for (pos = 0; pos < ARRAY_SIZE(ioerrs); pos++)
+        if (code == ioerrs[pos].ie_code) {
+            printf(" %s", ioerrs[pos].ie_name);
+            break;
+        }
+}
+
+#define SCSI_VERIFY_10           0x2f
+#define SCSI_VERIFY_12           0xaf
+#define SCSI_VERIFY_16           0x8f
+#define SCSI_UNMAP               0x42
+#define SCSI_WRITE_AND_VERIFY_10 0x2e
+#define SCSI_WRITE_AND_VERIFY_12 0xae
+#define SCSI_WRITE_AND_VERIFY_16 0x8e
+
 static void
 decode_scsi_command(const char *indent, uint8_t *cmd, uint cmdlen)
 {
@@ -148,12 +224,20 @@ read_write_6:
             break;
         case READ_10:   printf(" READ_10");     // 0x28
             goto read_write_10;
+        case SCSI_VERIFY_10: printf(" VERIFY_10");   // 0x2f
+            goto read_write_10;
+        case SCSI_WRITE_AND_VERIFY_10: printf(" WRITE_AND_VERIFY_10"); // 0x2e
+            goto read_write_10;
         case WRITE_10:  printf(" WRITE_10");    // 0x2a
 read_write_10:
             printf("(%02x%02x%02x%02x len=%02x%02x)",
                    cmd[2], cmd[3], cmd[4], cmd[5], cmd[7], cmd[8]);
             break;
         case READ_12:   printf(" READ_12");     // 0xa8
+            goto read_write_12;
+        case SCSI_VERIFY_12: printf(" VERIFY_12");   // 0xaf
+            goto read_write_12;
+        case SCSI_WRITE_AND_VERIFY_12: printf(" WRITE_AND_VERIFY_12"); // 0xae
             goto read_write_12;
         case WRITE_12:  printf(" WRITE_12");    // 0xaa
 read_write_12:
@@ -162,6 +246,10 @@ read_write_12:
                    cmd[6], cmd[7], cmd[8], cmd[9]);
             break;
         case READ_16:   printf(" READ_16");     // 0x88
+            goto read_write_16;
+        case SCSI_VERIFY_16: printf(" VERIFY_16");   // 0x8f
+            goto read_write_16;
+        case SCSI_WRITE_AND_VERIFY_16: printf(" WRITE_AND_VERIFY_16"); // 0x8e
             goto read_write_16;
         case WRITE_16:  printf(" WRITE_16");    // 0x8a
 read_write_16:
@@ -179,6 +267,10 @@ read_write_16:
             break;
         case INQUIRY:                printf(" INQUIRY");          // 0x12
             break;
+        case SCSI_MODE_SELECT_6:     printf(" MODE_SELECT_6");    // 0x15
+            break;
+        case SCSI_MODE_SELECT_10:    printf(" MODE_SELECT_10");   // 0x55
+            break;
         case SCSI_RESERVE_6:         printf(" SCSI_RESERVE_6");   // 0x16
             break;
         case SCSI_RELEASE_6:         printf(" SCSI_RELEASE_6");   // 0x17
@@ -193,7 +285,12 @@ read_write_16:
 mode_sense_6_10:
             printf("(%02x)", cmd[2]);  // page code
             break;
+#define SSS_START               0x01
+#define SSS_LOEJ                0x02
         case START_STOP:             printf(" START_STOP");       // 0x1b
+            printf(" %s", (cmd[4] & SSS_LOEJ) ?
+                         ((cmd[4] & SSS_START) ? "Load" : "Eject") :
+                         ((cmd[4] & SSS_START) ? "Start" : "Stop"));
             break;
         case SCSI_SEND_DIAGNOSTIC:   printf(" SEND_DIAGNOSTIC");  // 0x1d
             break;
@@ -201,11 +298,19 @@ mode_sense_6_10:
             break;
         case READ_CAPACITY_10:       printf(" READ_CAPACITY_10"); // 0x25
             break;
+        case SERVICE_ACTION_IN:                                   // 0x9e
+            if (cmd[1] == SRC16_READ_CAPACITY)  // 0x10
+                printf(" READ_CAPACITY_16");
+            else
+                printf(" SERVICE_ACTION_IN %02x", cmd[1]);
+            break;
         case SCSI_SYNCHRONIZE_CACHE_10:  printf(" SYNC_CACHE10"); // 0x36
             goto read_write_10;  // addr=2..5 len=7..8
         case SCSI_SYNCHRONIZE_CACHE_16:  printf(" SYNC_CACHE16"); // 0x36
             goto read_write_16;  // addr=2..9 len=10..13
         case SCSI_READ_DEFECT_DATA:  printf(" READ_DEFECT");      // 0x37
+            break;
+        case SCSI_UNMAP:             printf("  UNMAP");           // 0x42
             break;
         default:
             printf(" Unknown cmd ");
@@ -1384,7 +1489,10 @@ main(int argc, char *argv[])
     printf("  io_Command=%04x %s\n",
            ior->io_Command, iocmd_name(ior->io_Command));
     printf("  io_Flags=%02x\n", ior->io_Flags);
-    printf("  io_Error=%02x\n", ior->io_Error);
+    printf("  io_Error=%02x", ior->io_Error);
+    if (ior->io_Error != 0)
+        decode_io_error(ior->io_Error);
+    printf("\n");
     printf("  iotd_Count=%08x\n", ior->io_Error);
     printf("  iotd_SecLabel=%08x\n", ior->io_Error);
 
@@ -1542,7 +1650,7 @@ main(int argc, char *argv[])
         show_sc_list(6, sc->ready_list.tqh_first);
         printf("    nexus_list=");
         show_sc_list(6, sc->nexus_list.tqh_first);
-        printf("    sc_nexus=");
+        printf("    sc_nexus=%p", sc->sc_nexus);
         decode_acb(sc->sc_nexus);
         if ((sc->sc_active != 0) && (sc->sc_nexus->xs != NULL)) {
             /* Do full decode of ACB */

@@ -34,6 +34,10 @@
 #include "nsd.h"
 #include "ndkcompat.h"
 
+#ifndef DEBUG_CMDHANDLER
+#undef DEBUG_CMD
+#endif
+
 #ifdef DEBUG_CMD
 #define PRINTF_CMD(args...) printf(args)
 #else
@@ -59,7 +63,9 @@ typedef struct {
 void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
-    if (sc->sc_flags & SIOP_INTSOFF) {
+    if (got_int) {
+        siopintr(sc);
+    } else if (sc->sc_flags & SIOP_INTSOFF) {
         /*
          * XXX: According to NCR 53C710-1 errata, polling ISTAT is not safe
          *      when a MODE is in flight to a register with carry. This is
@@ -79,8 +85,6 @@ irq_poll(uint got_int, struct siop_softc *sc)
             sc->sc_dstat  = rp->siop_dstat;
             siopintr(sc);
         }
-    } else if (got_int) {
-        siopintr(sc);
     }
 }
 
@@ -191,8 +195,10 @@ cmd_do_iorequest(struct IORequest * ior)
     switch (ior->io_Command) {
         case ETD_READ:
         case CMD_READ:
-            PRINTF_CMD("CMD_READ %"PRIx32" %"PRIx32"\n",
-                       iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            PRINTF_CMD("CMD_READ %d %"PRIx32" %"PRIx32"\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                    iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
@@ -216,8 +222,10 @@ io_done:
         case CMD_WRITE:
         case ETD_FORMAT:
         case TD_FORMAT:
-            PRINTF_CMD("CMD_WRITE %"PRIx32" %"PRIx32"\n",
-                       iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            PRINTF_CMD("CMD_WRITE %d %"PRIx32" %"PRIx32"\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                    iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
@@ -237,6 +245,16 @@ CMD_WRITE_continue:
             break;
 
         case HD_SCSICMD:      // Send any SCSI command to drive (SCSI Direct)
+#ifdef DEBUG_CMD
+            {
+                uint8_t *scmd = (uint8_t *) *(uint32_t *)
+                                    (iotd->iotd_Req.io_Data + 12);
+                PRINTF_CMD("HD_SCSICMD %d CMD=%02x %02x %02x %02x %02x %02x\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                    scmd[0], scmd[1], scmd[2], scmd[3], scmd[4], scmd[5]);
+            }
+#endif
             rc = sd_scsidirect(iotd->iotd_Req.io_Unit,
                                iotd->iotd_Req.io_Data, ior);
             if (rc != 0) {
@@ -248,8 +266,11 @@ CMD_WRITE_continue:
         case NSCMD_TD_READ64:
             printf("NSCMD_");
         case TD_READ64:
-            printf("TD64_READ %"PRIx32":%"PRIx32" %"PRIx32"\n", iotd->iotd_Req.io_Actual,
-                   iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            printf("TD64_READ %d %"PRIx32":%"PRIx32" %"PRIx32"\n",
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                   iotd->iotd_Req.io_Actual, iotd->iotd_Req.io_Offset,
+                   iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
@@ -262,8 +283,11 @@ CMD_WRITE_continue:
             printf("NSCMD_");
         case TD_FORMAT64:
         case TD_WRITE64:
-            printf("TD64_WRITE %"PRIx32":%"PRIx32" %"PRIx32"\n", iotd->iotd_Req.io_Actual,
-                   iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
+            printf("TD64_WRITE %d %"PRIx32":%"PRIx32" %"PRIx32"\n",
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                   iotd->iotd_Req.io_Actual, iotd->iotd_Req.io_Offset,
+                   iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
@@ -280,6 +304,10 @@ CMD_WRITE_continue:
             goto CMD_SEEK_continue;
         case ETD_SEEK:
         case TD_SEEK:
+            PRINTF_CMD("TD_SEEK %d off=%lu\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                    iotd->iotd_Req.io_Offset);
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
             blkno = iotd->iotd_Req.io_Offset >> blkshift;
 CMD_SEEK_continue:
@@ -291,6 +319,9 @@ CMD_SEEK_continue:
             break;
 #endif
         case TD_GETGEOMETRY:  // Get drive capacity, blocksize, etc
+            PRINTF_CMD("TD_GETGEOMETRY %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
             rc = sd_getgeometry(iotd->iotd_Req.io_Unit,
                                 iotd->iotd_Req.io_Data, ior);
             if (rc != 0) {
@@ -318,25 +349,39 @@ CMD_SEEK_continue:
         }
 
         case TD_PROTSTATUS:   // Is the disk write protected?
+            PRINTF_CMD("TD_PROTSTATUS %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
             ior->io_Error = sd_get_protstatus(iotd->iotd_Req.io_Unit,
                                               &iotd->iotd_Req.io_Actual);
             ReplyMsg(&ior->io_Message);
             break;
 
         case TD_CHANGENUM:     // Number of disk changes
-            // XXX: Need to implement this for removable disks
-            iotd->iotd_Req.io_Actual = 1;
+            PRINTF_CMD("TD_CHANGENUM %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
+            iotd->iotd_Req.io_Actual =
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_changenum;
             ReplyMsg(&ior->io_Message);
             break;
 
         case TD_CHANGESTATE:   // Is there a disk in the drive?
-            // XXX: Need to implement this for removable disks
-            iotd->iotd_Req.io_Actual = 0;
-            ReplyMsg(&ior->io_Message);
+            PRINTF_CMD("TD_CHANGESTATE %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
+            rc = sd_testunitready(iotd->iotd_Req.io_Unit, ior);
+            if (rc != 0) {
+                iotd->iotd_Req.io_Error = rc;
+                ReplyMsg(&ior->io_Message);
+            }
             break;
 
         case CMD_STOP:         // Send SCSI STOP
-            rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, 0, 0);
+            PRINTF_CMD("CMD_STOP %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
+            rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, 0, 0, 0);
             if (rc != 0) {
                 iotd->iotd_Req.io_Error = rc;
                 ReplyMsg(&ior->io_Message);
@@ -344,12 +389,35 @@ CMD_SEEK_continue:
             break;
 
         case CMD_START:        // Send SCSI START
-            rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, 1, 0);
+            PRINTF_CMD("CMD_START %d\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target);
+            rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, 1, 0, 0);
             if (rc != 0) {
                 iotd->iotd_Req.io_Error = rc;
                 ReplyMsg(&ior->io_Message);
             }
             break;
+
+        case TD_EJECT: {       // Eject/load physical media (typically CD-ROM)
+            int load  = (iotd->iotd_Req.io_Length & ~2) == 0; // 1 = Eject
+            int eject = (iotd->iotd_Req.io_Length & ~2) == 1;
+            int immed = !!(iotd->iotd_Req.io_Length & 2);
+            PRINTF_CMD("TD_EJECT %d %s\n",
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                    ((struct scsipi_periph *) ior->io_Unit)->periph_target,
+                    load ? "load" : eject ? "eject" : "invalid");
+            if (load || eject)
+                rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, load, 1, immed);
+            else
+                rc = IOERR_BADLENGTH;
+
+            if (rc != 0) {
+                iotd->iotd_Req.io_Error = rc;
+                ReplyMsg(&ior->io_Message);
+            }
+            break;
+        }
 
         case CMD_ATTACH:  // Attach (open) a new SCSI device
             PRINTF_CMD("CMD_ATTACH %"PRIu32"\n", iotd->iotd_Req.io_Offset);
@@ -365,7 +433,10 @@ CMD_SEEK_continue:
             break;
 
         case CMD_DETACH:  // Detach (close) a SCSI device
-            PRINTF_CMD("CMD_DETACH\n");
+            PRINTF_CMD("CMD_DETACH %d\n",
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
+                   ((struct scsipi_periph *) ior->io_Unit)->periph_target);
+
             detach((struct scsipi_periph *) ior->io_Unit);
             ReplyMsg(&ior->io_Message);
             break;
@@ -395,7 +466,6 @@ CMD_SEEK_continue:
         case TD_REMOVE:        // Notify when disk changes
         case TD_ADDCHANGEINT:  // TD_REMOVE done right
         case TD_REMCHANGEINT:  // Remove softint set by ADDCHANGEINT
-        case TD_EJECT:         // For those drives that support it
         default:
             /* Unknown command */
             printf("Unknown cmd %x\n", ior->io_Command);
@@ -590,18 +660,20 @@ open_unit(uint scsi_target, void **io_Unit)
     PutMsg(myPort, &ior.io_Message);
     WaitPort(ior.io_Message.mn_ReplyPort);
     DeleteMsgPort(ior.io_Message.mn_ReplyPort);
+
     if (ior.io_Error != 0)
         return (ior.io_Error);
 
     *io_Unit = ior.io_Unit;
     if (ior.io_Unit == NULL)
-        return (1);  // Attach failed
+        return (ERROR_BAD_UNIT);  // Attach failed
 
     /* Add new device to periph list */
     cur = AllocMem(sizeof (*cur), MEMF_PUBLIC);
     if (cur == NULL) {
+        // XXX: Need to CMD_DETACH peripheral here?
         FreeMem(cur, sizeof (*cur));
-        return (1);
+        return (ERROR_NO_MEMORY);
     }
 
     cur->count = 1;

@@ -111,11 +111,11 @@ struct scsipi_read_capacity_10_data {
 	u_int8_t length[4];
 } __packed;
 
-#define	READ_CAPACITY_16	0x9e	/* really SERVICE ACTION IN */
+#define SERVICE_ACTION_IN       0x9e
 struct scsipi_read_capacity_16 {
 	u_int8_t opcode;
 	u_int8_t byte2;
-#define	SRC16_SERVICE_ACTION	0x10
+#define	SRC16_READ_CAPACITY      0x10
 	u_int8_t addr[8];
 	u_int8_t len[4];
 	u_int8_t byte15;

@@ -463,6 +463,7 @@ struct scsipi_periph {
 	int	periph_lun;		/* LUN (not used on ATAPI) */
 #ifdef PORT_AMIGA
 	uint	periph_blkshift;	/* Block size of this LUN in bits */
+        uint    periph_changenum;       /* Count of removes/inserts */
 #endif
 
 	int	periph_version;		/* ANSI SCSI version */

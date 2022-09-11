@@ -237,6 +237,7 @@ void __attribute__((used))
 drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
          uint scsi_unit asm("d0"), ULONG flags asm("d1"))
 {
+    int rc;
     ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
 
     if (SysBase->LibNode.lib_Version < 36) {
@@ -247,11 +248,10 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     ObtainSemaphore(&entry_sem);
     dev->lib_OpenCnt++;
 
-    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
+    if ((rc = open_unit(scsi_unit, (void **) &ioreq->io_Unit)) != 0) {
         printf("Open fail %d.%d\n", scsi_unit % 10, scsi_unit / 10);
         dev->lib_OpenCnt--;
-        ioreq->io_Error = HFERR_SelTimeout;
-        // HFERR_SelfUnit - attempted to open our own SCSI ID
+        ioreq->io_Error = rc;
         ReleaseSemaphore(&entry_sem);
         return;
     }
