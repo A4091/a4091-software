@@ -1,14 +1,10 @@
-	    INCLUDE "lvo/exec_lib.i"
+            INCLUDE "lvo/exec_lib.i"
 
 MEMF_PUBLIC EQU 1
 
-; ROM_OFFSET describes where the a4091.device file is
-; placed in the ROM.
-; If you change this, also change rom.ld
-ROM_OFFSET EQU  $400
-
         ; a0: rombase
-	public  _relocate
+        ; d0: offset
+        public  _relocate
 _relocate:
         bsr     InitHandle
 
@@ -189,9 +185,11 @@ InitHandle
         endif
 InitHandleZ3
         ; initialize readhandle to beginning of device driver
-	; ROM_OFFSET needs to be multiplied by 4 because of the
-	; nibble mapped nature of the AutoConfig ROM.
-        lea     (ROM_OFFSET<<2)(a0),a1
+        ; ROM_OFFSET needs to be multiplied by 4 because of the
+        ; nibble mapped nature of the AutoConfig ROM.
+        ; ROM_OFFSET is passed in d0
+        lsl.l   #2,d0
+        lea     (a0,d0),a1
         lea     ReadHandle(pc),a2
         move.l  a1,(a2)
         rts
