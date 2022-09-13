@@ -1,6 +1,5 @@
-            INCLUDE "lvo/exec_lib.i"
-
-MEMF_PUBLIC EQU 1
+        INCLUDE "exec/memory.i"
+        INCLUDE "lvo/exec_lib.i"
 
         ; API:
         ; Z3 ROM access:
@@ -29,22 +28,19 @@ _relocate:
 
         ; Go through hunk header and allocate all segments
         move.l  4,a6 ; execbase
-        lea.l   _Hunks(pc),a2
-        ifd     USERLAND
-        lea.l   _HunksLen(pc),a3	; debug only
-        endif
+
+        move.l  _pHunks(pc),a2   ; segment pointers
+        lea.l   16(a2),a3	; segment lengths
 AllocateLoop
-        move.l  #MEMF_PUBLIC,d1
+        moveq.l #MEMF_PUBLIC,d1
         bsr     RomFetch32
         lsl.l   #2,d0
-        ifd     USERLAND
-        move.l  d0,(a3)+ ; debug only
-        endif
+        move.l  d0,(a3)+ ; segment length
         jsr     _LVOAllocMem(a6)
-        move.l  d0,(a2)+
+        move.l  d0,(a2)+ ; segment pointer
         dbra    d7,AllocateLoop
 
-        lea     _Hunks(pc),a5
+        move.l  _pHunks(pc),a5
 HunkLoop
         move.l  (a5),a0 ; current hunk
         bsr     RomFetch32
@@ -110,7 +106,7 @@ HunkReloc32
         move.l  d0,d2 ; num ; number of the hunk the offsets are to point into
 
         lsl.l   #2,d2 ; *4 ; offset from Hunks
-        lea     _Hunks(pc),a2
+        move.l  _pHunks(pc),a2
         add.l   d2,a2 ; hunk number num
         move.l  (a2),d3 ; base address of hunk
 
@@ -192,21 +188,20 @@ InitHandle
         move.l  a1,(a2)  ; memory location passed in a0
         move.l  d0,4(a2) ; Set access type: 0 = memory, Z3 otherwise
 
+        moveq.l #(8*4),d0
+        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
+        jsr     _LVOAllocMem(a6)
+        lea     _pHunks(pc),a2
+        move.l  d0,(a2)
         rts
 
 ReadHandle
         dc.l    0 ; Current address
         dc.l    0 ; 0=memory, otherwise z3
 
-        public  _Hunks
-_Hunks
-        dc.l    0,0,0,0
-
-        ifd     USERLAND
-        public  _HunksLen
-_HunksLen
-        dc.l    0,0,0,0
-        endif
+        public  _pHunks
+_pHunks
+        dc.l    0
 
         ; keep out of the Diag area copied to RAM automatically
         section DEVICE,data

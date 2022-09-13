@@ -9,8 +9,7 @@
 
 #include <clib/exec_protos.h>
 extern uint32_t relocate(ULONG offset asm("d0"), uint8_t *program asm("a0"));
-extern uint32_t Hunks[];
-extern uint32_t HunksLen[];
+extern uint32_t *pHunks;
 extern uint8_t  device[];
 
 static void hexdump(unsigned char *data, size_t size)
@@ -49,10 +48,13 @@ int main(int argc, char *argv[])
 {
 	int i;
 	uint32_t ret;
+	uint32_t *Hunks, *HunksLen;
 
 	printf("Calling relocate()\n");
 	ret=relocate(0, device);
 	printf("... relocate returned %x\n", ret);
+	Hunks = pHunks;
+	HunksLen = &pHunks[4];
 
 	for (i=0; i<4; i++) {
 		if (Hunks[i] == 0)
@@ -62,5 +64,6 @@ int main(int argc, char *argv[])
 		FreeMem((void *)Hunks[i], HunksLen[i]);
 	}
 
+	FreeMem(pHunks, 8*4);
 	return(0);
 }

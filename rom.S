@@ -144,7 +144,7 @@ DiagEntry:
         move.w  #$0f00,$dff180               ; flash screen red (error)
 ok
         lea.l   Romtag(pc),a4                ; find Romtag in memory
-        lea.l   _Hunks(pc),a0
+        move.l  _pHunks(pc),a0
         move.l  (a0),a2
 
         cmp.w   #$4afc,4(a2)
