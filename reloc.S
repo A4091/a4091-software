@@ -157,7 +157,6 @@ RomFetch32
         bne.s   RomFetchZ3
 
         move.l  (a0)+,d0   ; access type is memory
-        move.l  a0,(a1)
         bra.s   RomFetchDone
 
 RomFetchZ3                 ; access type is ZorroIII
@@ -174,9 +173,9 @@ nextnip
 
         addq    #4,a0
         dbra    d3,nextnip
-        move.l  a0,(a1)
 
 RomFetchDone
+        move.l  a0,(a1)
         movem.l (sp)+,a0-a1/d1-d3
         rts
 
