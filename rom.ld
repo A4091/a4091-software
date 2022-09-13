@@ -10,14 +10,9 @@ SECTIONS {
         *(BSS)
     }
     /* Placing the a4091.device in the ROM file right after
-     * the AutoConfig ROM. Per default we leave the first 1024
-     * bytes for the AutoConfig ROM and relocation code.
-     *
-     * If you change the device driver offset here, you need to
-     * change reloc.S as well.
+     * the AutoConfig ROM.
      */
     .device : {
-	. = 0x400;
 	*(DEVICE)
     }
     /* Fill the unused space in the ROM with 0xFF. We use this

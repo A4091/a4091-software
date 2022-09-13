@@ -37,7 +37,7 @@ ROM_VECTOR     EQU     $0200      ; $80 in the ROM maps to $200 in the system
 ; ROM_OFFSET describes where the a4091.device file is
 ; placed in the ROM.
 ; If you change this, also change rom.ld
-ROM_OFFSET EQU  $400
+ROM_OFFSET EQU  (_device-RomStart)
 
         CODE
 
