@@ -8,9 +8,10 @@
 #include <proto/dos.h>
 
 #include <clib/exec_protos.h>
-extern uint32_t relocate(void);
+extern uint32_t relocate(ULONG offset asm("d0"), uint8_t *program asm("a0"));
 extern uint32_t Hunks[];
 extern uint32_t HunksLen[];
+extern uint8_t  device[];
 
 static void hexdump(unsigned char *data, size_t size)
 {
@@ -50,7 +51,7 @@ int main(int argc, char *argv[])
 	uint32_t ret;
 
 	printf("Calling relocate()\n");
-	ret=relocate();
+	ret=relocate(0, device);
 	printf("... relocate returned %x\n", ret);
 
 	for (i=0; i<4; i++) {

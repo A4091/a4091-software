@@ -2,8 +2,13 @@
 
 MEMF_PUBLIC EQU 1
 
-        ; a0: rombase
-        ; d0: offset
+        ; API:
+        ; Z3 ROM access:
+        ;   a0: rombase
+        ;   d0: offset
+        ; Memory (RAM) access:
+        ;   a0: pointer to binary
+        ;   d0: 0
         public  _relocate
 _relocate:
         bsr     InitHandle
@@ -144,21 +149,18 @@ HunkEnd
 ; data = RomFetch32(void)
 ; d0
 RomFetch32
-        ifd     USERLAND
-        movem.l a0-a1,-(sp)
-        lea     ReadHandle(pc),a1
-        move.l  (a1),a0
-        move.l  (a0)+,d0
-        move.l  a0,(a1)
-        movem.l (sp)+,a0-a1
-        rts
-        endif
-; ---------------------
-RomFetchZ3
         movem.l a0-a1/d1-d3,-(sp)
         lea     ReadHandle(pc),a1
         move.l  (a1),a0
 
+        tst.l   4(a1)      ; access type ZorroIII?
+        bne.s   RomFetchZ3
+
+        move.l  (a0)+,d0   ; access type is memory
+        move.l  a0,(a1)
+        bra.s   RomFetchDone
+
+RomFetchZ3                 ; access type is ZorroIII
         moveq.l #3,d3
 nextnip
         lsl.l   #8,d0
@@ -173,29 +175,29 @@ nextnip
         addq    #4,a0
         dbra    d3,nextnip
         move.l  a0,(a1)
+
+RomFetchDone
         movem.l (sp)+,a0-a1/d1-d3
         rts
 
 InitHandle
-        ifd     USERLAND
-        lea     device,a1 ; Not (pc) because different section
-        lea     ReadHandle(pc),a2
-        move.l  a1,(a2)
-        rts
-        endif
-InitHandleZ3
         ; initialize readhandle to beginning of device driver
         ; ROM_OFFSET needs to be multiplied by 4 because of the
         ; nibble mapped nature of the AutoConfig ROM.
         ; ROM_OFFSET is passed in d0
-        lsl.l   #2,d0
-        lea     (a0,d0),a1
         lea     ReadHandle(pc),a2
-        move.l  a1,(a2)
+
+        lsl.l   #2,d0
+
+        lea     (a0,d0),a1
+        move.l  a1,(a2)  ; memory location passed in a0
+        move.l  d0,4(a2) ; Set access type: 0 = memory, Z3 otherwise
+
         rts
 
 ReadHandle
-        dc.l    0
+        dc.l    0 ; Current address
+        dc.l    0 ; 0=memory, otherwise z3
 
         public  _Hunks
 _Hunks
@@ -209,7 +211,8 @@ _HunksLen
 
         ; keep out of the Diag area copied to RAM automatically
         section DEVICE,data
-device:
+        public  _device
+_device:
         ifd COMMODORE_DEVICE
         incbin "a3090.ld_strip"
         else
