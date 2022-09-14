@@ -304,7 +304,7 @@ CMD_WRITE_continue:
             goto CMD_SEEK_continue;
         case ETD_SEEK:
         case TD_SEEK:
-            PRINTF_CMD("TD_SEEK %d off=%lu\n",
+            PRINTF_CMD("TD_SEEK %d off=%"PRIu32"\n",
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
                     ((struct scsipi_periph *) ior->io_Unit)->periph_target,
                     iotd->iotd_Req.io_Offset);
