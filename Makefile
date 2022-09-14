@@ -173,8 +173,8 @@ test: reloctest
 a4091.rom: $(OBJDIR)/rom.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
-	@printf "${yellow}$@ is $(shell echo `wc -c < "$(PROG)"`) bytes${end}\n"
-	$(QUIET)test `wc -c <$<` -gt 32768 && printf "${red}ROM FILE EXCEEDS 32K!${end}\n" || printf "${green}ROM fits in 32k${end}\n"
+	@printf "${yellow}$(PROG) is $(shell echo `wc -c < "$(PROG)"`) bytes${end}\n"
+	$(QUIET)test `wc -c <$(PROG)` -gt 32768 && printf "${red}ROM FILE EXCEEDS 32K!${end}\n" || printf "${green}ROM fits in 32k${end}\n"
 
 $(OBJDIR):
 	mkdir -p $@
