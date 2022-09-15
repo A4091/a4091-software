@@ -30,7 +30,7 @@ _relocate:
         move.l  4,a6 ; execbase
 
         move.l  _pHunks(pc),a2   ; segment pointers
-        lea.l   16(a2),a3	; segment lengths
+        lea.l   16(a2),a3        ; segment lengths
 AllocateLoop
         moveq.l #MEMF_PUBLIC,d1
         bsr     RomFetch32

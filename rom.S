@@ -8,7 +8,7 @@
         INCLUDE "exec/resident.i"
         INCLUDE "lvo/exec_lib.i"
         INCLUDE "libraries/configvars.i"
-	INCLUDE "version.i"
+        INCLUDE "version.i"
 
 *----- We'll store Version and Revision in serial number
 VERSION         EQU     DEVICE_VERSION  ; also the high word of serial number
@@ -158,7 +158,7 @@ new_style
 
 done
         movem.l (sp)+,d2-d7/a2-a6
-	ENDIF
+        ENDIF
         moveq.l #1,d0           ; indicate "success"
         rts
 
