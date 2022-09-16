@@ -8,8 +8,7 @@
 #include <proto/dos.h>
 
 #include <clib/exec_protos.h>
-extern uint32_t relocate(ULONG offset asm("d0"), uint8_t *program asm("a0"));
-extern uint32_t *pHunks;
+uint32_t relocate(ULONG offset asm("d0"), uint8_t *program asm("a0"));
 extern uint8_t  device[];
 
 static void hexdump(unsigned char *data, size_t size)
@@ -46,24 +45,26 @@ static void hexdump(unsigned char *data, size_t size)
 
 int main(int argc, char *argv[])
 {
-	int i;
+	int i=0;
 	uint32_t ret;
-	uint32_t *Hunks, *HunksLen;
+	uint32_t *seg;
 
 	printf("Calling relocate()\n");
 	ret=relocate(0, device);
 	printf("... relocate returned %x\n", ret);
-	Hunks = pHunks;
-	HunksLen = &pHunks[4];
 
-	for (i=0; i<4; i++) {
-		if (Hunks[i] == 0)
-			continue;
-		printf("Hunk %d: %08x %8d\n", i, Hunks[i], HunksLen[i]);
-		hexdump((unsigned char *)Hunks[i], HunksLen[i]);
-		FreeMem((void *)Hunks[i], HunksLen[i]);
-	}
+	seg=(uint32_t *)ret;
 
-	FreeMem(pHunks, 8*4);
-	return(0);
+	do {
+		uint32_t len=*(seg-1);
+		uint32_t *hunk=(seg+1);
+		printf("Hunk %d: %p  %08d\n", i, hunk,(len-2)<<2);
+		hexdump((unsigned char *)hunk,(len-2)<<2);
+		unsigned char *fptr=(unsigned char *)(seg-1);
+		seg = BADDR(*seg);
+		FreeMem(fptr, len<<2);
+		i++;
+	} while (seg);
+
+	return 0;
 }

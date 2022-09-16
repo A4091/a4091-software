@@ -140,12 +140,15 @@ DiagEntry:
         move.l  #ROM_OFFSET,d0
         bsr     _relocate
         tst.l   d0
-        beq.s   ok
+        bne.s   ok
         move.w  #$0f00,$dff180               ; flash screen red (error)
+        moveq.l #0,d0
+        movem.l (sp)+,d2-d7/a2-a6
+        rts
 ok
         lea.l   Romtag(pc),a4                ; find Romtag in memory
-        move.l  _pHunks(pc),a0
-        move.l  (a0),a2
+        move.l  d0,a2
+        addq.l  #4,a2
 
         cmp.w   #$4afc,4(a2)
         beq.s   new_style

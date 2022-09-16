@@ -35,9 +35,13 @@ AllocateLoop
         moveq.l #MEMF_PUBLIC,d1
         bsr     RomFetch32
         lsl.l   #2,d0
-        move.l  d0,(a3)+ ; segment length
+        move.l  d0,(a3)+         ; segment length
+        addq.l  #8,d0            ; Add 8 for seglist overhead
         jsr     _LVOAllocMem(a6)
-        move.l  d0,(a2)+ ; segment pointer
+        tst.l   d0
+        beq.s   RelocateFail
+        addq.l  #8,d0            ; Skip seglist overhead
+        move.l  d0,(a2)+         ; segment pointer
         dbra    d7,AllocateLoop
 
         move.l  _pHunks(pc),a5
@@ -60,9 +64,10 @@ HunkLoop
 
         ; We don't know this hunk
 RelocateFail
-        ; Just return d0 for now, it's more useful
-        ; than -1
-        ; move.l  #$ffffffff,d0
+        bsr     RelocateCleanup
+        ; Save hunk number in d1 as error code
+        move.l  d0,d1
+        moveq.l #0,d0 ; NULL = Failure
         rts
 
 ; ---------------------
@@ -138,6 +143,60 @@ HunkEnd
         addq.l  #4,a5
         dbra    d6,HunkLoop
         moveq.l #$0,d0
+        bsr.s   CreateSegList
+        move.l  _pHunks(pc),a0
+        move.l  (a0),d2
+        subq.l  #4,d2
+        bsr.s   RelocateCleanup
+        move.l  d2,d0
+        rts
+
+; ---------------------
+
+; +--------------------+
+; | seg length (longs) | <-- = pHunks[x+4]
+; +--------------------+ <-- seglist returned
+; | bptr to next seg   | <-- = pHunks[x+1]
+; +--------------------+ <-- pHunks[x] points here
+; | segment data (also |
+; | first entry point) |
+; |/\/\/\/\/\/\/\/\/\/\|
+
+; pHunks  -+  Hunk Pointers Hunk Lengths
+;          |  +--+--+--+--+ +--+--+--+--+
+;          +->|  |  |  | 0| |  |  |  | 0|
+;             +--+--+--+--+ +--+--+--+--+
+CreateSegList:
+        move.l  _pHunks(pc),a0
+
+NextSeg:
+        move.l  (a0),a1     ; Hunks[x]
+
+        move.l  4*4(a0),d0  ; length of current hunk
+        addq.l  #8,d0       ; add header size
+        lsr.l   #2,d0       ; MKBADDR
+        move.l  d0,-8(a1)   ; write seg size
+
+        addq.l  #4,a0
+        move.l  (a0),d0    ; next hunk
+        tst.l   d0          ; hunk addr zero?
+        beq     SegListDone ; we're done
+        subq.l  #4,d0       ; else: point to linked list
+        lsr.l   #2,d0       ; MKBADDR
+        move.l  d0,-4(a1)   ; write BPTR to next hunk
+
+        bra.s   NextSeg
+
+SegListDone
+        move.l  d0,-4(a1)   ; terminate seglist
+        move.l  (a0),a1
+        subq.l  #4,a1
+        rts
+
+RelocateCleanup:
+        move.l  _pHunks(pc),a1
+        moveq.l #(4*8),d0
+        jsr     _LVOFreeMem(a6)
         rts
 
 ; ---------------------
