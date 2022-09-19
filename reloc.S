@@ -1,6 +1,9 @@
         INCLUDE "exec/memory.i"
         INCLUDE "lvo/exec_lib.i"
 
+        IFND ROM
+        section .text,code
+        ENDIF
         ; API:
         ; Z3 ROM access:
         ;   a0: rombase
