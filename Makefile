@@ -151,18 +151,21 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/rom.o: rom.S reloc.S $(PROG)
+$(OBJDIR)/rom.o: rom.S reloc.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
-$(OBJDIR)/reloc.o: reloc.S $(PROG)
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DUSERLAND=1 $(ROMDRIVER)
+$(OBJDIR)/reloc.o: reloc.S
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+
+$(OBJDIR)/assets.o: assets.S $(PROG)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $^ -o $@
 
-reloctest: $(OBJDIR)/reloctest.o $(OBJDIR)/reloc.o
+reloctest: $(OBJDIR)/reloctest.o $(OBJDIR)/reloc.o $(OBJDIR)/assets.o
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $^ -o $@
 
@@ -170,9 +173,9 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-a4091.rom: $(OBJDIR)/rom.o rom.ld
+a4091.rom: $(OBJDIR)/rom.o $(OBJDIR)/assets.o rom.ld
 	@echo Building $@
-	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $<
+	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $< $(OBJDIR)/assets.o
 	@printf "${yellow}$(PROG) is $(shell echo `wc -c < "$(PROG)"`) bytes${end}\n"
 	$(QUIET)test `wc -c < $@` -gt 32768 && printf "${red}ROM FILE EXCEEDS 32K!${end}\n" || printf "${green}ROM fits in 32k${end}\n"
 
