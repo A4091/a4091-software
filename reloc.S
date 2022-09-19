@@ -4,6 +4,9 @@
         IFND ROM
         section .text,code
         ENDIF
+
+NUM_ENTRIES EQU 5
+
         ; API:
         ; Z3 ROM access:
         ;   a0: rombase
@@ -33,7 +36,7 @@ _relocate:
         move.l  4,a6 ; execbase
 
         move.l  _pHunks(pc),a2   ; segment pointers
-        lea.l   16(a2),a3        ; segment lengths
+        lea.l   4*NUM_ENTRIES(a2),a3        ; segment lengths
 AllocateLoop
         moveq.l #MEMF_PUBLIC,d1
         bsr     RomFetch32
@@ -180,7 +183,7 @@ CreateSegList:
 NextSeg:
         move.l  (a0),a1     ; Hunks[x]
 
-        move.l  4*4(a0),d0  ; length of current hunk
+        move.l  4*NUM_ENTRIES(a0),d0  ; length of current hunk
         addq.l  #8,d0       ; add header size
         lsr.l   #2,d0       ; MKBADDR
         move.l  d0,-8(a1)   ; write seg size
@@ -203,7 +206,7 @@ SegListDone
 
 RelocateCleanup:
         move.l  _pHunks(pc),a1
-        moveq.l #(4*8),d0
+        moveq.l #(8*NUM_ENTRIES),d0
         jsr     _LVOFreeMem(a6)
         rts
 
@@ -255,7 +258,7 @@ InitHandle
         move.l  a1,(a2)  ; memory location passed in a0
         move.l  d0,4(a2) ; Set access type: 0 = memory, Z3 otherwise
 
-        moveq.l #(8*4),d0
+        moveq.l #(8*NUM_ENTRIES),d0
         move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
         jsr     _LVOAllocMem(a6)
         lea     _pHunks(pc),a2
