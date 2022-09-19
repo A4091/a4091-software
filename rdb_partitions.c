@@ -88,6 +88,7 @@ struct PartitionBlock {
 
 static uint32_t *_block; // shared storage for 1 block
 extern char real_device_name[];
+extern int blksize;
 
 void
 find_partitions(struct ConfigDev *cd, struct RigidDiskBlock *rdb, struct IOStdReq *ioreq, int unit)
@@ -178,6 +179,10 @@ next_partition:
     return;
 }
 
+void add_cdrom(struct ConfigDev *cd, int unit)
+{
+}
+
 int
 parse_rdb(struct ConfigDev *cd, struct Library *dev)
 {
@@ -223,7 +228,12 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
 
             find_partitions(cd, rdb, &ior, i);
 	} else {
-            printf("RDB not found!\n");
+            // Not a sufficient test but good
+            // enough for a proof of concept?
+            if (blksize == 2048)
+                add_cdrom(cd, i);
+            else
+                printf("RDB not found!\n");
 	}
 
         safe_close(&ior);
