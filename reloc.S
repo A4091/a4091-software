@@ -258,7 +258,6 @@ ReadHandle
         dc.l    0 ; Current address
         dc.l    0 ; 0=memory, otherwise z3
 
-        public  _pHunks
 _pHunks
         dc.l    0
 
