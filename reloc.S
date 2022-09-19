@@ -67,9 +67,10 @@ HunkLoop
 
         ; We don't know this hunk
 RelocateFail
+        ; Save hunk number in rErrno as error code
+        lea     _rErrno(pc),a0
+        move.l  d0,(a0)
         bsr     RelocateCleanup
-        ; Save hunk number in d1 as error code
-        move.l  d0,d1
         moveq.l #0,d0 ; NULL = Failure
         rts
 
@@ -145,7 +146,11 @@ SkipSymbol
 HunkEnd
         addq.l  #4,a5
         dbra    d6,HunkLoop
-        moveq.l #$0,d0
+
+        lea     _rErrno(pc),a0
+        moveq.l #0,d0
+        move.l  d0,(a0)
+
         bsr.s   CreateSegList
         move.l  _pHunks(pc),a0
         move.l  (a0),d2
@@ -264,4 +269,7 @@ ReadHandle
 _pHunks
         dc.l    0
 
+        public _rErrno
+_rErrno
+        dc.l    0
         CODE
