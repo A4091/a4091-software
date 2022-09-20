@@ -44,7 +44,7 @@ ROM_OFFSET EQU  (_device-RomStart)
 *******  RomStart  ***************************************************
 **********************************************************************
 
-RomStart:
+RomStart
         *   ExpansionRom structure
         *
         *   On the A4091 the AUTOCONFIG ROM information is encoded in nibbles across
@@ -82,7 +82,7 @@ RomStart:
         ENDC
 
 *******  DiagStart  **************************************************
-DiagStart:
+DiagStart
         ; This is the DiagArea structure whose relative offset from
         ; your board base appears as the Init Diag vector in your
         ; autoconfig ID information.  This structure is designed
@@ -123,7 +123,7 @@ DiagStart:
 * will be returned to the free memory pool.
 *
 
-DiagEntry:
+DiagEntry
         IFND NO_DEVICE
         movem.l d2-d7/a2-a6,-(sp)
 
@@ -140,26 +140,26 @@ DiagEntry:
         move.l  #ROM_OFFSET,d0
         bsr     _relocate
         tst.l   d0
-        bne.s   ok
+        bne.s   .ok
         move.w  #$0f00,$dff180               ; flash screen red (error)
         moveq.l #0,d0
         movem.l (sp)+,d2-d7/a2-a6
         rts
-ok
+.ok
         lea.l   Romtag(pc),a4                ; find Romtag in memory
         move.l  d0,a2
         addq.l  #4,a2
 
         cmp.w   #$4afc,4(a2)
-        beq.s   new_style
-old_style
+        beq.s   .new_style
+.old_style
         move.l  a2,RT_INIT(a4)
-        bra.s   done
-new_style
+        bra.s   .done
+.new_style
         add.l   #4+RT_INIT,a2 ; skip _start and find _auto_init_tables
         move.l  (a2),RT_INIT(a4)
 
-done
+.done
         movem.l (sp)+,d2-d7/a2-a6
         ENDIF
         moveq.l #1,d0           ; indicate "success"
@@ -169,20 +169,20 @@ done
 *******  BootEntry  **************************************************
 **********************************************************************
 
-BootEntry:
+BootEntry
         lea     DosName(PC),a1          ; 'dos.library',0
         jsr     _LVOFindResident(a6)    ; find the DOS resident tag
         tst.l   d0
-        beq.s   BadBoot
+        beq.s   .BadBoot
         move.l  d0,a0                   ; in order to bootstrap
         move.l  RT_INIT(A0),a0          ; set vector to DOS INIT
         jsr     (a0)                    ; and initialize DOS
-BadBoot:
+.BadBoot
         rts
 
 *******  Resident Structure  *****************************************
 **********************************************************************
-Romtag:
+Romtag
         dc.w    RTC_MATCHWORD      ; UWORD RT_MATCHWORD
         dc.l    0                  ; APTR  RT_MATCHTAG
         dc.l    0                  ; APTR  RT_ENDSKIP
@@ -204,13 +204,13 @@ Romtag:
 
 *******  Strings referenced in Diag Copy area  **************************
 *************************************************************************
-DevName:
+DevName
         dc.b    'a4091.device',0                   ; Name string
-IdString:
+IdString
         dc.b    'A4091 scsidisk '
         dc.b    48+VERSION/10,48+VERSION//10,'.'
         dc.b    48+REVISION/10,48+REVISION//10,0   ; Id string
-DosName:
+DosName
         dc.b    'dos.library',0                    ; DOS library name
         align 1     ; word align
 
@@ -223,6 +223,6 @@ ROM             EQU    1
 *
 * End of the Diag copy area which is copied to RAM
 *
-EndCopy:
+EndCopy
 *************************************************************************
         END

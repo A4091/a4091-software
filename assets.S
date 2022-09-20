@@ -1,7 +1,7 @@
         ; keep out of the Diag area copied to RAM automatically
         section DEVICE
         public  _device
-_device:
+_device
         ifd COMMODORE_DEVICE
         incbin "a3090.ld_strip"
         else
@@ -10,7 +10,7 @@ _device:
 
         section FILESYSTEM
         public  _CDFileSystem
-_CDFileSystem:
+_CDFileSystem
         incbin "BootCDFileSystem"
 
 	CODE

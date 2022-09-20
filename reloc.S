@@ -15,13 +15,13 @@ NUM_ENTRIES EQU 5
         ;   a0: pointer to binary
         ;   d0: 0
         public  _relocate
-_relocate:
+_relocate
         bsr     InitHandle
 
         ; fetch file header
         bsr     RomFetch32
         cmp.l   #$3f3,d0 ; We only know hunk_hdr
-        bne     RelocateFail
+        bne     .RelocateFail
 
         ; consume the header and remember number of hunks
         bsr     RomFetch32
@@ -35,9 +35,9 @@ _relocate:
         ; Go through hunk header and allocate all segments
         move.l  4,a6 ; execbase
 
-        move.l  _pHunks(pc),a2   ; segment pointers
+        move.l  pHunks(pc),a2   ; segment pointers
         lea.l   4*NUM_ENTRIES(a2),a3        ; segment lengths
-AllocateLoop
+.AllocateLoop
         moveq.l #MEMF_PUBLIC,d1
         bsr     RomFetch32
         lsl.l   #2,d0
@@ -45,71 +45,71 @@ AllocateLoop
         addq.l  #8,d0            ; Add 8 for seglist overhead
         jsr     _LVOAllocMem(a6)
         tst.l   d0
-        beq.s   RelocateFail
+        beq.s   .RelocateFail
         addq.l  #8,d0            ; Skip seglist overhead
         move.l  d0,(a2)+         ; segment pointer
-        dbra    d7,AllocateLoop
+        dbra    d7,.AllocateLoop
 
-        move.l  _pHunks(pc),a5
-HunkLoop
+        move.l  pHunks(pc),a5
+.HunkLoop
         move.l  (a5),a0 ; current hunk
         bsr     RomFetch32
 
         cmp.l   #$3e9,d0
-        beq     HunkCode
+        beq     .HunkCode
         cmp.l   #$3ea,d0
-        beq     HunkData
+        beq     .HunkData
         cmp.l   #$3eb,d0
-        beq     HunkBSS
+        beq     .HunkBSS
         cmp.l   #$3ec,d0
-        beq     HunkReloc32
+        beq     .HunkReloc32
         cmp.l   #$3f0,d0
-        beq     HunkSymbol
+        beq     .HunkSymbol
         cmp.l   #$3f2,d0
-        beq     HunkEnd
+        beq     .HunkEnd
 
         ; We don't know this hunk
-RelocateFail
+.RelocateFail
         ; Save hunk number in rErrno as error code
         lea     _rErrno(pc),a0
         move.l  d0,(a0)
-        bsr     RelocateCleanup
+        bsr     .RelocateCleanup
         moveq.l #0,d0 ; NULL = Failure
         rts
 
 ; ---------------------
 
-HunkData
-HunkCode
+.HunkData
+.HunkCode
         bsr     RomFetch32
         move.l  d0,d7
         subq.l  #1,d7
-CopyHunk
+.CopyHunk
         bsr     RomFetch32
         move.l  d0,(a0)+
-        dbra    d7,CopyHunk
-        bra     HunkLoop
+        dbra    d7,.CopyHunk
+        bra     .HunkLoop
 
 ; ---------------------
 
-HunkBSS
+.HunkBSS
         bsr     RomFetch32
         move.l  d0,d7
         subq.l  #1,d7
         ; hunk address in a0
-ClearBSS
+.ClearBSS
         move.l  #$0,(a0)+
-        dbra    d7,ClearBSS
+        dbra    d7,.ClearBSS
 
-        bra     HunkLoop
+        bra     .HunkLoop
 
 ; ---------------------
 
-HunkReloc32
+.HunkReloc32
         bsr     RomFetch32
 
         tst.l   d0     ; if len is zero the reloc32 block is done
-        beq     HunkLoop
+        beq     .HunkLoop
 
         move.l  d0,d1 ; len ; number of offsets for a given hunk
         subq.l  #1,d1 ; for dbra
@@ -118,48 +118,54 @@ HunkReloc32
         move.l  d0,d2 ; num ; number of the hunk the offsets are to point into
 
         lsl.l   #2,d2 ; *4 ; offset from Hunks
-        move.l  _pHunks(pc),a2
+        move.l  pHunks(pc),a2
         add.l   d2,a2 ; hunk number num
         move.l  (a2),d3 ; base address of hunk
 
-RelocTight
+.RelocTight
         bsr     RomFetch32
         ; get baseaddr + d0, add d3 to the data there.
         move.l  a0,a4
         add.l   d0,a4
         add.l   d3,(a4)
-        dbra    d1,RelocTight
+        dbra    d1,.RelocTight
 
-        bra     HunkReloc32
+        bra     .HunkReloc32
 
 ; ---------------------
 
-HunkSymbol
+.HunkSymbol
         bsr     RomFetch32
         tst.l   d0
-        beq     HunkLoop
+        beq     .HunkLoop
         move.l  d0,d7
-SkipSymbol
+.SkipSymbol
         bsr     RomFetch32
-        dbra    d7,SkipSymbol
-        bra     HunkSymbol
+        dbra    d7,.SkipSymbol
+        bra     .HunkSymbol
 
 ; ---------------------
 
-HunkEnd
+.HunkEnd
         addq.l  #4,a5
-        dbra    d6,HunkLoop
+        dbra    d6,.HunkLoop
 
         lea     _rErrno(pc),a0
         moveq.l #0,d0
         move.l  d0,(a0)
 
         bsr.s   CreateSegList
-        move.l  _pHunks(pc),a0
+        move.l  pHunks(pc),a0
         move.l  (a0),d2
         subq.l  #4,d2
-        bsr.s   RelocateCleanup
+        bsr.s   .RelocateCleanup
         move.l  d2,d0
+        rts
+
+.RelocateCleanup
+        move.l  pHunks(pc),a1
+        moveq.l #(8*NUM_ENTRIES),d0
+        jsr     _LVOFreeMem(a6)
         rts
 
 ; ---------------------
@@ -178,9 +184,9 @@ HunkEnd
 ;          +->|  |  |  | 0| |  |  |  | 0|
 ;             +--+--+--+--+ +--+--+--+--+
 CreateSegList:
-        move.l  _pHunks(pc),a0
+        move.l  pHunks(pc),a0
 
-NextSeg:
+.NextSeg
         move.l  (a0),a1     ; Hunks[x]
 
         move.l  4*NUM_ENTRIES(a0),d0  ; length of current hunk
@@ -191,23 +197,17 @@ NextSeg:
         addq.l  #4,a0
         move.l  (a0),d0    ; next hunk
         tst.l   d0          ; hunk addr zero?
-        beq     SegListDone ; we're done
+        beq     .SegListDone ; we're done
         subq.l  #4,d0       ; else: point to linked list
         lsr.l   #2,d0       ; MKBADDR
         move.l  d0,-4(a1)   ; write BPTR to next hunk
 
-        bra.s   NextSeg
+        bra.s   .NextSeg
 
-SegListDone
+.SegListDone
         move.l  d0,-4(a1)   ; terminate seglist
         move.l  (a0),a1
         subq.l  #4,a1
-        rts
-
-RelocateCleanup:
-        move.l  _pHunks(pc),a1
-        moveq.l #(8*NUM_ENTRIES),d0
-        jsr     _LVOFreeMem(a6)
         rts
 
 ; ---------------------
@@ -220,14 +220,14 @@ RomFetch32
         move.l  (a1),a0
 
         tst.l   4(a1)      ; access type ZorroIII?
-        bne.s   RomFetchZ3
+        bne.s   .RomFetchZ3
 
         move.l  (a0)+,d0   ; access type is memory
-        bra.s   RomFetchDone
+        bra.s   .RomFetchDone
 
-RomFetchZ3                 ; access type is ZorroIII
+.RomFetchZ3                ; access type is ZorroIII
         moveq.l #3,d3
-nextnip
+.nextnip
         lsl.l   #8,d0
         move.b  (a0),d1
         and.b   #$f0,d1
@@ -238,9 +238,9 @@ nextnip
         move.b  d2,d0
 
         addq    #4,a0
-        dbra    d3,nextnip
+        dbra    d3,.nextnip
 
-RomFetchDone
+.RomFetchDone
         move.l  a0,(a1)
         movem.l (sp)+,a0-a1/d1-d3
         rts
@@ -261,7 +261,7 @@ InitHandle
         moveq.l #(8*NUM_ENTRIES),d0
         move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
         jsr     _LVOAllocMem(a6)
-        lea     _pHunks(pc),a2
+        lea     pHunks(pc),a2
         move.l  d0,(a2)
         rts
 
@@ -269,7 +269,7 @@ ReadHandle
         dc.l    0 ; Current address
         dc.l    0 ; 0=memory, otherwise z3
 
-_pHunks
+pHunks
         dc.l    0
 
         public _rErrno
