@@ -16,6 +16,8 @@ NUM_ENTRIES EQU 5
         ;   d0: 0
         public  _relocate
 _relocate
+        movem.l d1-d7/a0-a6,-(sp)
+
         bsr     InitHandle
 
         ; fetch file header
@@ -75,6 +77,7 @@ _relocate
         move.l  d0,(a0)
         bsr     .RelocateCleanup
         moveq.l #0,d0 ; NULL = Failure
+        movem.l (sp)+,d1-d7/a0-a6
         rts
 
 ; ---------------------
@@ -160,6 +163,7 @@ _relocate
         subq.l  #4,d2
         bsr.s   .RelocateCleanup
         move.l  d2,d0
+        movem.l (sp)+,d1-d7/a0-a6
         rts
 
 .RelocateCleanup
