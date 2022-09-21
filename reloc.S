@@ -154,13 +154,14 @@ _relocate
         dbra    d6,.HunkLoop
 
         lea     _rErrno(pc),a0
-        moveq.l #0,d0
-        move.l  d0,(a0)
+        move.l  #0,(a0)
 
         bsr.s   CreateSegList
+
         move.l  pHunks(pc),a0
         move.l  (a0),d2
         subq.l  #4,d2
+
         bsr.s   .RelocateCleanup
         move.l  d2,d0
         movem.l (sp)+,d1-d7/a0-a6
@@ -210,8 +211,6 @@ CreateSegList:
 
 .SegListDone
         move.l  d0,-4(a1)   ; terminate seglist
-        move.l  (a0),a1
-        subq.l  #4,a1
         rts
 
 ; ---------------------
@@ -253,20 +252,21 @@ InitHandle
         ; initialize readhandle to beginning of device driver
         ; ROM_OFFSET needs to be multiplied by 4 because of the
         ; nibble mapped nature of the AutoConfig ROM.
+        ; ROM_ADDRESS is passed in a0
         ; ROM_OFFSET is passed in d0
-        lea     ReadHandle(pc),a2
 
         lsl.l   #2,d0
 
-        lea     (a0,d0),a1
-        move.l  a1,(a2)  ; memory location passed in a0
-        move.l  d0,4(a2) ; Set access type: 0 = memory, Z3 otherwise
+        add.l   d0,a0
+        lea     ReadHandle(pc),a1
+        move.l  a0,(a1)  ; memory location passed in a0
+        move.l  d0,4(a1) ; Set access type: 0 = memory, Z3 otherwise
 
         moveq.l #(8*NUM_ENTRIES),d0
         move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
         jsr     _LVOAllocMem(a6)
-        lea     pHunks(pc),a2
-        move.l  d0,(a2)
+        lea     pHunks(pc),a1
+        move.l  d0,(a1)
         rts
 
 ReadHandle
