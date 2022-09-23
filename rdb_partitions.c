@@ -26,7 +26,7 @@
 // PART
 #define PART_IDENTIFIER 0x50415254
 // FSHD
-#define	FS_IDENTIFIER 0x46534844
+#define        FS_IDENTIFIER 0x46534844
 
 struct RigidDiskBlock {
     uint32_t   rdb_ID;
@@ -150,7 +150,7 @@ next_partition:
     printf("TblSize: %d ", (uint32_t)parmPkt[4]);
 #endif
     printf("LoCyl: %4d HiCyl: %4d DosType: %08x\n",
-	    (uint32_t)parmPkt[4+9], (uint32_t)parmPkt[4+10], (uint32_t)parmPkt[4+16]);
+            (uint32_t)parmPkt[4+9], (uint32_t)parmPkt[4+10], (uint32_t)parmPkt[4+16]);
 
     struct DeviceNode *node = MakeDosNode(parmPkt);
 
@@ -192,7 +192,7 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
     _block = AllocMem(MAX_BLOCK_SIZE, MEMF_PUBLIC);
     if (!_block) {
         printf("RDB: Out of memory\n");
-	return 1;
+        return 1;
     }
 
     uint32_t *block=_block; // shared storage for 1 block
@@ -200,23 +200,23 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
     printf("Looking for RDB!\n");
 
     for (i=0; i<7; i++) { // FIXME LUNs?
-	int found = 0;
+        int found = 0;
 
-	if (safe_open(&ior, i))
-	    continue;
+        if (safe_open(&ior, i))
+            continue;
 
         for (j = 0; j < RDB_BLOCK_LIMIT; j++) {
             sdcmd_read_blocks(&ior, (uint8_t*)block, j, 1);
             uint32_t first = block[0];
             if (first == RDB_IDENTIFIER) {
-		found=1;
-		break;
-	    }
+                found=1;
+                break;
+            }
         }
 
-	if (found) {
+        if (found) {
             struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)block;
-	    printf("Unit %d: ", i);
+            printf("Unit %d: ", i);
             printf("RDB found at block %d\n", j);
 #ifdef DEBUG
             printf("\n Cylinders:\t%d", rdb->rdb_Cylinders);
@@ -227,17 +227,17 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
 #endif
 
             find_partitions(cd, rdb, &ior, i);
-	} else {
+        } else {
             // Not a sufficient test but good
             // enough for a proof of concept?
             if (blksize == 2048)
                 add_cdrom(cd, i);
             else
                 printf("RDB not found!\n");
-	}
+        }
 
         safe_close(&ior);
-	memset(&ior, 0, sizeof(ior));
+        memset(&ior, 0, sizeof(ior));
     }
     FreeMem(_block, MAX_BLOCK_SIZE);
     return 0;
