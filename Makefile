@@ -129,9 +129,9 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
-$(PROG): $(OBJS)
+$(PROG): $(OBJS) $(OBJDIR)/reloc.o
 	@echo Building $@
-	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
+	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(OBJDIR)/reloc.o $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
 
 $(PROGU): $(OBJSU)

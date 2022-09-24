@@ -10,12 +10,20 @@
 #include <devices/scsidisk.h>
 #include <libraries/expansion.h>
 #include <proto/expansion.h>
+#include <resources/filesysres.h>
+#include <dos/filehandler.h>
+
 #include <stdint.h>
 #include <string.h>
 #include "cmdhandler.h"
 #include "scsipiconf.h"
 #include "scsimsg.h"
 #include "rdb_partitions.h"
+#include "ndkcompat.h"
+
+#include "device.h"
+#include "attach.h"
+extern a4091_save_t *asave;
 
 // Based on https://github.com/captain-amygdala/pistorm/blob/main/platforms/amiga/piscsi/piscsi.h
 
@@ -179,8 +187,150 @@ next_partition:
     return;
 }
 
+
+struct FileSysResource *FileSysResBase = NULL;
+
+static struct FileSysEntry *scan_filesystems(void)
+{
+    struct FileSysEntry *fse, *cdfs=NULL;
+#ifdef DEBUG_RDB
+    int x;
+#endif
+
+    /* NOTE - you should actually be in a Forbid while accessing any
+     * system list for which no other method of arbitration is available.
+     * However, for this example we will be printing the information
+     * (which would break a Forbid anyway) so we won't Forbid.
+     * In real life, you should Forbid, copy the information you need,
+     * Permit, then print the info.
+     */
+    if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+        printf("Cannot open %s\n",FSRNAME);
+    } else {
+        printf("DosType   Version   Creator\n");
+        printf("------------------------------------------------\n");
+        for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+              fse->fse_Node.ln_Succ;
+              fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+#ifdef DEBUG_RDB
+            for (x=24; x>=8; x-=8)
+                putchar((fse->fse_DosType >> x) & 0xFF);
+
+            putchar((fse->fse_DosType & 0xFF) < 0x30
+                            ? (fse->fse_DosType & 0xFF) + 0x30
+                            : (fse->fse_DosType & 0xFF));
+#endif
+            printf("      %s%d",(fse->fse_Version >> 16)<10 ? " " : "", (fse->fse_Version >> 16));
+            printf(".%d%s",(fse->fse_Version & 0xFFFF), (fse->fse_Version & 0xFFFF)<10 ? " " : "");
+            printf("     %s",fse->fse_Node.ln_Name);
+
+            if (fse->fse_DosType==0x43443031) {
+                cdfs=fse;
+#ifndef ALL_FILESYSTEMS
+                break;
+#endif
+            }
+
+
+        }
+    }
+    return cdfs;
+}
+
+uint32_t relocate(ULONG offset asm("d0"), uint32_t program asm("a0"));
+extern uint32_t rErrno;
+extern uint32_t ReadHandle[2];
+int add_cdromfilesystem(void)
+{
+    uint32_t cdfs_seglist=0;
+    struct Resident *r;
+
+    r=FindResident("cdfs");
+    if (r == NULL) {
+        int i;
+        printf("No CDFileSystem in Kickstart ROM, search A4091 ROM\n");
+        cdfs_seglist = relocate(asave->romfile[1], (uint32_t)asave->as_addr);
+        if (cdfs_seglist == 0) {
+                printf("Not found. Bailing out. (rErrno=%x)\n", rErrno);
+                return 0;
+        }
+        printf("Scanning Filesystem...\n");
+        for (i=cdfs_seglist; i<cdfs_seglist+0x400; i+=2)
+            if(*(uint16_t *)i == 0x4afc)
+                       break;
+
+        if (*(uint16_t *)i == 0x4afc)
+            r = (struct Resident *)i;
+    }
+    if (r) {
+        printf("Initializing resident filesystem @ %p\n", r);
+        InitResident(r, cdfs_seglist);
+    } else {
+	printf("No resident filesystem.\n");
+    }
+    return (r!=NULL);
+}
+
 void add_cdrom(struct ConfigDev *cd, int unit)
 {
+    struct FileSysEntry *fse=NULL;
+    char *execName = real_device_name;
+    char dosName[] = "CD0";
+
+    ULONG parmPkt[] = {
+        (ULONG) dosName,
+        (ULONG) execName,
+        unit,          /* unit number */
+        0,             /* OpenDevice flags */
+        17,            // de_TableSize
+        2048>>2,       // de_SizeBlock
+        0,             // de_SecOrg
+        1,             // de_Surfaces
+        1,             // de_SectorPerBlock
+        1,             // de_BlocksPerTrack
+        0,             // de_Reserved
+        0,             // de_PreAlloc
+        0,             // de_Interleave
+        0,             // de_LowCyl
+        0,             // de_HighCyl
+        5,             // de_NumBuffers
+        1,             // de_BufMemType
+        0x100000,      // de_MaxTransfer
+        0x7FFFFFFE,    // de_Mask
+        2,             // de_BootPri
+        0x43443031,    // de_DosType = "CD01"
+    };
+
+    if (add_cdromfilesystem())
+        fse=scan_filesystems();
+
+    //struct ParameterPacket *pp = &parmPkt;
+
+    struct DeviceNode *node = MakeDosNode(parmPkt);
+
+    if (!node) {
+        printf("Could not create DosNode\n");
+        return;
+    }
+    if (!fse) {
+        printf("Could not load filesystem\n");
+        return;
+    }
+
+    // Process PatchFlags. Thank you, Toni.
+    ULONG *dstPatch = &node->dn_Type;
+    ULONG *srcPatch = &fse->fse_Type;
+    ULONG patchFlags = fse->fse_PatchFlags;
+    while (patchFlags) {
+        if (patchFlags & 1) {
+            *dstPatch = *srcPatch;
+        }
+        patchFlags >>= 1;
+        srcPatch++;
+        dstPatch++;
+    }
+
+    AddBootNode(2, ADNF_STARTPROC, node, cd);
 }
 
 int
