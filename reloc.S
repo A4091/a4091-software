@@ -65,6 +65,10 @@ _relocate
         beq     .HunkBSS
         cmp.l   #$3ec,d0
         beq     .HunkReloc32
+        cmp.l   #$3fc,d0
+        beq     .HunkReloc32Short
+        cmp.l   #$3f7,d0
+        beq     .HunkDRel32
         cmp.l   #$3f0,d0
         beq     .HunkSymbol
         cmp.l   #$3f2,d0
@@ -125,16 +129,51 @@ _relocate
         add.l   d2,a2 ; hunk number num
         move.l  (a2),d3 ; base address of hunk
 
-.RelocTight
+.Reloc32Tight
         bsr     RomFetch32
         ; get baseaddr + d0, add d3 to the data there.
         move.l  a0,a4
         add.l   d0,a4
         add.l   d3,(a4)
-        dbra    d1,.RelocTight
+        dbra    d1,.Reloc32Tight
 
         bra     .HunkReloc32
+; ---------------------
 
+.HunkDRel32
+.HunkReloc32Short
+        bsr     RomFetch16
+
+        tst.l   d0     ; if len is zero the reloc32 block is done
+        beq     .HunkLoopPrep
+
+        move.l  d0,d1 ; len ; number of offsets for a given hunk
+        subq.l  #1,d1 ; for dbra
+
+        bsr     RomFetch16
+        move.l  d0,d2 ; num ; number of the hunk the offsets are to point into
+
+        lsl.l   #2,d2 ; *4 ; offset from Hunks
+        move.l  pHunks(pc),a2
+        add.l   d2,a2 ; hunk number num
+        move.l  (a2),d3 ; base address of hunk
+
+.Reloc32ShortTight
+        bsr     RomFetch16
+        ; get baseaddr + d0, add d3 to the data there.
+        move.l  a0,a4
+        add.l   d0,a4
+        add.l   d3,(a4)
+        dbra    d1,.Reloc32ShortTight
+
+        bra     .HunkReloc32Short
+.HunkLoopPrep
+        lea     ReadHandle(pc),a2
+        move.l  (a2),d0 ; align pointer to longword
+        addq.l  #2,d0   ; in case we had an odd number
+        and.l   #$fffffffc,d0  ; of relocations
+        move.l  d0,(a2)
+        bra     .HunkLoop
 ; ---------------------
 
 .HunkSymbol
@@ -217,7 +256,13 @@ CreateSegList:
 
 ; data = RomFetch32(void)
 ; d0
+RomFetch16
+        moveq #1,d0
+        bra.s RomFetch
 RomFetch32
+        moveq #3,d0
+
+RomFetch
         movem.l a0-a1/d1-d3,-(sp)
         lea     ReadHandle(pc),a1
         move.l  (a1),a0
@@ -225,11 +270,16 @@ RomFetch32
         tst.l   4(a1)      ; access type ZorroIII?
         bne.s   .RomFetchZ3
 
+        cmp.b   #3,d0
+        bne.b   .RomFetchWord
         move.l  (a0)+,d0   ; access type is memory
+        bra.s   .RomFetchDone
+.RomFetchWord
+        move.w  (a0)+,d0
         bra.s   .RomFetchDone
 
 .RomFetchZ3                ; access type is ZorroIII
-        moveq.l #3,d3
+        move.l  d0,d3
 .nextnip
         lsl.l   #8,d0
         move.b  (a0),d1
