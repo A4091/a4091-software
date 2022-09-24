@@ -67,6 +67,8 @@ CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
 #ROMDRIVER := -DNO_DEVICE=1
 
+#CDFILESYSTEM := -DCDFS=1
+
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
 LDFLAGS        = -nostartfiles -nostdlib -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
 LDFLAGS_TOOLS  = -mcrt=clib2 -lgcc -lc -lamiga $(LDFLAGS_COMMON)
@@ -160,7 +162,7 @@ $(OBJDIR)/reloc.o: reloc.S
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/assets.o: assets.S $(PROG)
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER) $(CDFILESYSTEM)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@

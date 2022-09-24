@@ -11,7 +11,9 @@ _device
         section FILESYSTEM
         public  _CDFileSystem
 _CDFileSystem
+        ifd CDFS
         incbin "BootCDFileSystem"
+        endif
 
-	CODE
+        CODE
 
