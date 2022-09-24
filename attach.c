@@ -67,7 +67,7 @@ __attribute__((noinline))
 int
 irq_handler_core(a4091_save_t *save)
 {
-    struct siop_softc *sc = &save->as_device_private;
+    struct siop_softc *sc = save->as_device_private;
     siop_regmap_p      rp;
     uint8_t            istat;
 
@@ -113,7 +113,7 @@ irq_handler(void)
 void *
 device_private(device_t dev)
 {
-    return (&asave->as_device_private);
+    return (asave->as_device_private);
 }
 /* CDH: HACK */
 

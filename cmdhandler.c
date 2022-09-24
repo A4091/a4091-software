@@ -446,6 +446,7 @@ CMD_SEEK_continue:
             deinit_chan(&asave->as_device_self);
             close_timer();
             asave->as_isr = NULL;
+            FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
             FreeMem(asave, sizeof (*asave));
             asave = NULL;
             Forbid();
@@ -511,6 +512,9 @@ cmd_handler(void)
     }
 
     asave = AllocMem(sizeof (*asave), MEMF_CLEAR | MEMF_PUBLIC);
+    asave->as_device_private = AllocMem(sizeof (*asave->as_device_private),
+                                        MEMF_CLEAR | MEMF_PUBLIC);
+
     if (asave == NULL) {
         msg->io_Error = ERROR_NO_MEMORY;
         goto fail_allocmem;
@@ -524,6 +528,7 @@ cmd_handler(void)
     if (msg->io_Error != 0) {
         close_timer();
 fail_timer:
+        FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
         FreeMem(asave, sizeof (*asave));
 fail_allocmem:
         /* Terminate handler and give up */
@@ -537,7 +542,7 @@ fail_msgport:
     ReleaseSemaphore(&msg->started);
     restart_timer();
 
-    sc         = &asave->as_device_private;
+    sc         = asave->as_device_private;
     active     = &sc->sc_channel.chan_active;
     cmd_mask   = BIT(msgport->mp_SigBit);
     int_mask   = BIT(asave->as_irq_signal);

@@ -1632,8 +1632,8 @@ main(int argc, char *argv[])
         printf("  as_irq_signal=%x\n", asave->as_irq_signal);
         printf("  as_exiting=%x\n", asave->as_exiting);
         printf("  as_device_self=%p\n", &asave->as_device_self);
-        printf("  as_device_private=%p\n", &asave->as_device_private);
-        struct siop_softc *sc = &asave->as_device_private;
+        printf("  as_device_private=%p\n", asave->as_device_private);
+        struct siop_softc *sc = asave->as_device_private;
         printf("    sc_siop_si=%p\n", sc->sc_siop_si);
         printf("    sc_istat=%u sc_dstate=%u sc_sstat0=%u sc_sstat1=%u\n",
                sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);

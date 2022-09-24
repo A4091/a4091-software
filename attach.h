@@ -15,7 +15,7 @@ typedef struct {
     uint8_t               as_irq_signal;
     volatile uint8_t      as_exiting;
     struct device         as_device_self;
-    struct siop_softc     as_device_private;
+    struct siop_softc    *as_device_private;
     struct MsgPort       *as_timerport[2];
     struct timerequest   *as_timerio[2];
     int                   as_timer_running;
