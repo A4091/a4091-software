@@ -23,10 +23,6 @@
 #include "version.h"
 #include "rdb_partitions.h"
 #include "bootmenu.h"
-#include "sys_queue.h"
-#include "scsipiconf.h"
-#include "siopreg.h"
-#include "siopvar.h"
 #include "attach.h"
 
 #ifdef DEBUG

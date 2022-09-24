@@ -14,9 +14,6 @@
 #include "device.h"
 #include "printf.h"
 
-#include "scsipiconf.h"
-#include "siopreg.h"
-#include "siopvar.h"
 #include "attach.h"
 
 #ifdef DEBUG_CALLOUT

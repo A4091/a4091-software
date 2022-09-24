@@ -32,6 +32,7 @@
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
+#include "romfile.h"
 #include "ndkcompat.h"
 
 void scsipi_free_all_xs(struct scsipi_channel *chan);
@@ -333,6 +334,9 @@ init_chan(device_t self, UBYTE *boardnum)
     memset(sc, 0, sizeof (*sc));
     dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
     printf("DIP switches = %02x\n", dip_switches);
+
+    parse_romfiles();
+
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
