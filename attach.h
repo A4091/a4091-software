@@ -33,6 +33,8 @@ typedef struct {
     struct callout      **as_callout_head;
     struct ConfigDev     *as_cd;
     uint32_t             romfile[2];
+    /* battmem */
+    uint8_t              cdrom_boot;
 } a4091_save_t;
 
 #endif /* _ATTACH_H */

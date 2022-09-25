@@ -1,4 +1,4 @@
-#ifdef DEBUG_ATTACH
+#ifdef DEBUG_DEVICE
 #define USE_SERIAL_OUTPUT
 #endif
 #include "port.h"

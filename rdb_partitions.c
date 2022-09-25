@@ -380,7 +380,7 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
         } else {
             // Not a sufficient test but good
             // enough for a proof of concept?
-            if (blksize == 2048)
+            if (asave->cdrom_boot && blksize == 2048)
                 add_cdrom(cd, i);
             else
                 printf("RDB not found!\n");

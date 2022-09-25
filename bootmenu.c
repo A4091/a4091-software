@@ -33,18 +33,19 @@
 #include "siopvar.h"
 #include "attach.h"
 #include "scsimsg.h"
+#include "battmem.h"
 
 extern struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *IntuitionBase;
-struct Screen *screen;
-struct Window *window;
-APTR visualInfo;
-struct Gadget *gadgets;
-struct Gadget *DisplayTypeGad;
-struct Gadget *LastAdded;
-struct NewGadget *NewGadget;
+static struct Screen *screen;
+static struct Window *window;
+static APTR visualInfo;
+static struct Gadget *gadgets;
+static struct Gadget *DisplayTypeGad;
+static struct Gadget *LastAdded;
+static struct NewGadget *NewGadget;
 
 #define DISKS_BACK_ID      1
 #define DIPSWITCH_BACK_ID  2
@@ -55,6 +56,8 @@ struct NewGadget *NewGadget;
 #define MAIN_DIPSWITCH_ID  7
 #define MAIN_DEBUG_ID      8
 #define MAIN_BOOT_ID       9
+#define DEBUG_CDROM_BOOT_ID 10
+#define DEBUG_BOGUS_ID      11
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -515,9 +518,23 @@ static void debug_page(void)
     struct NewGadget ng;
     page_header(&ng, "A4091 Diagnostics - Debug");
 
+    BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
     SetRGB4(&screen->ViewPort,3,6,8,11);
-    SetAPen(&screen->RastPort,3);
-    Print("DEBUG - TBD",0,120,TRUE);
+
+    ng.ng_LeftEdge   = 400;
+    ng.ng_TopEdge    = 60;
+    ng.ng_Width      = 175;
+    ng.ng_GadgetText = "CDROM Boot";
+    ng.ng_GadgetID   = DEBUG_CDROM_BOOT_ID;
+    LastAdded = create_gadget(CHECKBOX_KIND);
+    GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, cdrom_boot, TAG_DONE);
+
+    ng.ng_TopEdge    = 76;
+    ng.ng_GadgetText = "Zorro-III magic speed hack";
+    ng.ng_GadgetID   = DEBUG_BOGUS_ID;
+    LastAdded = create_gadget_custom(CHECKBOX_KIND,
+		                     GA_Disabled, TRUE,
+                                     TAG_DONE);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -525,6 +542,12 @@ static void debug_page(void)
     ng.ng_GadgetText = "Back";
     ng.ng_GadgetID   = DEBUG_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
+
+    DrawBevelBox(&screen->RastPort,100,52,440,115,
+                                    GT_VisualInfo,  visualInfo,
+                                    GTBB_Recessed,  TRUE,
+                                    GTBB_FrameType, BBFT_RIDGE,
+                                    TAG_DONE);
 
     page_footer();
 }
@@ -639,7 +662,7 @@ static void main_page(void)
     ng.ng_GadgetText = "Debug";
     ng.ng_GadgetID   = MAIN_DEBUG_ID;
     LastAdded = create_gadget_custom(BUTTON_KIND,
-                                     GA_Disabled, TRUE,
+                                     // GA_Disabled, TRUE,
                                      TAG_DONE);
 
     ng.ng_TopEdge= 200;
@@ -699,6 +722,10 @@ static void event_loop(void)
                 case MAIN_BOOT_ID:
                     running=FALSE;
                     break;
+                case DEBUG_CDROM_BOOT_ID:
+                    asave->cdrom_boot=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
+                    Save_BattMem();
+                    break;
                 }
             }
         }
@@ -731,6 +758,7 @@ void boot_menu(void)
     event_loop();
     cleanup_bootmenu();
     printf("Bootmenu: exit\n");
+    ColdReboot();
     return;
 }
 
