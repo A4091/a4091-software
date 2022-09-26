@@ -275,9 +275,11 @@ scsibusattach(device_t parent, device_t self, void *aux)
 	if (chan->chan_flags & SCSIPI_CHAN_OPENINGS) {
 		if (chan->chan_max_periph > 256)
 			chan->chan_max_periph = 256;
+#ifndef PORT_AMIGA
 	} else {
 		if (chan->chan_adapter->adapt_max_periph > 256)
 			chan->chan_adapter->adapt_max_periph = 256;
+#endif
 	}
 
 #if 0

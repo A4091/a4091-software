@@ -171,6 +171,68 @@ cmd_complete(void *ior, int8_t rc)
     ReplyMsg(&ioreq->io_Message);
 }
 
+VOID
+AddHeadMinList(struct MinList *list, struct MinNode *node)
+{
+    struct MinNode *head;
+
+    head            = list->mlh_Head;
+    list->mlh_Head  = node;
+    node->mln_Succ  = head;
+    node->mln_Pred  = (struct MinNode *)list;
+    head->mln_Pred  = node;
+}
+
+void
+td_addchangeint(struct IORequest *ior)
+{
+    struct scsipi_periph *periph = (struct scsipi_periph *)ior->io_Unit;
+
+    Forbid();
+    AddHeadMinList(&periph->periph_changeintlist,
+                   (struct MinNode *) &ior->io_Message.mn_Node);
+    Permit();
+    ior->io_Error = 0;  // Success
+}
+
+void
+td_remchangeint(struct IORequest *ior)
+{
+    struct IORequest *io;
+    struct scsipi_periph *periph = (struct scsipi_periph *)ior->io_Unit;
+
+    Forbid();
+    for (io = (struct IORequest *)periph->periph_changeintlist.mlh_Head;
+         io->io_Message.mn_Node.ln_Succ != NULL;
+         io = (struct IORequest *)io->io_Message.mn_Node.ln_Succ) {
+        if (io == ior) {
+            Remove(&io->io_Message.mn_Node);
+
+            io->io_Message.mn_Node.ln_Succ = NULL;
+            io->io_Message.mn_Node.ln_Pred = NULL;
+
+            ior->io_Error = 0;
+            break;
+        }
+    }
+    Permit();
+    if (io == NULL) {
+        ior->io_Error = IOERR_BADADDRESS;
+    } else {
+        ior->io_Error = 0;  // Success
+    }
+}
+
+void
+td_remove(struct IORequest *ior)
+{
+    struct IOStdReq *io = (struct IOStdReq *) ior;
+    struct scsipi_periph *periph = (struct scsipi_periph *)io->io_Unit;
+    periph->periph_changeint = io->io_Data;
+    ior->io_Error = 0;  // Success
+}
+
+
 static const UWORD nsd_supported_cmds[] = {
     CMD_READ, CMD_WRITE, TD_SEEK, TD_FORMAT,
     CMD_STOP, CMD_START,
@@ -407,6 +469,7 @@ CMD_SEEK_continue:
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
                     ((struct scsipi_periph *) ior->io_Unit)->periph_target,
                     load ? "load" : eject ? "eject" : "invalid");
+
             if (load || eject)
                 rc = sd_startstop(iotd->iotd_Req.io_Unit, ior, load, 1, immed);
             else
@@ -421,11 +484,13 @@ CMD_SEEK_continue:
 
         case CMD_ATTACH:  // Attach (open) a new SCSI device
             PRINTF_CMD("CMD_ATTACH %"PRIu32"\n", iotd->iotd_Req.io_Offset);
+
             rc = attach(&asave->as_device_self, iotd->iotd_Req.io_Offset,
-                        (struct scsipi_periph **) &ior->io_Unit);
+                        (struct scsipi_periph **) &ior->io_Unit,
+                        iotd->iotd_Req.io_Length);
             if (rc != 0) {
                 ior->io_Error = rc;
-            } else {
+            } else if ((iotd->iotd_Req.io_Length & TDF_DEBUG_OPEN) == 0) {
                 (void) sd_blocksize((struct scsipi_periph *) ior->io_Unit);
             }
 
@@ -455,6 +520,24 @@ CMD_SEEK_continue:
             ReplyMsg(&ior->io_Message);
             return (1);
 
+        case TD_ADDCHANGEINT:  // TD_REMOVE done right
+            PRINTF_CMD("TD_ADDCHANGEINT\n");
+            td_addchangeint(ior);
+            /* Do not reply to this request */
+            break;
+
+        case TD_REMCHANGEINT:  // Remove softint set by ADDCHANGEINT
+            PRINTF_CMD("TD_REMCHANGEINT\n");
+            td_remchangeint(ior);
+            ReplyMsg(&ior->io_Message);
+            break;
+
+        case TD_REMOVE:        // Notify when media changes
+            PRINTF_CMD("TD_REMOVE\n");
+            td_remove(ior);
+            ReplyMsg(&ior->io_Message);
+            break;
+
         case CMD_INVALID:      // Invalid command (0)
         case CMD_RESET:        // Not supported by SCSI
         case CMD_UPDATE:       // Not supported by SCSI
@@ -464,9 +547,6 @@ CMD_SEEK_continue:
         case TD_RAWWRITE:      // Not supported by SCSI (raw bits to disk)
         case TD_GETDRIVETYPE:  // Not supported by SCSI (floppy-only DRIVExxxx)
         case TD_GETNUMTRACKS:  // Not supported by SCSI (floppy-only)
-        case TD_REMOVE:        // Notify when disk changes
-        case TD_ADDCHANGEINT:  // TD_REMOVE done right
-        case TD_REMCHANGEINT:  // Remove softint set by ADDCHANGEINT
         default:
             /* Unknown command */
             printf("Unknown cmd %x\n", ior->io_Command);
@@ -481,6 +561,40 @@ CMD_SEEK_continue:
 
 
 void scsipi_completion_poll(struct scsipi_channel *chan);
+
+/*
+ * irq_and_timer_handler()
+ * -----------------------
+ * This function may be called by code which only needs to run background
+ * processing of interrupts and timer events. The function will return
+ * after each service action, so should be called repeatedly until an
+ * external condition is met.
+ */
+int
+irq_and_timer_handler(void)
+{
+    struct siop_softc     *sc   = asave->as_device_private;
+    struct scsipi_channel *chan = &sc->sc_channel;
+    uint32_t int_mask   = asave->as_int_mask;
+    uint32_t timer_mask = asave->as_timer_mask;
+    uint32_t mask;
+
+    mask = Wait(int_mask | timer_mask);
+
+    /* Handle incoming interrupts */
+    irq_poll(mask & int_mask, sc);
+
+    if (mask & timer_mask) {
+        WaitIO(&asave->as_timerio[0]->tr_node);
+        callout_run_timeouts();
+        sd_testunitready_walk(chan);
+        restart_timer();
+    }
+
+    /* Process the failure completion queue, if anything is present */
+    scsipi_completion_poll(chan);
+    return ((mask & int_mask) ? 1 : 0);
+}
 
 static void
 cmd_handler(void)
@@ -550,6 +664,9 @@ fail_msgport:
     wait_mask  = int_mask | timer_mask | cmd_mask;
     chan       = &sc->sc_channel;
 
+    asave->as_int_mask   = int_mask;
+    asave->as_timer_mask = timer_mask;
+
     while (1) {
         mask = Wait(wait_mask);
 
@@ -565,6 +682,7 @@ fail_msgport:
         if (mask & timer_mask) {
             WaitIO(&asave->as_timerio[0]->tr_node);
             callout_run_timeouts();
+            sd_testunitready_walk(chan);
             restart_timer();
         }
 
@@ -645,7 +763,7 @@ struct unit_list {
 unit_list_t *unit_list = NULL;
 
 int
-open_unit(uint scsi_target, void **io_Unit)
+open_unit(uint scsi_target, void **io_Unit, uint flags)
 {
     unit_list_t *cur;
     for (cur = unit_list; cur != NULL; cur = cur->next) {
@@ -655,12 +773,19 @@ open_unit(uint scsi_target, void **io_Unit)
             return (0);
         }
     }
+    if (flags & TDF_DEBUG_OPEN)
+        return (ERROR_BAD_UNIT);  // This flag only grabs already open device
+
+    cur = AllocMem(sizeof (*cur), MEMF_PUBLIC);
+    if (cur == NULL)
+        return (ERROR_NO_MEMORY);
 
     struct IOStdReq ior;
     ior.io_Message.mn_ReplyPort = CreateMsgPort();
     ior.io_Command = CMD_ATTACH;
     ior.io_Unit = NULL;
     ior.io_Offset = scsi_target;
+    ior.io_Length = flags;
 
     PutMsg(myPort, &ior.io_Message);
     WaitPort(ior.io_Message.mn_ReplyPort);
@@ -674,13 +799,6 @@ open_unit(uint scsi_target, void **io_Unit)
         return (ERROR_BAD_UNIT);  // Attach failed
 
     /* Add new device to periph list */
-    cur = AllocMem(sizeof (*cur), MEMF_PUBLIC);
-    if (cur == NULL) {
-        // XXX: Need to CMD_DETACH peripheral here?
-        FreeMem(cur, sizeof (*cur));
-        return (ERROR_NO_MEMORY);
-    }
-
     cur->count = 1;
     cur->periph = (struct scsipi_periph *) ior.io_Unit;
     cur->scsi_target = scsi_target;

@@ -1,12 +1,16 @@
 #ifndef _CMD_HANDLER_H
 #define _CMD_HANDLER_H
 
-int open_unit(uint scsi_target, void **io_Unit);
+int open_unit(uint scsi_target, void **io_Unit, uint flags);
 void close_unit(void *io_Unit);
 
 int start_cmd_handler(uint *boardnum);
 void stop_cmd_handler(void);
 void cmd_complete(void *ior, int8_t rc);
+
+void td_addchangeint(struct IORequest *ior);
+void td_remchangeint(struct IORequest *ior);
+void td_remove(struct IORequest *ior);
 
 /* Trackdisk-64 enhanced commands */
 /* Check before defining. AmigaOS 3.2 NDK provides these in

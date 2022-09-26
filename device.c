@@ -196,9 +196,10 @@ static BPTR __attribute__((used))
 drv_expunge(struct Library *dev asm("a6"))
 {
     ObtainSemaphore(&entry_sem);
-    if (dev->lib_OpenCnt != 0) {
+
+    if ((dev->lib_OpenCnt != 0) || periph_still_attached()) {
         printf("expunge() device still open\n");
-        dev->lib_Flags |= LIBF_DELEXP;
+        dev->lib_Flags |= LIBF_DELEXP;  // Indicate I'll expunge myself later
         ReleaseSemaphore(&entry_sem);
         return (0);
     }
@@ -244,7 +245,7 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     ObtainSemaphore(&entry_sem);
     dev->lib_OpenCnt++;
 
-    if ((rc = open_unit(scsi_unit, (void **) &ioreq->io_Unit)) != 0) {
+    if ((rc = open_unit(scsi_unit, (void **) &ioreq->io_Unit, flags)) != 0) {
         printf("Open fail %d.%d\n", scsi_unit % 10, scsi_unit / 10);
         dev->lib_OpenCnt--;
         ioreq->io_Error = rc;
@@ -293,6 +294,36 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __attribute__((used))
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
+    /* These commands are forced to always execute in immediate mode */
+    switch (ior->io_Command) {
+        case TD_REMCHANGEINT:
+            printf("TD_REMCHANGEINT\n");
+            td_remchangeint(ior);
+            return;
+        case CMD_START:
+            /*
+             * This driver doesn't currently disable queue processing
+             * on a CMD_STOP, so it does not need to immediately
+             * execute a CMD_START.
+             */
+            break;
+    }
+
+    /* These commands may optionally execute in immediate mode */
+    if (ior->io_Flags & IOF_QUICK) {
+        switch (ior->io_Command) {
+            case TD_ADDCHANGEINT:
+                printf("TD_ADDCHANGEINT\n");
+                td_addchangeint(ior);
+                return;
+            case TD_REMOVE:
+                printf("TD_REMOVE\n");
+                td_remove(ior);
+                return;
+        }
+    }
+
+    /* All other commands must be pushed to the driver task */
     ior->io_Flags &= ~IOF_QUICK;
     PutMsg(myPort, &ior->io_Message);
 }

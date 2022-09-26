@@ -12,24 +12,28 @@ struct timerequest;
 struct callout;
 struct ConfigDev;
 
-int attach(device_t self, uint scsi_target, struct scsipi_periph **periph);
+int attach(device_t self, uint scsi_target, struct scsipi_periph **periph,
+           uint flags);
 void detach(struct scsipi_periph *periph);
+int periph_still_attached(void);
 int init_chan(device_t self, UBYTE *boardnum);
 void deinit_chan(device_t self);
 
 typedef struct {
     uint32_t              as_addr;
     struct ExecBase      *as_SysBase;
+    int8_t                as_timer_running;
+    uint8_t               as_irq_signal;
     uint32_t              as_irq_count;   // Total interrupts
+    uint32_t              as_int_mask;
+    uint32_t              as_timer_mask;
     struct Task          *as_svc_task;
     struct Interrupt     *as_isr;         // My interrupt server
-    uint8_t               as_irq_signal;
     volatile uint8_t      as_exiting;
     struct device         as_device_self;
     struct siop_softc    *as_device_private;
     struct MsgPort       *as_timerport[2];
     struct timerequest   *as_timerio[2];
-    int                   as_timer_running;
     struct callout      **as_callout_head;
     struct ConfigDev     *as_cd;
     uint32_t             romfile[2];

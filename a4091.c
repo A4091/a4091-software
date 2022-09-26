@@ -1417,7 +1417,7 @@ dma_mem_to_mem_quad(volatile APTR src, volatile APTR dst, uint32_t len,
 static void
 show_dip(uint8_t switches, int bit)
 {
-    printf("  SW %d %s  ", bit + 1, (switches & BIT(7)) ? "Off" : "On");
+    printf("  SW %d %-3s ", bit + 1, (switches & BIT(bit)) ? "Off" : "On");
 }
 
 static int
@@ -2222,8 +2222,8 @@ test_scsi_pins(void)
     sbcl |= 0x20; // Not sure why, but STRCL_BSY might still be high
     if ((sbcl == 0xff) && (sbdl == 0xff)) {
         if (rc++ == 0)
-            printf("\n");
-        printf("All SCSI pins low (check term power D309A and F309A/F309B)\n");
+            printf("FAIL\n");
+        printf("\tAll SCSI pins low: check term power D309A and F309A/F309B\n");
         return (rc);
     }
 
@@ -2231,8 +2231,8 @@ test_scsi_pins(void)
     sstat1 = get_ncrreg8(REG_SSTAT1);
     if (sstat1 & REG_SSTAT1_RST) {
         if (rc++ == 0)
-            printf("\n");
-        printf("SCSI bus is in reset (check for SCTRL_RST short to GND)\n");
+            printf("FAIL\n");
+        printf("\tSCSI bus is in reset: check for SCTRL_RST short to GND\n");
         return (rc);
     }
 
@@ -2242,11 +2242,21 @@ test_scsi_pins(void)
     sstat1 = get_ncrreg8(REG_SSTAT1);
     if ((sstat1 & REG_SSTAT1_RST) == 0) {
         if (rc++ == 0)
-            printf("\n");
-        printf("SCSI bus cannot be reset (check for SCTRL_RST short to VCC)\n");
+            printf("FAIL\n");
+        printf("\tSCSI bus could not be reset: "
+               "check for SCTRL_RST short to VCC\n");
     }
     set_ncrreg8(REG_SCNTL1, 0);
     Delay(1);
+
+    /* Check that bus is not stuck busy */
+    sbcl = get_ncrreg8(REG_SBCL);
+    if (sbcl & 0x20) {
+        if (rc++ == 0)
+            printf("FAIL\n");
+        printf("\tSCSI bus is stuck busy: check for SCTRL_BSY short to GND\n");
+    }
+
 
     /* Set registers to manually drive SCSI data and control pins */
     set_ncrreg8(REG_DCNTL,  dcntl | REG_DCNTL_LLM);
@@ -2289,12 +2299,12 @@ test_scsi_pins(void)
             if (diff != 0) {
                 pins_diff |= diff;
                 if (rc++ == 0)
-                    printf("\n");
+                    printf("FAIL\n");
                 if (rc <= 8) {
-                    printf("SCSI data %03x != expected %03x (diff %03x",
+                    printf("\tSCSI data %03x != expected %03x [diff %03x]",
                            din, dout, diff);
                     print_bits(scsi_data_pins, diff);
-                    printf(")\n");
+                    printf("\n");
                 }
             }
         }
@@ -2302,17 +2312,17 @@ test_scsi_pins(void)
     /* Note: Register state is inverted from SCSI pin state */
     pins_diff &= ~(stuck_high | stuck_low);
     if (stuck_high != 0) {
-        printf("Stuck low: %02x", stuck_high);
+        printf("Stuck low [%02x]", stuck_high);
         print_bits(scsi_data_pins, stuck_high);
-        printf(" (check for short to GND)\n");
+        printf(": check for short to GND\n");
     }
     if (stuck_low != 0) {
-        printf("Stuck high: %02x", stuck_low);
+        printf("Stuck high [%02x]", stuck_low);
         print_bits(scsi_data_pins, stuck_low);
-        printf(" (check for short to VCC)\n");
+        printf(": check for short to VCC\n");
     }
     if (pins_diff != 0) {
-        printf("Floating or bridged: %02x", pins_diff);
+        printf("Floating or bridged [%02x]", pins_diff);
         print_bits(scsi_data_pins, pins_diff);
         printf("\n");
     }

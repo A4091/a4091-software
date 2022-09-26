@@ -12,8 +12,14 @@
 #define ERROR_BAD_DRIVE_TYPE  33  // TDERR_BadDriveType
 #define ERROR_SELF_UNIT       40  // HFERR_SelfUnit
 #define ERROR_INQUIRY_FAILED  46  // (HFERR_BadStatus + 1)
+#define ERROR_TIMEOUT         47  // (HFERR_BadStatus + 2)
+#define ERROR_BUS_RESET       48  // (HFERR_BadStatus + 3)
+#define ERROR_TRY_AGAIN       49  // (HFERR_BadStatus + 4)
 #define ERROR_NO_BOARD        50  // HFERR_NoBoard
 #define ERROR_BAD_BOARD       51  // (HFERR_NoBoard + 1)
+#define ERROR_SENSE_CODE      52  // (HFERR_NoBoard + 2)
+
+#define TDF_DEBUG_OPEN    (1<<7)  // Open unit in debug mode (no I/O)
 
 /*
  *

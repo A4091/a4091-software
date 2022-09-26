@@ -199,7 +199,9 @@ struct scsipi_adapter {
 	int	adapt_nchannels;	/* number of adapter channels */
 	volatile int	adapt_refcnt;		/* adapter's reference count */
 	int	adapt_openings;		/* total # of command openings */
+#ifndef PORT_AMIGA
 	int	adapt_max_periph;	/* max openings per periph */
+#endif
 	int	adapt_flags;
 
 	void	(*adapt_request)(struct scsipi_channel *,
@@ -360,6 +362,9 @@ struct scsipi_channel {
 #define	SCSIPI_CHAN_CANGROW	0x02	/* channel can grow resources */
 #define	SCSIPI_CHAN_NOSETTLE	0x04	/* don't wait for devices to settle */
 #define	SCSIPI_CHAN_TACTIVE	0x08	/* completion thread is active */
+#ifdef PORT_AMIGA
+#define SCSIPI_CHAN_RESET_PEND  0x10    /* reset pending on channel */
+#endif
 
 /* chan thread flags (chan_tflags) */
 #define	SCSIPI_CHANT_SHUTDOWN	0x01	/* channel is shutting down */
@@ -427,6 +432,8 @@ struct scsipi_opcodes
 struct scsipi_periph {
 #ifdef PORT_AMIGA
 	void *drv_state;        /* pointer to Amiga driver's device state */
+        struct MinList periph_changeintlist;  /* Notify list for media change */
+        struct Interrupt *periph_changeint;   /* Old notify for media change */
 #else
 	device_t periph_dev;	/* pointer to peripheral's device */
 #endif
@@ -464,6 +471,7 @@ struct scsipi_periph {
 #ifdef PORT_AMIGA
 	uint	periph_blkshift;	/* Block size of this LUN in bits */
         uint    periph_changenum;       /* Count of removes/inserts */
+        uint    periph_tur_active;      /* Test unit ready already active */
 #endif
 
 	int	periph_version;		/* ANSI SCSI version */

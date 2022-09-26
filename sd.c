@@ -28,7 +28,7 @@
 #endif
 
 #ifndef SD_IO_TIMEOUT
-#define SD_IO_TIMEOUT   (5 * 1000)  // 5 seconds
+#define SD_IO_TIMEOUT   (3 * 1000)  // 5 seconds
 #endif
 
 typedef struct
@@ -45,24 +45,81 @@ static void geom_done_inquiry(struct scsipi_xfer *xs);
 
 static const int8_t error_code_mapping[] = {
     0,                // 0 XS_NOERROR           No error, (invalid sense)
-    HFERR_BadStatus,  // 1 XS_SENSE             Check returned sense for error
+    ERROR_SENSE_CODE, // 1 XS_SENSE             Check returned sense for error
     HFERR_BadStatus,  // 2 XS_SHORTSENSE        Check ATAPI sense for the error
     HFERR_DMA,        // 3 XS_DRIVER_STUFFUP    Driver failed operation
-    HFERR_BadStatus,  // 4 XS_RESOURCE_SHORTAGE Adapter resource shortage
+    ERROR_NO_MEMORY,  // 4 XS_RESOURCE_SHORTAGE Adapter resource shortage
     HFERR_SelTimeout, // 5 XS_SELTIMEOUT        Device timed out.. turned off?
-    HFERR_SelTimeout, // 6 XS_TIMEOUT           Timeout was caught by SW
+    ERROR_TIMEOUT,    // 6 XS_TIMEOUT           Timeout was caught by SW
     IOERR_UNITBUSY,   // 7 XS_BUSY              Device busy, try again later?
-    HFERR_Phase,      // 8 XS_RESET             Bus reset; possible retry cmd
-    HFERR_Phase,      // 9 XS_REQUEUE           Requeue this command
+    ERROR_BUS_RESET,  // 8 XS_RESET             Bus reset; possible retry cmd
+    ERROR_TRY_AGAIN,  // 9 XS_REQUEUE           Requeue this command
 };
 
 /* Translate error code to AmigaOS code */
 static int
-translate_xs_error(scsipi_xfer_result_t res)
+translate_xs_error(struct scsipi_xfer *xs)
 {
+    scsipi_xfer_result_t res = xs->error;
+
+    if (res == XS_SENSE) {
+        if ((xs->sense.scsi_sense.asc == 0x3a) ||
+            ((xs->sense.scsi_sense.asc == 0x04) &&
+             (xs->sense.scsi_sense.ascq == 0x02))) {
+            return (TDERR_DiskChanged);  // No disk present
+        }
+        if (xs->sense.scsi_sense.asc == 0x27)
+            return (TDERR_WriteProt);  // Write-protected
+    }
+
     if (res < ARRAY_SIZE(error_code_mapping))
         res = error_code_mapping[res];
     return (res);
+}
+
+void
+call_changeintlist(struct scsipi_periph *periph)
+{
+    struct IOStdReq *io;
+
+    Forbid();
+    if (periph->periph_changeint != NULL) {
+        printf("Notify TD_REMOVE\n");
+        Cause(periph->periph_changeint);  // TD_REMOVE interrupt
+    }
+
+    for (io = (struct IOStdReq *)periph->periph_changeintlist.mlh_Head;
+         io->io_Message.mn_Node.ln_Succ != NULL;
+         io = (struct IOStdReq *)io->io_Message.mn_Node.ln_Succ) {
+
+        if (io->io_Data != NULL) {
+            printf("Notify TD_ADDCHANGEINT %p\n", io->io_Data);
+            Cause(io->io_Data);           // TD_ADDCHANGEINT interrupt
+        }
+    }
+    Permit();
+}
+
+void
+sd_media_unloaded(struct scsipi_periph *periph)
+{
+    if (periph->periph_flags & PERIPH_MEDIA_LOADED) {
+        periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
+        periph->periph_changenum++;
+        call_changeintlist(periph);
+        printf("Media unloaded\n");
+    }
+}
+
+void
+sd_media_loaded(struct scsipi_periph *periph)
+{
+    if ((periph->periph_flags & PERIPH_MEDIA_LOADED) == 0) {
+        periph->periph_flags |= PERIPH_MEDIA_LOADED;
+        periph->periph_changenum++;
+        call_changeintlist(periph);
+        printf("Media loaded\n");
+    }
 }
 
 /*
@@ -232,6 +289,8 @@ sd_testunitready(void *periph_p, void *ior)
     if (periph->periph_quirks & PQUIRK_NOTUR) {
         /* Device does not support TEST_UNIT_READY */
         struct IOExtTD *iotd = (struct IOExtTD *) ior;
+        if (ior == NULL)
+            return (0);
         iotd->iotd_Req.io_Actual = 0;  // Assume drive is present
         cmd_complete(ior, 0);
         return (0);
@@ -239,8 +298,9 @@ sd_testunitready(void *periph_p, void *ior)
 
     memset(&cmd, 0, sizeof (cmd));
     cmd.opcode = SCSI_TEST_UNIT_READY;
+    cmd.byte2  = periph->periph_lun << 5;
 
-    flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG | XS_CTL_IGNORE_ILLEGAL_REQUEST |
+    flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG |
             XS_CTL_IGNORE_NOT_READY | XS_CTL_IGNORE_MEDIA_CHANGE;
 
     /* No buffer, no retries, timeout 2 seconds */
@@ -249,10 +309,58 @@ sd_testunitready(void *periph_p, void *ior)
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
 
+    periph->periph_tur_active++;
+    printf(" sd_testunitready %d tur_active=%d\n",
+           periph->periph_target, periph->periph_tur_active);
+
+    /*
+     * Note that ior will be NULL when this function is called by
+     * sd_testunitready_walk(). When called by TD_CHANGESTATE, ior
+     * is non-NULL. In either case, sd_tur_complete() will know how
+     * to handle this.
+     */
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_tur_complete;
 
     return (scsipi_execute_xs(xs));
+}
+
+static BOOL
+IsMinListEmpty(const struct MinList *list)
+{
+    BOOL is_empty;
+
+    is_empty = (BOOL)(list->mlh_TailPred == (struct MinNode *)list);
+
+    return(is_empty);
+}
+
+/*
+ * sd_testunitready_walk
+ * ---------------------
+ * Walks all peripherals of the channel which have client applications
+ * waiting for change interrupts (TD_REMOVE or TD_ADDCHANGEINT).
+ */
+void
+sd_testunitready_walk(struct scsipi_channel *chan)
+{
+    struct scsipi_periph  *periph;
+    int                    i;
+    static uint8_t         iter = 0;
+
+    if ((iter++ & 3) != 0)  // Poll every 4 seconds
+        return;
+
+    for (i = 0; i < SCSIPI_CHAN_PERIPH_BUCKETS; i++) {
+        LIST_FOREACH(periph, &chan->chan_periphtab[i], periph_hash) {
+            if ((periph->periph_tur_active == 0) &&
+                ((periph->periph_changeint != NULL) ||
+                 !IsMinListEmpty(&periph->periph_changeintlist))) {
+                /* Need to poll this device to detect load/eject */
+                sd_testunitready(periph, NULL);
+            }
+        }
+    }
 }
 
 /*
@@ -485,13 +593,21 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject, int immed)
 
     /* Allow more time for start */
     timeout = load_eject ?
-                  (start ? 20000 : 5000) :
+#ifdef EJECT_DEBUG
+                  (start ? 20000 : 3000) :
+#else
+                  (start ? 45000 : 8000) :
+#endif
                   (start ? 6000 : 3000);
 
     flags |= XS_CTL_IGNORE_MEDIA_CHANGE | XS_CTL_IGNORE_NOT_READY;
 
     xs = scsipi_make_xs_locked(periph, (struct scsipi_generic *) &cmd,
+#ifdef EJECT_DEBUG
+                               cmdlen, NULL, 0, 0, timeout, NULL, flags);
+#else
                                cmdlen, NULL, 0, 1, timeout, NULL, flags);
+#endif
     if (__predict_false(xs == NULL))
         return (TDERR_NoMem);  // out of memory
 
@@ -500,13 +616,6 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject, int immed)
 
     /* Return previous media state in io_Actual 0=Present, 1=Removed */
     iotd->iotd_Req.io_Actual = !(periph->periph_flags & PERIPH_MEDIA_LOADED);
-
-#if 0
-    printf("sd%d.%d %p %s\n",
-           periph->periph_target, periph->periph_lun, xs,
-           load_eject ? (start ? "load" : "eject") :
-           (start ? "start" : "stop"));
-#endif
 
     return (scsipi_execute_xs(xs));
 }
@@ -561,7 +670,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
 static void
 geom_done_mode_page_5(struct scsipi_xfer *xs)
 {
-    int                rc       = translate_xs_error(xs->error);
+    int                rc       = translate_xs_error(xs);
     scsi_mode_sense_t *modepage = (scsi_mode_sense_t *) xs->data;
     printf("mode_page_5 complete: %d\n", rc);
 
@@ -613,7 +722,7 @@ geom_done_mode_page_5(struct scsipi_xfer *xs)
 static void
 geom_done_mode_page_4(struct scsipi_xfer *xs)
 {
-    int                rc       = translate_xs_error(xs->error);
+    int                rc       = translate_xs_error(xs);
     scsi_mode_sense_t *modepage = (scsi_mode_sense_t *) xs->data;
     printf("mode_page_4 complete: %d\n", rc);
 
@@ -778,7 +887,7 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
 
     rc = scsipi_execute_xs(xs);
     if (rc != 0)
-        cmd_complete(oxs->amiga_ior, translate_xs_error(rc));
+        cmd_complete(oxs->amiga_ior, rc);
 }
 
 int
@@ -823,11 +932,18 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     else
         flags |= XS_CTL_DATA_OUT;
 #if 0
-// flags |= XS_CTL_DATA_UIO;
+// xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command (no autosense)
+
     if ((scmd->scsi_Flags & SCSIF_OLDAUTOSENSE) == SCSIF_OLDAUTOSENSE)
         printf("scsidirect: Old autosense\n");
     else if (scmd->scsi_Flags & SCSIF_AUTOSENSE)
         printf("scsidirect: Autosense\n");
+
+    /*
+     * XXX: If SCSIF_AUTOSENSE is not set, then we need to disable
+     *      automatic sense with the following (untested):
+     *      xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command
+     */
 #endif
 
     xs = scsipi_make_xs_locked(periph, cmdp, cmdlen, buf, buflen,
@@ -842,12 +958,6 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs);
 #endif
     return (scsipi_execute_xs(xs));
-// xs->xs_control |= XS_CTL_USERCMD;  // to indicate user command
-//
-// flags |= XS_CTL_DATA_UIO;
-// XS_CTL_RESET XS_CTL_TARGET XS_CTL_ESCAPE XS_CTL_URGENT
-//   XS_CTL_SIMPLE_TAG XS_CTL_ORDERED_TAG XS_CTL_HEAD_TAG
-//   XS_CTL_REQSENSE
 }
 
 
@@ -855,26 +965,31 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
 static void
 sd_complete(struct scsipi_xfer *xs)
 {
-    int rc = translate_xs_error(xs->error);
+    int rc = translate_xs_error(xs);
 
+#ifdef DEBUG
     if (xs->amiga_ior == NULL) {
         printf("NULL IOR received\n\n");
         return;  /* This should not happen */
     }
+#endif
 
-#if 0
+#ifdef DEBUG_SD_READWRITE
     printf("sd%d.%d %p done %c rc=%d\n",
            xs->xs_periph->periph_target, xs->xs_periph->periph_lun, xs,
            (xs->xs_control & XS_CTL_DATA_OUT) ? 'W' : 'R', rc);
 #endif
+
 #ifdef DEBUG_SD
     if (xs->error == XS_SENSE) {
-        uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
-        printf("got sense:");
+        printf("sd_complete sense key=%x asc=%02x ascq=%02x\n",
+               SSD_SENSE_KEY(xs->sense.scsi_sense.flags),
+               xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+#if 0
         for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
             printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
-        printf("\nkey=%x asc=%02x ascq=%02x\n",
-               key, xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+        printf("\n");
+#endif
     }
 #endif
     cmd_complete(xs->amiga_ior, rc);
@@ -883,20 +998,21 @@ sd_complete(struct scsipi_xfer *xs)
 static void
 sd_startstop_complete(struct scsipi_xfer *xs)
 {
-    int rc = translate_xs_error(xs->error);
+    int rc = translate_xs_error(xs);
 
     if (xs->error != 0)
         printf("startstop complete xs->error=%d\n", xs->error);
     if (xs->error == XS_SENSE) {
         uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
-        printf("sense key=%02x asc=%02x ascq=%02x\n", key,
+        printf("startstop sense key=%02x asc=%02x ascq=%02x\n", key,
                xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
         if ((key == SKEY_NOT_READY) && (xs->sense.scsi_sense.asc == 4)) {
             /* "Not ready" status is fine for eject / load / stop / start */
-            cmd_complete(xs->amiga_ior, 0);
-            return;
+            rc = 0;
         }
     }
+    /* Kick off an immediate TEST_UNIT_READY to detect load/eject state */
+    sd_testunitready(xs->xs_periph, NULL);
     cmd_complete(xs->amiga_ior, rc);
 }
 
@@ -906,44 +1022,58 @@ sd_tur_complete(struct scsipi_xfer *xs)
 {
     struct IOExtTD *iotd = (struct IOExtTD *) xs->amiga_ior;
     struct scsipi_periph *periph = xs->xs_periph;
+    ULONG actual;  // 0 = Present, !0 = Not present
 
-    int rc = translate_xs_error(xs->error);
+    int rc = translate_xs_error(xs);
 
-    if (xs->error == XS_SENSE) {
-        uint8_t key = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
-
-        if (key == SKEY_NOT_READY) {
-            if (xs->sense.scsi_sense.asc == 0x3a) {
-                periph_media_unloaded(periph);
-                iotd->iotd_Req.io_Actual = -1;  // Drive is not present
-            } else {
-                iotd->iotd_Req.io_Actual = 0;   // Drive present, but not ready
-                periph_media_loaded(periph);
-            }
-            cmd_complete(xs->amiga_ior, 0);
-        } else {
-            iotd->iotd_Req.io_Actual = 0;      // Assume drive is present
-            cmd_complete(xs->amiga_ior, key);  // Return error code
-        }
+    periph->periph_tur_active--;
 #if 0
-        printf("got sense:");
-        for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
-            printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
-        printf("\nkey=%x asc=%02x ascq=%02x\n",
-               key, xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+    printf("tur complete %d rc=%d xserror=%d tur_active=%d\n",
+           periph->periph_target, rc, xs->error, periph->periph_tur_active);
 #endif
-        return;
+    if (xs->error == XS_SENSE) {
+        rc = SSD_SENSE_KEY(xs->sense.scsi_sense.flags);
+
+        if (rc == SKEY_NOT_READY) {
+            if ((xs->sense.scsi_sense.asc == 0x3a) ||
+                ((xs->sense.scsi_sense.asc == 0x04) &&
+                 (xs->sense.scsi_sense.ascq == 0x02))) {
+                sd_media_unloaded(periph);
+                actual = -1;  // Drive is not present
+            } else {
+                actual  = 0;  // Drive present, though not ready
+                sd_media_loaded(periph);
+            }
+            rc = 0;
+        } else {
+            actual = 0;       // Assume drive is present
+        }
+#undef DEBUG_SD_TEST_UNIT_READY
+#ifdef DEBUG_SD_TEST_UNIT_READY
+        if (xs->sense.scsi_sense.asc != 0x3a) {
+            printf("TUR sense:");
+            for (int t = 0; t < sizeof (xs->sense.scsi_sense); t++)
+                printf(" %02x", ((uint8_t *) &xs->sense.scsi_sense)[t]);
+            printf("\nkey=%x asc=%02x ascq=%02x\n",
+                   SSD_SENSE_KEY(xs->sense.scsi_sense.flags),
+                   xs->sense.scsi_sense.asc, xs->sense.scsi_sense.ascq);
+        }
+#endif
+    } else {
+        actual = 0;  // Drive is present (and ready)
+        sd_media_loaded(periph);
     }
-    iotd->iotd_Req.io_Actual = 0;  // Drive is present (and ready)
-    periph_media_loaded(periph);
-    cmd_complete(xs->amiga_ior, rc);
+    if (iotd != NULL) {
+        iotd->iotd_Req.io_Actual = actual;
+        cmd_complete(xs->amiga_ior, rc);  // Return error code
+    }
 }
 
 
 static void
 scsidirect_complete(struct scsipi_xfer *xs)
 {
-    int             rc   = translate_xs_error(xs->error);
+    int             rc   = translate_xs_error(xs);
     struct SCSICmd *scmd = xs->xs_callback_arg;
 
     scmd->scsi_Status    = rc;
@@ -951,11 +1081,12 @@ scsidirect_complete(struct scsipi_xfer *xs)
     scmd->scsi_CmdActual = scmd->scsi_CmdLength;
 
     if (rc != 0) {
-        printf("sdirect%d.%d fail %d\n",
-               xs->xs_periph->periph_target, xs->xs_periph->periph_lun, rc);
+        printf("sdirect%d.%d fail %d (%d)\n",
+               xs->xs_periph->periph_target, xs->xs_periph->periph_lun, rc,
+               xs->error);
         if (scmd->scsi_Flags & SCSIF_AUTOSENSE) {
             UWORD len = scmd->scsi_SenseLength;
-            if (len < sizeof (xs->sense.scsi_sense))
+            if (len > sizeof (xs->sense.scsi_sense))
                 len = sizeof (xs->sense.scsi_sense);
             CopyMem(&xs->sense.scsi_sense, scmd->scsi_SenseData, len);
             scmd->scsi_SenseActual = len;

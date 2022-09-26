@@ -163,7 +163,7 @@ int safe_open(struct IOStdReq *ioreq, uint scsi_unit)
 {
     ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
 
-    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit)) {
+    if (open_unit(scsi_unit, (void **) &ioreq->io_Unit, 0)) {
         printf("No unit at %d.%d\n", scsi_unit % 10, scsi_unit / 10);
         ioreq->io_Error = HFERR_SelTimeout;
         // HFERR_SelfUnit - attempted to open our own SCSI ID

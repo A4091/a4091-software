@@ -123,8 +123,10 @@ struct siop_tinfo {
 
 struct	siop_softc {
 	device_t sc_dev;
-//	struct	isr sc_isr;
+#ifndef PORT_AMIGA
+	struct	isr sc_isr;
 	void	*sc_siop_si;
+#endif
 
 	u_char	sc_istat;
 	u_char	sc_dstat;
@@ -141,7 +143,6 @@ struct	siop_softc {
 	u_long	sc_scriptspa;		/* physical address of scripts */
 	siop_regmap_p	sc_siopp;	/* the SIOP */
 	u_long	sc_active;		/* number of active I/O's */
-        u_long  sc_nosync;              /* no synchronous SCSI (bit / target) */
 
 	/* Lists of command blocks */
 	TAILQ_HEAD(acb_list, siop_acb) free_list,
@@ -168,6 +169,10 @@ struct	siop_softc {
 	u_char	sc_sien;
 #else
 	u_short	sc_sien;
+#endif
+#ifdef PORT_AMIGA
+	u_char  sc_nosync;              /* no synchronous SCSI (bit / target) */
+	u_char  sc_nodisconnect;        /* no disconnect SCSI (bit / target) */
 #endif
 	/* one for each target */
 	struct syncpar {

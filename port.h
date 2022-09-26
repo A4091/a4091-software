@@ -22,9 +22,10 @@
 struct device;
 typedef struct device *device_t;
 
-void panic(const char *s);
+void panic(const char *s, ...);
 unsigned int read_system_ticks(void);
 unsigned int ticks_since_last(void);
+int irq_and_timer_handler(void);
 
 #define __USE(x) (/*LINTED*/(void)(x))
 
@@ -36,6 +37,7 @@ void bsd_splx();
 
 typedef uint32_t paddr_t;
 typedef uint32_t vaddr_t;
+#define hz TICKS_PER_SECOND
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)
 #define kvtop(x) ((uint32_t)(x))
 
@@ -70,8 +72,8 @@ int dbgprintf(const char *fmt, ...);
 #define KASSERT(x)
 
 #define mutex_init(x, y, z)
-#define mutex_enter(x)
-#define mutex_exit(x)
+#define mutex_enter(x) do { } while (0)
+#define mutex_exit(x)  do { } while (0)
 #define cv_init(x, y)
 #define cv_wait(x, y)
 #define cv_broadcast(x)
@@ -101,7 +103,6 @@ void *device_private(device_t dev);
 #define printf(x...)   do { } while (0)
 #define vfprintf(x...) do { } while (0)
 #define putchar(x...)  do { } while (0)
-#define panic(x) panic((const char *)0)
 #endif
 
 #endif /* _PORT_H */

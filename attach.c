@@ -120,7 +120,7 @@ device_private(device_t dev)
 /* CDH: HACK */
 
 static int
-a4091_add_local_irq_handler(uint32_t dev_base)
+a4091_add_local_irq_handler(void)
 {
     struct Task *task = FindTask(NULL);
     if (task == NULL)
@@ -359,7 +359,6 @@ init_chan(device_t self, UBYTE *boardnum)
     adapt->adapt_dev = self;
     adapt->adapt_nchannels = 1;
     adapt->adapt_openings = 7;
-    adapt->adapt_max_periph = 1;
     adapt->adapt_request = siop_scsipi_request;
     adapt->adapt_asave = asave;
 
@@ -379,6 +378,7 @@ init_chan(device_t self, UBYTE *boardnum)
         /* Need to disable synchronous SCSI */
         sc->sc_nosync = ~0;
     }
+    sc->sc_nodisconnect = 0;  /* Mask of targets not allowed to disconnect */
 
     /*
      * A4091 Rear-access DIP switches
@@ -394,7 +394,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
     scsipi_channel_init(chan);
 
-    rc = a4091_add_local_irq_handler(dev_base);
+    rc = a4091_add_local_irq_handler();
     if (rc != 0)
         return (rc);
 
@@ -424,14 +424,16 @@ scsipi_alloc_periph(int flags)
     if (periph == NULL)
         return (NULL);
 
+#if 0
     /*
      * Start with one command opening.  The periph driver
      * will grow this if it knows it can take advantage of it.
      */
     periph->periph_openings = 1;
+#endif
 
     for (i = 0; i < PERIPH_NTAGWORDS; i++)
-            periph->periph_freetags[i] = 0xffffffff;
+        periph->periph_freetags[i] = 0xffffffff;
 
 #if 0
     /* Not tracked for AmigaOS */
@@ -449,7 +451,8 @@ scsipi_free_periph(struct scsipi_periph *periph)
 int scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed);
 
 int
-attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
+attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
+       uint flags)
 {
     struct siop_softc     *sc = device_private(self);
     struct scsipi_channel *chan = &sc->sc_channel;
@@ -459,7 +462,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     int rc;
     int failed = 0;
 
-    if ((scsi_target % 10) == chan->chan_id)
+    if (target == chan->chan_id)
         return (ERROR_SELF_UNIT);
 
     periph = scsipi_alloc_periph(0);
@@ -474,6 +477,8 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
     periph->periph_dbflags   = 0;
     periph->periph_changenum = 1;
     periph->periph_channel   = chan;
+    periph->periph_changeint = NULL;
+    NewMinList(&periph->periph_changeintlist);
 
     rc = scsi_probe_device(chan, target, lun, periph, &failed);
     printf("scsi_probe_device(%d.%d) cont=%d failed=%d\n",
@@ -495,11 +500,35 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p)
 void
 detach(struct scsipi_periph *periph)
 {
-    printf("detach(%p)\n", periph);
+    printf("detach(%p, %d)\n",
+           periph, periph->periph_target + periph->periph_lun * 10);
 
     if (periph != NULL) {
+        int timeout = 6;  // Seconds
         struct scsipi_channel *chan = periph->periph_channel;
+        while (periph->periph_sent > 0) {
+            /* Need to wait for outstanding commands to complete */
+            timeout -= irq_and_timer_handler();
+            if (timeout == 0) {
+                printf("Detach timeout waiting for periph to quiesce\n");
+                return;
+            }
+        }
         scsipi_remove_periph(chan, periph);
         scsipi_free_periph(periph);
     }
+}
+
+int
+periph_still_attached(void)
+{
+    uint                   i;
+    struct siop_softc     *sc = asave->as_device_private;
+    struct scsipi_channel *chan = &sc->sc_channel;
+
+    for (i = 0; i < SCSIPI_CHAN_PERIPH_BUCKETS; i++)
+        if (LIST_FIRST(&chan->chan_periphtab[i]) != NULL) {
+            return (1);
+        }
+    return (0);
 }

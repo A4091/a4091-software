@@ -10,6 +10,9 @@
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
 #include <clib/exec_protos.h>
+#include <clib/intuition_protos.h>
+#include <intuition/intuition.h>
+#include <inline/intuition.h>
 #include <exec/execbase.h>
 #include "device.h"
 #include "printf.h"
@@ -22,11 +25,27 @@
 #define PRINTF_CALLOUT(args...)
 #endif
 
-#undef panic
 void
-panic(const char *s)
+panic(const char *fmt, ...)
 {
-    printf("PANIC: %s", s);
+    va_list ap;
+    struct Library *IntuitionBase;
+    struct EasyStruct es = {
+        sizeof (es),
+        0,
+        "A4091 Panic",
+        (char *) fmt,
+        "OK",
+    };
+    printf("PANIC: %s\n\n", fmt);
+
+    IntuitionBase = OpenLibrary("intuition.library", 37);
+    if (IntuitionBase != NULL) {
+        va_start(ap, fmt);
+        (void) EasyRequestArgs(NULL, &es, NULL, ap);
+        va_end(ap);
+        CloseLibrary(IntuitionBase);
+    }
 }
 
 #if 0
@@ -84,7 +103,6 @@ bsd_splx(int ilevel)
         Enable();
 }
 
-#ifdef USE_SERIAL_OUTPUT
 const char *
 device_xname(void *ptr)
 {
@@ -95,6 +113,7 @@ device_xname(void *ptr)
         return (dev->dv_xname);
 }
 
+#if 0
 unsigned int
 read_system_ticks(void)
 {
@@ -175,11 +194,10 @@ callout_t *callout_head = NULL;
 static void
 callout_add(callout_t *c)
 {
-    c->co_next = callout_head;
     c->co_prev = NULL;
-    if (callout_head != NULL) {
-        callout_head->co_next->co_prev = c;
-    }
+    c->co_next = callout_head;
+    if (callout_head != NULL)
+        callout_head->co_prev = c;
     callout_head = c;
 }
 
@@ -187,18 +205,13 @@ static void
 callout_remove(callout_t *c)
 {
     if (c == callout_head) {
-        if (c->co_prev != NULL) {
-            printf("CALLOUT head %p has non-NULL prev %p\n",
-                   callout_head, c->co_prev);
-            c->co_prev = NULL;
-        }
         callout_head = c->co_next;
-    } else if (c->co_prev != NULL) {
-        c->co_prev->co_next = c->co_next;
-    } else if (c->co_next != NULL) {
-        printf("CALLOUT list corrupt head=%p c=%p\n", callout_head, c);
+        if (callout_head != NULL)
+            callout_head->co_prev = NULL;
+        return;
     }
-
+    if (c->co_prev != NULL)
+        c->co_prev->co_next = c->co_next;
     if (c->co_next != NULL)
         c->co_next->co_prev = c->co_prev;
 }

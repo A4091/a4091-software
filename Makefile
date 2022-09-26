@@ -51,7 +51,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
 #CFLAGS  += -DDEBUG_RDB         # Debug rdb_partitions.c
 #CFLAGS  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
-#CFLAGS  += -DNO_SERIAL_OUTPUT   # Turn off serial debugging for the whole driver
+#CFLAGS  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 #CFLAGS  += -mhard-float

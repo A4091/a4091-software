@@ -142,13 +142,14 @@ const
 
 /* default to not inhibit sync negotiation on any drive */
 u_char siop_inhibit_sync[8] = { 0, 0, 0, 0, 0, 0, 0 }; /* initialize, so patchable */
-const u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
-#if 0
-int siop_no_dma = 1;  // CDH debug
-#else
-int siop_no_dma = 0;
-#endif
+u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
+int siop_no_disc = 0;  // Disable Synchronous SCSI when this flag is set
+int siop_no_dma = 0;   // Disable 53C710 DMA when this flag is set
 
+/*
+ * siop_reset_delay must provide sufficient time for all targets
+ * on the bus to recover following a bus reset.
+ */
 const int siop_reset_delay = 250; /* delay after reset, in milliseconds */
 
 #if 0
@@ -230,6 +231,7 @@ void siop_dump_trace(void);
 #define SIOP_TRACE(a,b,c,d)
 #endif
 
+#ifndef PORT_AMIGA
 /*
  * default minphys routine for siop based controllers
  */
@@ -240,8 +242,9 @@ siop_minphys(struct buf *bp)
     /*
      * No max transfer at this level.
      */
-//  minphys(bp);
+    minphys(bp);
 }
+#endif
 
 /*
  * used by specific siop controller
@@ -267,9 +270,11 @@ siop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 #endif
         flags = xs->xs_control;
 
+#ifndef PORT_AMIGA
         /* XXXX ?? */
         if (flags & XS_CTL_DATA_UIO)
             panic("siop: scsi data uio requested");
+#endif
 
         /* XXXX ?? */
         if (sc->sc_nexus && flags & XS_CTL_POLL)
@@ -437,6 +442,19 @@ siop_sched(struct siop_softc *sc)
     if (acb->xs->xs_control & XS_CTL_RESET)
         siopreset(sc);
 
+#ifdef PORT_AMIGA
+    /*
+     * Setup timeout callout for every issued transaction on the channel.
+     *
+     * This differs from the original NetBSD driver where a callout is
+     * only set for the first transaction active on the bus. In that case,
+     * if the first one finishes, but following transactions do not finish,
+     * a driver hang will occur, since there is nothing to terminate another
+     * active command.
+     */
+    callout_reset(&acb->xs->xs_callout,
+        mstohz(acb->xs->timeout) + 1, siop_timeout, acb);
+#endif
 #if 0
     acb->cmd.bytes[0] |= slp->scsipi_scsi.lun << 5; /* XXXX */
 #endif
@@ -492,12 +510,10 @@ siop_scsidone(struct siop_acb *acb, int stat)
         --sc->sc_active;
         SIOP_TRACE('d','a',stat,0)
     } else if (sc->ready_list.tqh_last == &acb->chain.tqe_next) {
-        printf("CDH: acb %p is at top of ready list\n", acb);
         TAILQ_REMOVE(&sc->ready_list, acb, chain);
         SIOP_TRACE('d','r',stat,0)
     } else {
         register struct siop_acb *acb2;
-        printf("CDH: searching for acb %p\n", acb);
         for (acb2 = sc->nexus_list.tqh_first; acb2;
             acb2 = acb2->chain.tqe_next)
             if (acb2 == acb) {
@@ -528,6 +544,21 @@ siop_scsidone(struct siop_acb *acb, int stat)
     sc->sc_tinfo[periph->periph_target].cmds++;
 
     scsipi_done(xs);
+
+#ifdef PORT_AMIGA
+    if (sc->sc_channel.chan_flags & SCSIPI_CHAN_RESET_PEND) {
+        /*
+         * If reset is pending and there is no current I/O active on
+         * the channel, then go ahead and reset the channel now.
+         */
+        if ((sc->sc_nexus == NULL) && (sc->nexus_list.tqh_first == NULL)) {
+            siopreset(sc);
+
+            /* Tell scsipi completion thread to restart the queue */
+            sc->sc_channel.chan_tflags |= SCSIPI_CHANT_KICK;
+        }
+    }
+#endif
 
     if (dosched && sc->sc_nexus == NULL)
         siop_sched(sc);
@@ -635,10 +666,17 @@ siopinitialize(struct siop_softc *sc)
     }
 
 #ifdef PORT_AMIGA
+    if (sc->sc_nodisconnect) {
+        /* sc->sc_nodisconnect can be used to prevent SCSI target disconnect */
+        for (i = 0; i < 8; ++i)
+            if (sc->sc_nodisconnect & (1 << i))
+                siop_allow_disc[i] = 0;
+    }
+#endif
     if (sc->sc_nosync) {
+#ifdef PORT_AMIGA
         inhibit_sync = sc->sc_nosync & 0xff;
 #else
-    if (scsi_nosync) {
         inhibit_sync = (scsi_nosync >> shift_nosync) & 0xff;
         shift_nosync += 8;
 #endif
@@ -683,8 +721,24 @@ siop_timeout(void *arg)
 
     s = bsd_splbio();
 
+#ifdef PORT_AMIGA
+    /*
+     * To prevent clobbering transactions on this channel to other targets
+     * which have not timed out, we will:
+     * 1) Mark the channel as pending reset.
+     * 2) Complete this transaction as XS_TIMEOUT.
+     * 3) siop_scsidone() will take care of resetting the channel when
+     *    there are no more transactions pending for the channel,
+     */
+    sc->sc_channel.chan_flags |= SCSIPI_CHAN_RESET_PEND;
+
+    printf("XS_TIMEOUT %p %p\n", acb, acb->xs);
+    acb->xs->error = XS_TIMEOUT;
+    siop_scsidone(acb, acb->stat[0]);
+#else
     acb->xs->error = XS_TIMEOUT;
     siopreset(sc);
+#endif
 
     bsd_splx(s);
 }
@@ -783,6 +837,10 @@ siopreset(struct siop_softc *sc)
         }
     }
 
+#ifdef PORT_AMIGA
+    sc->sc_channel.chan_flags &= ~SCSIPI_CHAN_RESET_PEND;
+#endif
+
     sc->sc_flags |= SIOP_ALIVE;
     sc->sc_flags &= ~(SIOP_INTDEFER|SIOP_INTSOFF);
     /* enable SCSI and DMA interrupts */
@@ -819,6 +877,9 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         printf("siop_start: NULL acb!\n");
         return;
     }
+#if 0
+   printf("siop_start %d.%d  acb=%p xs=%p retries=%d\n", target, lun, acb, acb->xs, acb->xs ? acb->xs->xs_retries : -1);
+#endif
 
 #ifdef DEBUG
     if (siop_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {
@@ -976,6 +1037,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         dma_cachectl (buf, len);
 #endif
 
+#ifndef PORT_AMIGA
 #ifdef DEBUG
     if (siop_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {
         printf ("ACK! siop was busy at start: rp %p script %p dsa %p active %ld\n",
@@ -986,9 +1048,13 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         siopreset(sc);
     }
 #endif
+#endif
     if (sc->nexus_list.tqh_first == NULL) {
+#ifndef PORT_AMIGA
+        /* Callout is now configured for every transaction in siop_sched() */
         callout_reset(&acb->xs->xs_callout,
             mstohz(acb->xs->timeout) + 1, siop_timeout, acb);
+#endif
         if (rp->siop_istat & SIOP_ISTAT_CON)
             printf("%s: siop_select while connected?\n",
                 device_xname(sc->sc_dev));
@@ -1153,7 +1219,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     int target = 0;
     int dfifo, dbc, sstat1;
 
-//  printf("CDH: siop_checkintr acb=%p\n", acb);
     dfifo = rp->siop_dfifo;
     dbc = rp->siop_dbc0;
     sstat1 = rp->siop_sstat1;
@@ -1175,17 +1240,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     rp->siop_ctest8 &= ~SIOP_CTEST8_CLF;
 #ifdef DEBUG
     ++siopints;
-#endif
-#if 0
-    /*
-     * It appears the following code is invalid, as this function might
-     * be called with acb being NULL, such as the case where an I/O
-     * has timed out and needs to be restarted.
-     */
-    if (acb == NULL) {
-        printf("ERROR: siop_checkintr() acb is NULL\n");
-        goto fail_return;
-    }
 #endif
 #ifdef DEBUG
 #if 0
@@ -1465,8 +1519,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         rp->siop_dsps == 0xff02)) {
 #ifdef DEBUG
         if (siop_debug & 0x100)
-            printf ("%s: ID %02x disconnected TEMP %lx (+%lx) curbuf %lx curlen %lx buf %p len %lx dfifo %x dbc %x sstat1 %x starts %d acb %p\n",
-                device_xname(sc->sc_dev), 1 << target, rp->siop_temp,
+            printf ("%s: TGT %x disconnected TEMP %lx (+%lx) curbuf %lx curlen %lx buf %p len %lx dfifo %x dbc %x sstat1 %x starts %d acb %p\n",
+                device_xname(sc->sc_dev), target, rp->siop_temp,
                 rp->siop_temp ? rp->siop_temp - sc->sc_scriptspa : 0,
                 acb->iob_curbuf, acb->iob_curlen,
                 acb->ds.chain[0].databuf, acb->ds.chain[0].datalen, dfifo, dbc, sstat1, siopstarts, acb);
@@ -1524,8 +1578,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 printf ("%s: adjusting DMA chain\n",
                     device_xname(sc->sc_dev));
             if (rp->siop_dsps == 0xff02)
-                printf ("%s: ID %02x disconnected without Save Data Pointers\n",
-                    device_xname(sc->sc_dev), 1 << target);
+                printf ("%s: TGT %x disconnected without Save Data Pointers\n",
+                    device_xname(sc->sc_dev), target);
 #endif
 /* XXX is:      if (rp->siop_dsps != 0xff02) { */
                 /* not disconnected without save data ptr */
@@ -1895,7 +1949,7 @@ siopintr(register struct siop_softc *sc)
             printf ("siopintr: status == 0xff\n");
 #endif
         if ((sc->sc_flags & (SIOP_INTSOFF | SIOP_INTDEFER)) != SIOP_INTSOFF) {
-#if 1
+#if 0
             if (rp->siop_sbcl & SIOP_BSY) {
                 printf ("%s: SCSI bus busy at completion",
                     device_xname(sc->sc_dev));

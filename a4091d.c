@@ -47,9 +47,35 @@ typedef struct device *device_t;
 
 #define BIT(x)        (1 << (x))
 
-extern a4091_save_t *asave;
+extern BOOL __check_abort_enabled;  // 0 = Disable gcc clib2 ^C break handling
+
+a4091_save_t   *asave;
+static int      global_opened = 0;
+struct IOExtTD *global_tio;
+struct MsgPort *global_mp;
 
 #define DEVICE_NAME "a4091.device"
+
+static void
+close_exit(void)
+{
+    if (global_opened) {
+        global_opened = 0;
+        printf("^C abort\n");
+        CloseDevice((struct IORequest *) global_tio);
+        DeleteExtIO((struct IORequest *) global_tio);
+        DeletePort(global_mp);
+    }
+    exit(1);
+}
+
+static BOOL
+is_user_abort(void)
+{
+    if (SetSignal(0, 0) & SIGBREAKF_CTRL_C)
+        return (1);
+    return (0);
+}
 
 static void
 usage(void)
@@ -57,7 +83,55 @@ usage(void)
     printf("This tool is used to show " DEVICE_NAME " driver internal state.\n"
            "It does not work on any other driver.\n"
            "Usage:  a4091d [<unit>]\n"
+           "        a4091d -p <periph address>\n"
            "        a4091d -x <xs address>\n");
+}
+
+typedef const char * const bitdesc_t;
+
+static bitdesc_t bits_periph_flags[] = {
+    "REMOVABLE", "MEDIA_LOADED", "WAITING", "OPEN",
+        "WAITDRAIN", "GROW_OPENINGS", "MODE_VALID", "RECOVERING",
+    "RECOVERING_ACTIVE", "KEEP_LABEL", "SENSE", "UNTAG",
+};
+
+static bitdesc_t bits_periph_cap[] = {
+    "ANEC", "TERMIOP", "RELADR", "WIDE32",
+        "WIDE16", "Bit5", "Bit6", "SYNC",
+    "LINKCMDS", "TQING", "SFTRESET", "CMD16",
+        "DT", "QAS", "IUS", "Bit15",
+};
+
+static bitdesc_t bits_xs_control[] = {
+    "NOSLEEP", "POLL", "DISCOVERY", "ASYNC",
+        "USERCMD", "SILENT", "IGNORE_NOT_READY", "IGNORE_MEDIA_CHANGE",
+    "IGNORE_ILLEGAL_REQUEST", "SILENT_NODEV", "RESET", "DATA_UIO",
+        "DATA_IN", "DATA_OUT", "TARGET", "ESCAPE",
+    "URGENT", "SIMPLE_TAG", "ORDERED_TAG", "HEAD_TAG",
+        "THAW_PERIPH", "FREEZE_PERIPH", "Bit22", "REQSENSE",
+};
+
+static bitdesc_t bits_chan_flags[] = {
+    "CHAN_OPENINGS", "CHAN_CANGROW", "CHAN_NOSETTLE", "CHAN_TACTIVE",
+    "CHAN_RESET_PEND",
+};
+
+static bitdesc_t bits_chan_tflags[] = {
+    "CHANT_SHUTDOWN", "CHANT_CALLBACK", "CHANT_KICK", "CHANT_GROWRES",
+};
+
+static void
+print_bits(bitdesc_t *bits, uint nbits, uint value)
+{
+    uint bit;
+    for (bit = 0; value != 0; value >>= 1, bit++) {
+        if (value & 1) {
+            if ((bit >= nbits) || (bits[bit] == NULL))
+                printf(" bit%d", bit);
+            else
+                printf(" %s", bits[bit]);
+        }
+    }
 }
 
 static const char *
@@ -167,6 +241,8 @@ struct ioerr {
     { 33, "TDERR_BadDriveType" },
     { 34, "TDERR_DriveInUse" },
     { 35, "TDERR_PostReset" },
+    { 36, "CDERR_BadDataType" },   // data on disk is wrong type
+    { 37, "CDERR_InvalidState" },  // invalid cmd under current conditions
     { 40, "HFERR_SelfUnit" },
     { 41, "HFERR_DMA" },
     { 42, "HFERR_Phase" },
@@ -174,8 +250,12 @@ struct ioerr {
     { 44, "HFERR_SelTimeout" },
     { 45, "HFERR_BadStatus" },
     { 46, "ERROR_INQUIRY_FAILED" },
+    { 47, "ERROR_TIMEOUT" },
+    { 48, "ERROR_BUS_RESET" },
+    { 49, "ERROR_TRY_AGAIN" },
     { 56, "HFERR_NoBoard" },
     { 51, "ERROR_BAD_BOARD" },
+    { 52, "ERROR_SENSE_CODE" },
 };
 
 static void
@@ -400,23 +480,25 @@ decode_scsi_sense_key(int key)
     return ("UNKNOWN");
 }
 
-#define SCSI_COND_MET     0x04
-#define SCSI_TASK_ABORTED 0x40
+#define SCSI_COND_MET       0x04
+#define SCSI_INTERM_CNDMET  0x14
+#define SCSI_TASK_ABORTED   0x40
 
 static const char *
 decode_xs_status(int status)
 {
     switch (status) {
-        case SCSI_OK:            return ("OK");             // 0x00
-        case SCSI_CHECK:         return ("CHECK");          // 0x02
-        case SCSI_COND_MET:      return ("COND_MET");       // 0x04
-        case SCSI_BUSY:          return ("BUSY");           // 0x08
-        case SCSI_INTERM:        return ("INTERM");         // 0x10
-        case SCSI_RESV_CONFLICT: return ("RESV_CONFLICT");  // 0x18
-        case SCSI_TERMINATED:    return ("TERMINATED");     // 0x22
-        case SCSI_QUEUE_FULL:    return ("QUEUE_FULL");     // 0x28
-        case SCSI_ACA_ACTIVE:    return ("ACA_ACTIVE");     // 0x30
-        case SCSI_TASK_ABORTED:  return ("TASK_ABORTED");   // 0x40
+        case SCSI_OK:            return ("OK");              // 0x00
+        case SCSI_CHECK:         return ("CHECK");           // 0x02
+        case SCSI_COND_MET:      return ("COND_MET");        // 0x04
+        case SCSI_BUSY:          return ("BUSY");            // 0x08
+        case SCSI_INTERM:        return ("INTERMEDIATE");    // 0x10
+        case SCSI_INTERM_CNDMET: return ("INTERM_COND_MET"); // 0x14
+        case SCSI_RESV_CONFLICT: return ("RESV_CONFLICT");   // 0x18
+        case SCSI_TERMINATED:    return ("TERMINATED");      // 0x22
+        case SCSI_QUEUE_FULL:    return ("QUEUE_FULL");      // 0x28
+        case SCSI_ACA_ACTIVE:    return ("ACA_ACTIVE");      // 0x30
+        case SCSI_TASK_ABORTED:  return ("TASK_ABORTED");    // 0x40
         default:                 return ("UNKNOWN");
     }
 }
@@ -1267,9 +1349,18 @@ print_xs(struct scsipi_xfer *xs, int indent_count)
         printf("%s  io_Length=%08x\n", indent, (uint) ior->io_Length);
         printf("%s  io_Data=%p\n", indent, ior->io_Data);
     }
-    printf("%sxs_control=%d\n", indent, xs->xs_control);
-    printf("%sxs_status=%d\n", indent, xs->xs_status);
-    printf("%sxs_periph=%p\n", indent, xs->xs_periph);
+    printf("%sxs_control=%08x  ", indent, xs->xs_control);
+    print_bits(bits_xs_control, ARRAY_SIZE(bits_xs_control),
+               xs->xs_control);
+    printf("\n");
+    printf("%sxs_status=%d %s\n", indent, xs->xs_status,
+           (xs->xs_status & XS_STS_DONE) ? "STS_DONE" : "");
+    printf("%sxs_periph=%p", indent, xs->xs_periph);
+    if (xs->xs_periph != NULL) {
+        printf(" %d.%d",
+               xs->xs_periph->periph_target, xs->xs_periph->periph_lun);
+    }
+    printf("\n");
     printf("%sxs_retries=%d\n", indent, xs->xs_retries);
     printf("%sxs_requeuecnt=%d\n", indent, xs->xs_requeuecnt);
     printf("%stimeout=%d\n", indent, xs->timeout);
@@ -1305,9 +1396,11 @@ decode_acb(struct siop_acb *acb)
         if (acb->xs->xs_periph == NULL) {
             printf(" %p <NO PERIPH>", acb->xs);
         } else {
-            printf(" %p %d.%d", acb->xs,
-                   acb->xs->xs_periph->periph_target,
-                   acb->xs->xs_periph->periph_lun);
+            struct scsipi_xfer *xs = acb->xs;
+            printf(" %p %d.%d", xs,
+                   xs->xs_periph->periph_target, xs->xs_periph->periph_lun);
+            if (xs->xs_callout.func != NULL)
+                printf(" [%d ticks]", xs->xs_callout.ticks);
         }
     }
     printf(" flags=%x len=%02d", acb->flags, acb->clen);
@@ -1344,26 +1437,77 @@ show_sc_list(int indent_count, struct siop_acb *acb)
         printf("\n");
 }
 
-typedef const char * const bitdesc_t;
+static const char * const scsi_periph_type_name[] = {
+    "T_DIRECT - direct access device",                     // 0x00
+    "T_SEQUENTIAL - sequential access device",             // 0x01
+    "T_PRINTER - printer device",                          // 0x02
+    "T_PROCESSOR - processor device",                      // 0x03
+    "T_WORM - write once, read many device",               // 0x04
+    "T_CDROM - cd-rom device",                             // 0x05
+    "T_SCANNER - scanner device",                          // 0x06
+    "T_OPTICAL - optical memory device",                   // 0x07
+    "T_CHANGER - medium changer device",                   // 0x08
+    "T_COMM - communication device",                       // 0x09
+    "T_IT8_1 - Defined by ASC IT8",                        // 0x0a
+    "T_IT8_2 - Graphic arts pre-press device",             // 0x0b
+    "T_STORARRAY - storage array device",                  // 0x0c
+    "T_ENCLOSURE - enclosure services device",             // 0x0d
+    "T_SIMPLE_DIRECT - Simplified direct-access device",   // 0x0e
+    "T_OPTIC_CARD_RW - Optical card reader/writer device", // 0x0f
+    "",                                                    // 0x10
+    "T_OBJECT_STORED - Object-based Storage Device",       // 0x11
+    "T_AUTOMATION_DRIVE - Automation drive interface",     // 0x12
+    "",                                                    // 0x13
+    "",                                                    // 0x13
+    "",                                                    // 0x14
+    "",                                                    // 0x15
+    "",                                                    // 0x16
+    "",                                                    // 0x17
+    "",                                                    // 0x18
+    "",                                                    // 0x19
+    "",                                                    // 0x1a
+    "",                                                    // 0x1b
+    "",                                                    // 0x1c
+    "",                                                    // 0x1d
+    "T_WELL_KNOWN_LUN - Well known logical unit",          // 0x1e
+    "T_NODEVICE - Unknown or no device type",              // 0x1f
+};
 
-static bitdesc_t bits_periph_flags[] = {
-    "REMOVABLE", "MEDIA_LOADED", "WAITING", "OPEN",
-        "WAITDRAIN", "GROW_OPENINGS", "MODE_VALID", "RECOVERING",
-    "RECOVERING_ACTIVE", "KEEP_LABEL", "SENSE", "UNTAG",
+static const char * const interrupt_type_name[] = {
+    "NT_UNKNOWN",      // 0
+    "NT_TASK",         // 1
+    "NT_INTERRUPT",    // 2
+    "NT_DEVICE",       // 3
+    "NT_MSGPORT",      // 4
+    "NT_MESSAGE",      // 5
+    "NT_FREEMSG",      // 6
+    "NT_REPLYMSG",     // 7
+    "NT_RESOURCE",     // 8
+    "NT_LIBRARY",      // 9
+    "NT_MEMORY",       // 10
+    "NT_SOFTINT",      // 11
+    "NT_FONT",         // 12
+    "NT_PROCESS",      // 13
+    "NT_SEMAPHORE",    // 14
+    "NT_SIGNALSEM",    // 15
+    "NT_BOOTNODE",     // 16
+    "NT_KICKMEM",      // 17
+    "NT_GRAPHICS",     // 18
+    "NT_DEATHMESSAGE", // 19
 };
 
 static void
-print_bits(bitdesc_t *bits, uint nbits, uint value)
+show_interrupt(int indent, struct Interrupt *interrupt)
 {
-    uint bit;
-    for (bit = 0; value != 0; value >>= 1, bit++) {
-        if (value & 1) {
-            if ((bit >= nbits) || (bits[bit] == NULL))
-                printf(" bit%d", bit);
-            else
-                printf(" %s", bits[bit]);
-        }
-    }
+    printf("%*sis_Node.ln_Type=%x %s\n",
+           indent, "", interrupt->is_Node.ln_Type,
+           interrupt->is_Node.ln_Type < ARRAY_SIZE(interrupt_type_name) ?
+           interrupt_type_name[interrupt->is_Node.ln_Type] : "");
+    printf("%*sis_Node.ln_Pri=%d\n", indent, "", interrupt->is_Node.ln_Pri);
+    printf("%*sis_Node.ln_Name=%p '%s'\n", indent, "",
+           interrupt->is_Node.ln_Name, interrupt->is_Node.ln_Name);
+    printf("%*sis_Code %p(%p)\n",
+           indent, "", interrupt->is_Code, interrupt->is_Data);
 }
 
 static void
@@ -1375,6 +1519,110 @@ show_sc_tinfo(int indent_count, struct siop_tinfo *st)
            st->lubusy, st->flags, st->period, st->offset);
 }
 
+static void
+show_periph(struct scsipi_periph *periph)
+{
+    int count = 0;
+    printf("Periph=%p\n", periph);
+    printf("  drv_state=%p\n", periph->drv_state);
+    printf("  periph_channel=%p\n", periph->periph_channel);
+    printf("  periph_changeintlist=");
+    struct IOStdReq *io;
+    for (io = (struct IOStdReq *)periph->periph_changeintlist.mlh_Head;
+         io->io_Message.mn_Node.ln_Succ != NULL;
+         io = (struct IOStdReq *)io->io_Message.mn_Node.ln_Succ) {
+        if (count++ == 0)
+            printf("\n");
+        printf("    ioRequest=%p\n", io);
+        printf("      io_Message=%p\n", &io->io_Message);
+        printf("      io_Device=%p\n", io->io_Device);
+        printf("      io_Unit=%p\n", io->io_Unit);
+        printf("      io_Command=%04x %s\n",
+               io->io_Command, iocmd_name(io->io_Command));
+        decode_io_command(8, (struct IOStdReq *) io);
+        printf("      io_Flags=%02x\n", io->io_Flags);
+        printf("      io_Error=%02x\n", io->io_Error);
+        printf("      io_Data=%p\n", io->io_Data);
+        if (io->io_Data != NULL) {
+            show_interrupt(8, io->io_Data);
+        }
+    }
+    if (count == 0)
+        printf("NONE\n");
+    printf("  periph_changeint=%p\n", periph->periph_changeint);
+    if (periph->periph_changeint != NULL)
+        show_interrupt(4, periph->periph_changeint);
+    printf("  periph_openings=%d\n", periph->periph_openings);
+    printf("  periph_sent=%d\n", periph->periph_sent);
+    printf("  periph_mode=%x\n", periph->periph_mode);
+    printf("  periph_period=%d\n", periph->periph_period);
+    printf("  periph_offset=%d\n", periph->periph_offset);
+
+    printf("  periph_type=%u  %s\n", periph->periph_type,
+           periph->periph_type < ARRAY_SIZE(scsi_periph_type_name) ?
+           scsi_periph_type_name[periph->periph_type] : "");
+    printf("  periph_cap=0x%x ", periph->periph_cap);
+    print_bits(bits_periph_cap, ARRAY_SIZE(bits_periph_cap),
+               periph->periph_cap);
+    printf("\n");
+    printf("  periph_quirks=%x\n", periph->periph_quirks);
+    printf("  periph_flags=%x ", periph->periph_flags);
+    print_bits(bits_periph_flags, ARRAY_SIZE(bits_periph_flags),
+               periph->periph_flags);
+    printf("\n");
+    printf("  periph_dbflags=%x\n", periph->periph_dbflags);
+    printf("  periph_target=%d\n", periph->periph_target);
+    printf("  periph_lun=%d\n", periph->periph_lun);
+    printf("  periph_blkshift=%d (%u bytes)\n", periph->periph_blkshift,
+           1U << periph->periph_blkshift);
+    printf("  periph_changenum=%d\n", periph->periph_changenum);
+    printf("  periph_tur_active=%d\n", periph->periph_tur_active);
+    printf("  periph_version=%d\n", periph->periph_version);
+//  printf("  periph_freetags[]=\n", periph->periph_freetags[i]);
+//  printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
+
+#if 0
+    struct scsipi_channel *chan = periph->periph_channel;
+    struct scsipi_xfer_queue *xq;
+
+    /*
+     * periph_xferq is not being tracked in AmigaOS driver,
+     * so it is simulated here using the channel xferq.
+     */
+    Forbid();
+    xq = &chan->chan_queue;
+    xs = TAILQ_FIRST(xq);
+    while ((xs != NULL) && (xs->xs_periph != periph)) {
+        /* Channel queue might have other XS than just this periph */
+        xs = TAILQ_NEXT(xs, channel_q);
+    }
+    printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
+    while (xs != NULL) {
+        printf("    xs=%p\n", xs);
+        print_xs(xs, 6);
+        xs = TAILQ_NEXT(xs, channel_q);
+        while ((xs != NULL) && (xs->xs_periph != periph)) {
+            /* Channel queue might have other XS than just this periph */
+            xs = TAILQ_NEXT(xs, channel_q);
+        }
+    }
+    Permit();
+#endif
+
+    if (periph->periph_callout.func == NULL) {
+        printf("  periph_callout NONE\n");
+    } else {
+        printf("  periph_callout ticks=%d\n", periph->periph_callout.ticks);
+        printf("                 func=%p(%p)\n",
+               periph->periph_callout.func, periph->periph_callout.arg);
+    }
+    printf("  periph_xscheck=%p\n", periph->periph_xscheck);
+    Forbid();
+    if (periph->periph_xscheck != NULL)
+        print_xs(periph->periph_xscheck, 6);
+    Permit();
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1382,10 +1630,12 @@ main(int argc, char *argv[])
     int arg;
     int pos = 0;
     int rc = 0;
+    int open_and_wait = 0;
     struct IOExtTD     *tio;
     struct MsgPort     *mp;
     struct IOStdReq    *ior;
-    struct scsipi_xfer *xs = NULL;
+    struct scsipi_xfer *xs;
+    struct scsipi_periph *periph;
     char   *devname = DEVICE_NAME;
 
     for (arg = 1; arg < argc; arg++) {
@@ -1393,15 +1643,33 @@ main(int argc, char *argv[])
         if (*ptr == '-') {
             while (*(++ptr) != '\0') {
                 switch (*ptr) {
+                    case 'p': {
+                        if (++arg > argc) {
+                            printf("-%c requires an argument\n", *ptr);
+                            exit(1);
+                        }
+                        if ((sscanf(argv[arg], "%x%n",
+                                    (uint *) &periph, &pos) != 1) ||
+                            (argv[arg][pos] != '\0')) {
+                            printf("Invalid periph address '%s'\n", argv[arg]);
+                        }
+                        show_periph(periph);
+                        exit(0);
+                    }
                     case 'x':
                         if (++arg > argc) {
                             printf("-%c requires an argument\n", *ptr);
                             exit(1);
                         }
-                        if ((sscanf(argv[arg], "%x%n", (uint *) &xs, &pos) != 1) ||
+                        if ((sscanf(argv[arg], "%x%n",
+                                    (uint *) &xs, &pos) != 1) ||
                             (argv[arg][pos] != '\0')) {
                             printf("Invalid xs address '%s'\n", argv[arg]);
                         }
+                        print_xs(xs, 1);
+                        exit(0);
+                    case 'w':
+                        open_and_wait++;
                         break;
                     default:
                         printf("Invalid argument -%s\n", ptr);
@@ -1419,15 +1687,12 @@ main(int argc, char *argv[])
         }
     }
 
-    if (xs != NULL) {
-        print_xs(xs, 1);
-        exit(0);
-    }
-
     if (unitno == -1) {
         usage();
         exit(1);
     }
+
+    __check_abort_enabled = 0;  // Disable gcc clib2 ^C break handling
 
     mp = CreatePort(NULL, 0);
     if (mp == NULL) {
@@ -1442,11 +1707,25 @@ main(int argc, char *argv[])
         goto extio_fail;
     }
 
-    if (OpenDevice(devname, unitno, (struct IORequest *) tio, 0)) {
-        printf("Open %s failed\n", devname);
-        rc = 1;
-        goto open_fail;
+    if (OpenDevice(devname, unitno, (struct IORequest *) tio, TDF_DEBUG_OPEN)) {
+        printf("Unit %d is not currently open; attemping a normal open.\n",
+               unitno);
+        if (OpenDevice(devname, unitno, (struct IORequest *) tio, 0)) {
+            printf("Open %s failed\n", devname);
+            rc = 1;
+            goto open_fail;
+        }
     }
+    global_opened = 1;
+    global_mp     = mp;
+    global_tio    = tio;
+
+    if (open_and_wait) {
+        int i;
+        printf("Device open; press enter to proceed.\n");
+        scanf("%d", &i);
+    }
+
     ior = &tio->iotd_Req;
     struct MsgPort *rp = ior->io_Message.mn_ReplyPort;
     struct Library *dp = &ior->io_Device->dd_Library;
@@ -1472,6 +1751,8 @@ main(int argc, char *argv[])
            dp->lib_IdString, (char *)dp->lib_IdString);
     printf("    lib_Sum=%08x\n", (unsigned int) dp->lib_Sum);
     printf("    lib_OpenCnt=%04x\n", dp->lib_OpenCnt);
+    if (is_user_abort())
+        close_exit();
 
     struct Unit *u = ior->io_Unit;
     printf("  io_Unit=%p\n", u);
@@ -1496,68 +1777,16 @@ main(int argc, char *argv[])
     printf("  iotd_Count=%08x\n", ior->io_Error);
     printf("  iotd_SecLabel=%08x\n", ior->io_Error);
 
-    struct scsipi_periph *periph = (void *) u;
-    printf("Periph=%p\n", periph);
-    printf("  drv_state=%p\n", periph->drv_state);
-    printf("  periph_channel=%p\n", periph->periph_channel);
-    printf("  periph_openings=%d\n", periph->periph_openings);
-    printf("  periph_sent=%d\n", periph->periph_sent);
-    printf("  periph_mode=%x\n", periph->periph_mode);
-    printf("  periph_period=%d\n", periph->periph_period);
-    printf("  periph_offset=%d\n", periph->periph_offset);
-    printf("  periph_type=%u\n", periph->periph_type);
-    printf("  periph_cap=0x%x\n", periph->periph_cap);
-    printf("  periph_quirks=%x\n", periph->periph_quirks);
-    printf("  periph_flags=%x", periph->periph_flags);
-    print_bits(bits_periph_flags, ARRAY_SIZE(bits_periph_flags),
-               periph->periph_flags);
-    printf("\n");
-    printf("  periph_dbflags=%x\n", periph->periph_dbflags);
-    printf("  periph_target=%d\n", periph->periph_target);
-    printf("  periph_lun=%d\n", periph->periph_lun);
-    printf("  periph_blkshift=%d\n", periph->periph_blkshift);
-    printf("  periph_version=%d\n", periph->periph_version);
-//  printf("  periph_freetags[]=\n", periph->periph_freetags[i]);
-//  printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
+    if (is_user_abort())
+        close_exit();
 
-    /*
-     * periph_xferq is not being tracked in AmigaOS driver,
-     * so it is simulated here using the channel xferq.
-     */
-    Forbid();
+    periph = (void *) u;
     struct scsipi_channel *chan = periph->periph_channel;
-    struct scsipi_xfer_queue *xq;
-    xq = &chan->chan_queue;
-    xs = TAILQ_FIRST(xq);
-    while ((xs != NULL) && (xs->xs_periph != periph)) {
-        /* Channel queue might have other XS than just this periph */
-        xs = TAILQ_NEXT(xs, channel_q);
-    }
-    printf("  periph_xferq=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
-    while (xs != NULL) {
-        printf("    xs=%p\n", xs);
-        xs = TAILQ_NEXT(xs, channel_q);
-        while ((xs != NULL) && (xs->xs_periph != periph)) {
-            /* Channel queue might have other XS than just this periph */
-            xs = TAILQ_NEXT(xs, channel_q);
-        }
-        if (xs != NULL)
-            print_xs(xs, 6);
-    }
-    Permit();
+    show_periph(periph);
 
-    if (periph->periph_callout.func == NULL) {
-        printf("  periph_callout NONE\n");
-    } else {
-        printf("  periph_callout ticks=%d\n", periph->periph_callout.ticks);
-        printf("                 func=%p(%p)\n",
-               periph->periph_callout.func, periph->periph_callout.arg);
-    }
-    printf("  periph_xscheck=%p\n", periph->periph_xscheck);
-    Forbid();
-    if (periph->periph_xscheck != NULL)
-        print_xs(periph->periph_xscheck, 6);
-    Permit();
+    if (is_user_abort())
+        close_exit();
+
     printf("Chan %p\n", chan);
     Forbid();
     xs = chan->chan_xs_free;
@@ -1578,6 +1807,10 @@ main(int argc, char *argv[])
         print_xs(xs, 6);
     }
     Permit();
+
+    if (is_user_abort())
+        close_exit();
+
     printf("  chan_active=%d\n", chan->chan_active);
     struct scsipi_adapter *adapt = chan->chan_adapter;
     printf("  chan_adapter=%p\n", adapt);
@@ -1585,26 +1818,53 @@ main(int argc, char *argv[])
     printf("    adapt_nchannels=%d\n", adapt->adapt_nchannels);
     printf("    adapt_refcnt=%d\n", adapt->adapt_refcnt);
     printf("    adapt_openings=%d\n", adapt->adapt_openings);
-    printf("    adapt_max_periph=%d\n", adapt->adapt_max_periph);
+//  printf("    adapt_max_periph=%d\n", adapt->adapt_max_periph);
     printf("    adapt_flags=%d\n", adapt->adapt_flags);
     printf("    adapt_runnings=%d\n", adapt->adapt_running);
     printf("    adapt_asave=%p\n", adapt->adapt_asave);
     printf("  chan_periphtab[]=%p\n", chan->chan_periphtab);
-    printf("  chan_flags=%d\n", chan->chan_flags);
+    for (int i = 0; i < SCSIPI_CHAN_PERIPH_BUCKETS; i++) {
+        LIST_FOREACH(periph, &chan->chan_periphtab[i], periph_hash) {
+            printf("    periph=%p %d.%d\n", periph,
+                   periph->periph_target, periph->periph_lun);
+        }
+    }
+
+    printf("  chan_flags=%02x", chan->chan_flags);
+    print_bits(bits_chan_flags, ARRAY_SIZE(bits_chan_flags), chan->chan_flags);
+    printf("\n");
     printf("  chan_openings=%d\n", chan->chan_openings);
     printf("  chan_nluns=%d\n", chan->chan_nluns);
     printf("  chan_id=%d (SCSI host ID)\n", chan->chan_id);
-    printf("  chan_tflags=%d\n", chan->chan_tflags);
+    printf("  chan_tflags=%d", chan->chan_tflags);
+    print_bits(bits_chan_tflags, ARRAY_SIZE(bits_chan_tflags),
+               chan->chan_tflags);
+    printf("\n");
+
+    if (is_user_abort())
+        close_exit();
+
     Forbid();
-    xq = &chan->chan_queue;
+    struct scsipi_xfer_queue *xq = &chan->chan_queue;
     xs = TAILQ_FIRST(xq);
     printf("  chan_queue=%p%s\n", xq, (xs == NULL) ? "  EMPTY" : "");
     while (xs != NULL) {
-        printf("    xs=%p\n", xs);
+        printf("    xs=%p", xs);
+        if (xs->xs_periph != NULL) {
+            struct scsipi_periph *tperiph = xs->xs_periph;
+            printf("  periph %d.%d",
+                   tperiph->periph_target, tperiph->periph_lun);
+            if (tperiph == periph)
+                printf(" (THIS)");
+        }
+        printf("\n");
         print_xs(xs, 6);
         xs = TAILQ_NEXT(xs, channel_q);
     }
     Permit();
+
+    if (is_user_abort())
+        close_exit();
 
     Forbid();
     xq = &chan->chan_complete;
@@ -1620,42 +1880,49 @@ main(int argc, char *argv[])
     if (asave != NULL) {
         printf("Driver globals %p\n", asave);
         printf("  as_SysBase=%p\n", asave->as_SysBase);
-        printf("  as_irq_count=%x\n", asave->as_irq_count);
-        printf("  as_svc_task=%p\n", asave->as_svc_task);
-        struct Interrupt *isr = asave->as_isr;
-        printf("  as_isr=%p is_Code=%p(%p)\n",
-               asave->as_isr, isr->is_Code, isr->is_Data);
-        printf("    is_Node.ln_Type=%x\n", isr->is_Node.ln_Type);
-        printf("    is_Node.ln_Pri=%x\n", isr->is_Node.ln_Pri);
-        printf("    is_Node.ln_Name=%p %.30s\n",
-               isr->is_Node.ln_Name, isr->is_Node.ln_Name);
+        printf("  as_timer_running=%x\n", asave->as_timer_running);
         printf("  as_irq_signal=%x\n", asave->as_irq_signal);
+        printf("  as_irq_count=%x\n", asave->as_irq_count);
+        printf("  as_int_mask=%08x\n", asave->as_int_mask);
+        printf("  as_timer_mask=%08x\n", asave->as_timer_mask);
+        printf("  as_svc_task=%p\n", asave->as_svc_task);
+        printf("  as_isr=%p\n", asave->as_isr);
+        show_interrupt(4, asave->as_isr);
         printf("  as_exiting=%x\n", asave->as_exiting);
         printf("  as_device_self=%p\n", &asave->as_device_self);
         printf("  as_device_private=%p\n", asave->as_device_private);
         struct siop_softc *sc = asave->as_device_private;
-        printf("    sc_siop_si=%p\n", sc->sc_siop_si);
+//      printf("    sc_siop_si=%p\n", sc->sc_siop_si);
         printf("    sc_istat=%u sc_dstate=%u sc_sstat0=%u sc_sstat1=%u\n",
                sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);
-        printf("    sc_intcode=%lu\n", sc->sc_intcode);
+        printf("    sc_intcode=%04lx\n", sc->sc_intcode);
         printf("    sc_adapter=%p\n", &sc->sc_adapter);
         printf("    sc_channel=%p\n", &sc->sc_channel);
         printf("    sc_scriptspa=%lx\n", sc->sc_scriptspa);
         printf("    sc_siopp=%p\n", sc->sc_siopp);
-        printf("    sc_active=%lu sc_nosync=%lu\n",
-               sc->sc_active, sc->sc_nosync);
+        printf("    sc_active=%lu\n", sc->sc_active);
+
+        Forbid();
         printf("    free_list=");
         show_sc_list(6, sc->free_list.tqh_first);
-        printf("    ready_list=");
+        printf("    ready_list=");  // Queue of xs to be issued
         show_sc_list(6, sc->ready_list.tqh_first);
-        printf("    nexus_list=");
+        printf("    nexus_list=");  // List of xs already issued on channel
         show_sc_list(6, sc->nexus_list.tqh_first);
-        printf("    sc_nexus=%p", sc->sc_nexus);
+        Permit();
+
+        if (is_user_abort())
+            close_exit();
+
+        Forbid();
+        printf("    sc_nexus=%p", sc->sc_nexus);  // Current active xs
         decode_acb(sc->sc_nexus);
-        if ((sc->sc_active != 0) && (sc->sc_nexus->xs != NULL)) {
+        if ((sc->sc_active != 0) &&
+            (sc->sc_nexus != NULL) && (sc->sc_nexus->xs != NULL)) {
             /* Do full decode of ACB */
             print_xs(sc->sc_nexus->xs, 6);
         }
+        Permit();
         printf("    sc_acb[0]=%p\n", sc->sc_acb);
         for (pos = 0; pos < ARRAY_SIZE(sc->sc_tinfo); pos++) {
             printf("    sc_tinfo[%d] ", pos);
@@ -1669,17 +1936,21 @@ main(int argc, char *argv[])
         printf("    sc_flags=%02x sc_dien=%02x sc_minsync=%02x "
                "sc_sien=%02x\n",
                sc->sc_flags, sc->sc_dien, sc->sc_minsync, sc->sc_sien);
+        printf("    sc_nosync=%x sc_nodisconnect=%x\n",
+               sc->sc_nosync, sc->sc_nodisconnect);
         for (pos = 0; pos < ARRAY_SIZE(sc->sc_sync); pos++) {
             printf("    sc_sync[%d] state=%u sxfer=%u sbcl=%u\n",
                    pos, sc->sc_sync[pos].state, sc->sc_sync[pos].sxfer,
                    sc->sc_sync[pos].sbcl);
         }
 
+        if (is_user_abort())
+            close_exit();
+
         printf("  as_timerport[0]=%p as_timerport[1]=%p\n",
                 asave->as_timerport[0], asave->as_timerport[1]);
         printf("  as_timerio[0]=%p   as_timerio[1]=%p\n",
                asave->as_timerio[0], asave->as_timerio[1]);
-        printf("  as_timer_running=%x\n", asave->as_timer_running);
         callout_t *callout_head = *(asave->as_callout_head);
         callout_t *cur;
         printf("  as_callout_head=%p\n", callout_head);
@@ -1696,5 +1967,6 @@ open_fail:
 
 extio_fail:
     DeletePort(mp);
+    global_opened = 0;
     exit(rc);
 }

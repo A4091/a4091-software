@@ -44,15 +44,18 @@
 #include <proto/exec.h>
 #include <inline/exec.h>
 
+#if 0
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.187 2020/09/17 01:19:41 jakllsch Exp $");
+#endif
+
 #include "scsipiconf.h"
 #include "scsi_disk.h"
 #include "scsipi_disk.h"
 #include "scsipi_base.h"
 #include "scsipi_all.h"
 #include "scsi_all.h"
-#include "siopreg.h"
-#include "siopvar.h"
 #include "scsi_message.h"
+#include "sd.h"
 
 #undef SCSIPI_DEBUG
 #undef QUEUE_DEBUG
@@ -67,10 +70,6 @@ void scsipi_completion_poll(struct scsipi_channel *chan);
 static void scsipi_put_tag(struct scsipi_xfer *xs);
 
 extern struct ExecBase *SysBase;
-
-#ifdef PORT_AMIGA
-void irq_poll(int gotint, struct siop_softc *sc);
-#endif
 
 #if 0
 /*
@@ -264,7 +263,7 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
     chan->chan_active++;
 
 #if 0
-    printf("get_xs(%p) active=%u\n", xs, periph->periph_active);
+    printf("get_xs(%p) active=%u\n", xs, chan->chan_active);
 #endif
     return (xs);
 }
@@ -296,7 +295,7 @@ scsipi_put_xs(struct scsipi_xfer *xs)
     chan->chan_xs_free = xs;
 
 #if 0
-    printf("put_xs(%p) active=%u\n", xs, periph->periph_active);
+    printf("put_xs(%p) active=%u\n", xs, chan->chan_active);
 #endif
 }
 
@@ -330,7 +329,6 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	KASSERT(!cold);
 
 #ifdef PORT_AMIGA
-        uint timeout;
         /*
          * Set the LUN in the CDB if we have an older device. We also
          * set it for more modern SCSI-2 devices "just in case".
@@ -408,7 +406,11 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 			scsipi_printaddr(periph);
 			printf("invalid tag mask 0x%08x\n",
 			    XS_CTL_TAGTYPE(xs));
+#ifdef PORT_AMIGA
+			panic("invalid tag mask %x", XS_CTL_TAGTYPE(xs));
+#else
 			panic("scsipi_execute_xs");
+#endif
 		}
 	}
 
@@ -441,7 +443,11 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 			scsipi_printaddr(periph);
 			printf("not polling, but enqueue failed with %d\n",
 			    error);
+#ifdef PORT_AMIGA
+			panic("not polling but enqueue failed %d", error);
+#else
 			panic("scsipi_execute_xs");
+#endif
 		}
 
 		scsipi_printaddr(periph);
@@ -464,57 +470,19 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	/*
 	 * Not an asynchronous command; wait for it to complete.
 	 */
-#ifdef PORT_AMIGA
-        /*
-         * XXX: More can be done to improve the completion poll timeout.
-         *      It could instead call into an enhanced cmdhandler function
-         *      which would choose to only wait on interrupts and timer
-         *      messages. That would increase efficiency by not having
-         *      the driver poll for 53C710 interrupt status every tick.
-         */
-        timeout = xs->timeout * TICKS_PER_SECOND / 1000;
-        if (timeout == 0) {
-            timeout = 1;  // Run at least one poll iteration
-        }
-
-        struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
-        irq_poll(1, sc);
-
-	while ((xs->xs_status & XS_STS_DONE) == 0) {
-                /*
-                 * Need to run interrupt message handling here because
-                 * this code is running in the same thread as the normal
-                 * interrupt message handling.
-                 */
-                if (timeout-- == 0) {
-                    printf("SCSI completion poll timeout: %d\n", xs->timeout);
-                    break;
-                }
-
-                delay(1000000 / TICKS_PER_SECOND);  // 1 tick
-                irq_poll(1, sc);
-	}
-
-        /*
-         * If the XS did not complete due to timeout, then execute
-         * the timeout callout, if one has been set up.
-         */
-	if ((xs->xs_status & XS_STS_DONE) == 0) {
-            if (callout_pending(&xs->xs_callout)) {
-                printf("Did not reach STS_DONE, running callout\n");
-                callout_call(&xs->xs_callout);
-                callout_stop(&xs->xs_callout);  // Combine with call?
-            }
-        }
-#else  /* !PORT_AMIGA */
 	while ((xs->xs_status & XS_STS_DONE) == 0) {
 		if (poll) {
 			scsipi_printaddr(periph);
+#ifndef PORT_AMIGA
+			printf("polling command not done\n");
 			panic("scsipi_execute_xs");
+#endif
 		}
+#ifdef PORT_AMIGA
+                irq_and_timer_handler();  // Run timer and interrupts
+#endif
 		cv_wait(xs_cv(xs), chan_mtx(chan));
 	}
-#endif
 
 	/*
 	 * Command is complete.  scsipi_done() has awakened us to perform
@@ -539,6 +507,9 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
 	mutex_enter(chan_mtx(chan));
  free_xs:
+        if (xs->xs_done_callback != NULL) {
+            printf("BUG: xs_done_callback not called\n");
+        }
 	scsipi_put_xs(xs);
 	mutex_exit(chan_mtx(chan));
 
@@ -568,10 +539,12 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 int
 scsipi_channel_init(struct scsipi_channel *chan)
 {
-//      struct scsipi_adapter *adapt = chan->chan_adapter;
+#ifndef PORT_AMIGA
+        struct scsipi_adapter *adapt = chan->chan_adapter;
+#endif
         int i;
 
-#if 0
+#ifndef PORT_AMIGA
         /* Initialize shared data. */
         scsipi_init();
 #endif
@@ -584,7 +557,7 @@ scsipi_channel_init(struct scsipi_channel *chan)
         for (i = 0; i < SCSIPI_CHAN_PERIPH_BUCKETS; i++)
                 LIST_INIT(&chan->chan_periphtab[i]);
 
-#if 0
+#ifndef PORT_AMIGA
         /*
          * Create the asynchronous completion thread.
          */
@@ -599,7 +572,7 @@ scsipi_channel_init(struct scsipi_channel *chan)
         return 0;
 }
 
-static uint32_t
+uint32_t
 scsipi_chan_periph_hash(uint64_t t, uint64_t l)
 {
         return (0);
@@ -703,6 +676,8 @@ scsipi_make_xs_internal(struct scsipi_periph *periph,
     xs->timeout = timeout;
     xs->bp = bp;
 
+    if (timeout == 0)
+        printf("WARNING: xs new timeout is ZERO for cmd %x\n", cmd->opcode);
     return (xs);
 }
 
@@ -770,22 +745,28 @@ scsipi_grow_resources(struct scsipi_channel *chan)
 {
 
 	if (chan->chan_flags & SCSIPI_CHAN_CANGROW) {
+#ifndef PORT_AMIGA
 		if ((chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
+#endif
+                        /*
+                         * Amiga driver doesn't wait for completion thread
+                         * to grow resources.
+                         */
 			mutex_exit(chan_mtx(chan));
 			scsipi_adapter_request(chan,
 			    ADAPTER_REQ_GROW_RESOURCES, NULL);
 			mutex_enter(chan_mtx(chan));
 			return scsipi_get_resource(chan);
+#ifndef PORT_AMIGA
 		}
 		/*
 		 * ask the channel thread to do it. It'll have to thaw the
 		 * queue
 		 */
-#if 0
 		scsipi_channel_freeze_locked(chan, 1);
-#endif
 		chan->chan_tflags |= SCSIPI_CHANT_GROWRES;
 //		cv_broadcast(chan_cv_complete(chan));
+#endif
 		return 0;
 	}
 
@@ -853,6 +834,8 @@ scsipi_get_tag(struct scsipi_xfer *xs)
 	}
 
 	xs->xs_tag_id = tag;
+	SDT_PROBE3(scsi, base, tag, get,
+	    xs, xs->xs_tag_id, xs->xs_tag_type);
 }
 
 /*
@@ -869,6 +852,9 @@ scsipi_put_tag(struct scsipi_xfer *xs)
 	int word, bit;
 
 	KASSERT(mutex_owned(chan_mtx(periph->periph_channel)));
+
+	SDT_PROBE3(scsi, base, tag, put,
+	    xs, xs->xs_tag_id, xs->xs_tag_type);
 
 	word = xs->xs_tag_id >> 5;
 	bit = xs->xs_tag_id & 0x1f;
@@ -888,7 +874,13 @@ scsipi_run_queue(struct scsipi_channel *chan)
 	struct scsipi_periph *periph;
 
 	for (;;) {
-#ifndef PORT_AMIGA
+#ifdef PORT_AMIGA
+		/*
+		 * A reset is pending on channel - don't issue anything new.
+		 */
+		if (chan->chan_flags & SCSIPI_CHAN_RESET_PEND)
+			break;
+#else
 		/*
 		 * If the channel is frozen, we can't do any work right
 		 * now.
@@ -908,6 +900,11 @@ scsipi_run_queue(struct scsipi_channel *chan)
 #ifdef PORT_AMIGA
 			if ((periph->periph_sent >= periph->periph_openings) ||
 			    (periph->periph_flags & PERIPH_UNTAG) != 0) {
+                            /*
+                             * PERIPH_UNTAG means the device is running a
+                             * single untagged command. No other commands
+                             * are allowed at this time.
+                             */
                                 if (xs == TAILQ_LAST(&chan->chan_queue, scsipi_xfer_queue))
                                     break;  // Last entry in queue
 				continue;
@@ -1128,27 +1125,32 @@ scsipi_done(struct scsipi_xfer *xs)
 	scsipi_run_queue(chan);
 }
 
+/*
+ * scsipi_completion_poll
+ * ----------------------
+ * Finish completions or perform other channel thread service operations.
+ */
 void
 scsipi_completion_poll(struct scsipi_channel *chan)
 {
     struct scsipi_xfer *xs;
 
     chan->chan_flags |= SCSIPI_CHAN_TACTIVE;
-    while ((xs = TAILQ_FIRST(&chan->chan_complete)) != NULL) {
+    do {
+#ifndef PORT_AMIGA
         if (chan->chan_tflags & SCSIPI_CHANT_GROWRES) {
             /* attempt to get more openings for this channel */
             chan->chan_tflags &= ~SCSIPI_CHANT_GROWRES;
             mutex_exit(chan_mtx(chan));
             scsipi_adapter_request(chan,
                 ADAPTER_REQ_GROW_RESOURCES, NULL);
-#if 0
             scsipi_channel_thaw(chan, 1);
-#endif
             if (chan->chan_tflags & SCSIPI_CHANT_GROWRES)
                 delay(100000);
             mutex_enter(chan_mtx(chan));
             continue;
         }
+#endif
         if (chan->chan_tflags & SCSIPI_CHANT_KICK) {
             /* explicitly run the queues for this channel */
             chan->chan_tflags &= ~SCSIPI_CHANT_KICK;
@@ -1159,6 +1161,8 @@ scsipi_completion_poll(struct scsipi_channel *chan)
         }
         if (chan->chan_tflags & SCSIPI_CHANT_SHUTDOWN)
             break;
+
+        xs = TAILQ_FIRST(&chan->chan_complete);
         if (xs) {
 #ifdef QUEUE_DEBUG
             printf("(removing %p)", xs);
@@ -1178,8 +1182,10 @@ scsipi_completion_poll(struct scsipi_channel *chan)
             scsipi_run_queue(chan);
             mutex_enter(chan_mtx(chan));
         }
-    }
+    } while (xs != NULL);
+#ifndef PORT_AMIGA  // Amiga driver runs this as part of command handler thread
     chan->chan_flags &= ~SCSIPI_CHAN_TACTIVE;
+#endif
 }
 
 
@@ -1348,20 +1354,15 @@ scsipi_complete(struct scsipi_xfer *xs)
 			if ((xs->xs_control & XS_CTL_POLL) ||
 			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
 #ifdef PORT_AMIGA
-                                /* Wait 1 second */
-                                int count = TICKS_PER_SECOND;
-                                struct siop_softc *sc =
-                                  device_private(chan->chan_adapter->adapt_dev);
-                                while (count-- > 0) {
-                                    delay(20000);
-
-                                    /*
-                                     * Continue running interrupt processing
-                                     * while waiting to try again.
-                                     */
-                                    irq_poll(1, sc);
-                                }
-                                printf(",");
+				/*
+				 * Wait at least 1 second, running timer and
+				 * interrupts until we've seen two timer
+				 * messages.
+				  */
+				int count = 0;
+				do {
+				    count += irq_and_timer_handler();
+				} while (count < 2);
 #else  /* !PORT_AMIGA */
 				/* XXX: quite extreme */
 				kpause("xsbusy", false, hz, chan_mtx(chan));
@@ -1428,7 +1429,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 
 	mutex_enter(chan_mtx(chan));
 	if (error == ERESTART) {
-                printf("restart retries left=%d\n", xs->xs_retries);
+                printf("restart %p retries left=%d\n", xs, xs->xs_retries);
 		SDT_PROBE1(scsi, base, xfer, restart,  xs);
 		/*
 		 * If we get here, the periph has been thawed and frozen
@@ -1514,26 +1515,6 @@ scsipi_print_sense(struct scsipi_xfer * xs, int verbosity)
                 return scsipi_print_sense(xs, verbosity);
         else
                 return 0;
-}
-#endif
-
-#ifdef PORT_AMIGA
-void
-periph_media_unloaded(struct scsipi_periph *periph)
-{
-    if (periph->periph_flags & PERIPH_MEDIA_LOADED) {
-        periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
-        periph->periph_changenum++;
-    }
-}
-
-void
-periph_media_loaded(struct scsipi_periph *periph)
-{
-    if ((periph->periph_flags & PERIPH_MEDIA_LOADED) == 0) {
-        periph->periph_flags |= PERIPH_MEDIA_LOADED;
-        periph->periph_changenum++;
-    }
 }
 #endif
 
@@ -1625,7 +1606,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	case 0x04:		/* drive not ready after it was selected */
 #ifdef PORT_AMIGA
 		if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
-			periph_media_unloaded(periph);
+			sd_media_unloaded(periph);
 #else
 		if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 			periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
@@ -1681,10 +1662,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			error = 0;
 			break;
 		case SKEY_NOT_READY:
-#ifdef PORT_AMIGA
-                        printf("SKEY_NOT_READY: asc=%02x ascq=%02x\n",
-                               sense->asc, sense->ascq);
-#else
+#ifndef PORT_AMIGA
 			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
 #endif
@@ -1693,7 +1671,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			if (sense->asc == 0x3A) {
 #ifdef PORT_AMIGA
 				if (periph->periph_flags & PERIPH_REMOVABLE)
-					periph_media_unloaded(periph);
+					sd_media_unloaded(periph);
 #endif
 				error = ENODEV; /* Medium not present */
 				if (xs->xs_control & XS_CTL_SILENT_NODEV)
@@ -1727,7 +1705,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			}
 #ifdef PORT_AMIGA
 			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
-				periph_media_unloaded(periph);
+				sd_media_unloaded(periph);
 #else
 			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
 				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
