@@ -8,6 +8,7 @@
 #include <exec/io.h>
 #include <devices/trackdisk.h>
 #include <devices/scsidisk.h>
+#include <devices/hardblocks.h>
 #include <libraries/expansion.h>
 #include <proto/expansion.h>
 #include <resources/filesysres.h>
@@ -18,85 +19,22 @@
 #include "cmdhandler.h"
 #include "scsipiconf.h"
 #include "scsimsg.h"
+#include "reloc.h"
 #include "rdb_partitions.h"
 #include "ndkcompat.h"
 
 #include "device.h"
 #include "attach.h"
-extern a4091_save_t *asave;
 
-// Based on https://github.com/captain-amygdala/pistorm/blob/main/platforms/amiga/piscsi/piscsi.h
-
-#define RDB_BLOCK_LIMIT 16
 #define MAX_BLOCK_SIZE 2048
-// RDSK
-#define RDB_IDENTIFIER 0x5244534B
-// PART
-#define PART_IDENTIFIER 0x50415254
-// FSHD
-#define        FS_IDENTIFIER 0x46534844
 
-struct RigidDiskBlock {
-    uint32_t   rdb_ID;
-    uint32_t   rdb_SummedLongs;
-    int32_t    rdb_ChkSum;
-    uint32_t   rdb_HostID;
-    uint32_t   rdb_BlockBytes;
-    uint32_t   rdb_Flags;
-    /* block list heads */
-    uint32_t   rdb_BadBlockList;
-    uint32_t   rdb_PartitionList;
-    uint32_t   rdb_FileSysHeaderList;
-    uint32_t   rdb_DriveInit;
-    uint32_t   rdb_Reserved1[6];
-    /* physical drive characteristics */
-    uint32_t   rdb_Cylinders;
-    uint32_t   rdb_Sectors;
-    uint32_t   rdb_Heads;
-    uint32_t   rdb_Interleave;
-    uint32_t   rdb_Park;
-    uint32_t   rdb_Reserved2[3];
-    uint32_t   rdb_WritePreComp;
-    uint32_t   rdb_ReducedWrite;
-    uint32_t   rdb_StepRate;
-    uint32_t   rdb_Reserved3[5];
-    /* logical drive characteristics */
-    uint32_t   rdb_RDBBlocksLo;
-    uint32_t   rdb_RDBBlocksHi;
-    uint32_t   rdb_LoCylinder;
-    uint32_t   rdb_HiCylinder;
-    uint32_t   rdb_CylBlocks;
-    uint32_t   rdb_AutoParkSeconds;
-    uint32_t   rdb_HighRDSKBlock;
-    uint32_t   rdb_Reserved4;
-    /* drive identification */
-    char    rdb_DiskVendor[8];
-    char    rdb_DiskProduct[16];
-    char    rdb_DiskRevision[4];
-    char    rdb_ControllerVendor[8];
-    char    rdb_ControllerProduct[16];
-    char    rdb_ControllerRevision[4];
-    char    rdb_DriveInitName[40];
-};
-
-struct PartitionBlock {
-    uint32_t   pb_ID;
-    uint32_t   pb_SummedLongs;
-    int32_t    pb_ChkSum;
-    uint32_t   pb_HostID;
-    uint32_t   pb_Next;
-    uint32_t   pb_Flags;
-    uint32_t   pb_Reserved1[2];
-    uint32_t   pb_DevFlags;
-    uint8_t    pb_DriveName[32];
-    uint32_t   pb_Reserved2[15];
-    uint32_t   pb_Environment[20];
-    uint32_t   pb_EReserved[12];
-};
-
-static uint32_t *_block; // shared storage for 1 block
+extern a4091_save_t *asave;
 extern char real_device_name[];
 extern int blksize;
+
+struct FileSysResource *FileSysResBase = NULL;
+
+static uint32_t *_block; // shared storage for 1 block
 
 void
 find_partitions(struct ConfigDev *cd, struct RigidDiskBlock *rdb, struct IOStdReq *ioreq, int unit)
@@ -119,7 +57,7 @@ next_partition:
     sdcmd_read_blocks(ioreq, (uint8_t*)block, cur_block, 1);
 
     uint32_t first = block[0];
-    if (first != PART_IDENTIFIER) {
+    if (first != IDNAME_PARTITION) {
         printf("Not a valid partition: %d\n", first);
         return;
     }
@@ -188,7 +126,6 @@ next_partition:
 }
 
 
-struct FileSysResource *FileSysResBase = NULL;
 
 static struct FileSysEntry *scan_filesystems(void)
 {
@@ -237,9 +174,6 @@ static struct FileSysEntry *scan_filesystems(void)
     return cdfs;
 }
 
-uint32_t relocate(ULONG offset asm("d0"), uint32_t program asm("a0"));
-extern uint32_t rErrno;
-extern uint32_t ReadHandle[2];
 int add_cdromfilesystem(void)
 {
     uint32_t cdfs_seglist=0;
@@ -355,10 +289,10 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
         if (safe_open(&ior, i))
             continue;
 
-        for (j = 0; j < RDB_BLOCK_LIMIT; j++) {
+        for (j = 0; j < RDB_LOCATION_LIMIT; j++) {
             sdcmd_read_blocks(&ior, (uint8_t*)block, j, 1);
             uint32_t first = block[0];
-            if (first == RDB_IDENTIFIER) {
+            if (first == IDNAME_RIGIDDISK) {
                 found=1;
                 break;
             }
