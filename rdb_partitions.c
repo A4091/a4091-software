@@ -43,7 +43,8 @@ find_partitions(struct ConfigDev *cd, struct RigidDiskBlock *rdb, struct IOStdRe
     uint8_t tmp;
     uint32_t *block = _block;
 
-    if (!rdb || rdb->rdb_PartitionList == 0) {
+    if (!rdb || rdb->rdb_PartitionList == 0 ||
+		    rdb->rdb_PartitionList == 0xffffffff) {
         printf("No partitions on disk.\n");
         return;
     }
