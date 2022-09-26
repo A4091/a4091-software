@@ -171,7 +171,8 @@ cmd_complete(void *ior, int8_t rc)
     ReplyMsg(&ioreq->io_Message);
 }
 
-VOID
+#ifndef AddHeadMinList
+void
 AddHeadMinList(struct MinList *list, struct MinNode *node)
 {
     struct MinNode *head;
@@ -182,6 +183,7 @@ AddHeadMinList(struct MinList *list, struct MinNode *node)
     node->mln_Pred  = (struct MinNode *)list;
     head->mln_Pred  = node;
 }
+#endif
 
 void
 td_addchangeint(struct IORequest *ior)
