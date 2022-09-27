@@ -19,22 +19,24 @@ extern struct MsgPort *myPort;
 int blksize;
 UBYTE sense_data[255];
 
+static int doPortIO(struct IOStdReq *iostd_Req)
+{
+    iostd_Req->io_Message.mn_ReplyPort=CreateMsgPort();
+    PutMsg(myPort, &iostd_Req->io_Message);
+    WaitPort(iostd_Req->io_Message.mn_ReplyPort);
+    DeleteMsgPort(iostd_Req->io_Message.mn_ReplyPort);
+
+    return (iostd_Req->io_Error);
+}
+
 uint16_t sdcmd_read_blocks(struct IOStdReq *ioreq, uint8_t *data, uint32_t block, uint32_t len)
 {
     ioreq->io_Command = CMD_READ;
-    ioreq->io_Actual  = 0;
     ioreq->io_Offset  = block * blksize;
     ioreq->io_Length  = blksize * len;
     ioreq->io_Data    = data;
-    ioreq->io_Flags   = 0;
-    ioreq->io_Error   = 0;
-    ioreq->io_Message.mn_ReplyPort=CreateMsgPort();
 
-    PutMsg(myPort, &ioreq->io_Message);
-    WaitPort(ioreq->io_Message.mn_ReplyPort);
-    DeleteMsgPort(ioreq->io_Message.mn_ReplyPort);
-
-    return 0;
+    return doPortIO(ioreq);
 }
 
 int do_scsi_inquiry(struct IOExtTD *tio, uint lun, scsi_inquiry_data_t **inq)
@@ -63,27 +65,20 @@ int do_scsi_inquiry(struct IOExtTD *tio, uint lun, scsi_inquiry_data_t **inq)
     memset(&scmd, 0, sizeof (scmd));
     scmd.scsi_Data = (UWORD *) res;
     scmd.scsi_Length = sizeof (*res);
-    // scmd.scsi_Actual = 0;
+
     scmd.scsi_Command = (UBYTE *) &cmd;
     scmd.scsi_CmdLength = 6;
-    // scmd.scsi_CmdActual = 0;
+
     scmd.scsi_Flags = SCSIF_READ | SCSIF_AUTOSENSE;
-    // scmd.scsi_Status = 0;
+
     scmd.scsi_SenseData = sense_data;
     scmd.scsi_SenseLength = sizeof (sense_data);
-    // scmd.scsi_SenseActual = 0;
 
     tio->iotd_Req.io_Command = HD_SCSICMD;
     tio->iotd_Req.io_Length  = sizeof (scmd);
     tio->iotd_Req.io_Data    = &scmd;
 
-    tio->iotd_Req.io_Message.mn_ReplyPort=CreateMsgPort();
-
-    PutMsg(myPort, &tio->iotd_Req.io_Message);
-    WaitPort(tio->iotd_Req.io_Message.mn_ReplyPort);
-    DeleteMsgPort(tio->iotd_Req.io_Message.mn_ReplyPort);
-
-    rc = 0; // FIXME how do I get rc?
+    rc = doPortIO(&tio->iotd_Req);
 
     if (rc != 0) {
         FreeMem(res, sizeof (*res));
@@ -103,47 +98,22 @@ do_scsidirect_cmd(struct IOExtTD *tio, scsi_generic_t *cmd, uint cmdlen,
     memset(&scmd, 0, sizeof (scmd));
     scmd.scsi_Data = (UWORD *) res;
     scmd.scsi_Length = reslen;
-    // scmd.scsi_Actual = 0;
+
     scmd.scsi_Command = (UBYTE *) cmd;
     scmd.scsi_CmdLength = cmdlen;  // sizeof (cmd);
-    // scmd.scsi_CmdActual = 0;
+
     scmd.scsi_Flags = SCSIF_READ | SCSIF_AUTOSENSE;
-    // scmd.scsi_Status = 0;
+
     scmd.scsi_SenseData = sense_data;
     scmd.scsi_SenseLength = sizeof (sense_data);
-    // scmd.scsi_SenseActual = 0;
 
     tio->iotd_Req.io_Command = HD_SCSICMD;
     tio->iotd_Req.io_Length  = sizeof (scmd);
     tio->iotd_Req.io_Data    = &scmd;
 
-    tio->iotd_Req.io_Message.mn_ReplyPort=CreateMsgPort();
-
-    PutMsg(myPort, &tio->iotd_Req.io_Message);
-    WaitPort(tio->iotd_Req.io_Message.mn_ReplyPort);
-    DeleteMsgPort(tio->iotd_Req.io_Message.mn_ReplyPort);
-
-    rc = 0; // FIXME how do I get rc?
+    rc = doPortIO(&tio->iotd_Req);
 
     return (rc);
-}
-
-static void *
-do_scsidirect_alloc(struct IOExtTD *tio, scsi_generic_t *cmd, uint cmdlen,
-                    uint reslen)
-{
-    void *res = AllocMem(reslen, MEMF_PUBLIC | MEMF_CLEAR);
-    if (res == NULL) {
-        printf("AllocMem ");
-    } else {
-	printf("do_scsidirect_alloc\n");
-        if (do_scsidirect_cmd(tio, cmd, cmdlen, res, reslen)) {
-            FreeMem(res, reslen);
-            res = NULL;
-        }
-    }
-    printf("do_scsidirect_alloc %p\n", res);
-    return (res);
 }
 
 scsi_read_capacity_10_data_t *
@@ -155,23 +125,26 @@ do_scsi_read_capacity_10(struct IOExtTD *tio, uint lun)
     cmd.opcode = READ_CAPACITY_10;
     cmd.bytes[0] = lun << 5;
 
-    return (do_scsidirect_alloc(tio, &cmd, 10,
-                                sizeof (scsi_read_capacity_10_data_t)));
+    int reslen = sizeof (scsi_read_capacity_10_data_t);
+    void *res = AllocMem(reslen, MEMF_PUBLIC | MEMF_CLEAR);
+    if (res) {
+	if (do_scsidirect_cmd(tio, &cmd, 10, res, reslen)) {
+	    FreeMem(res, reslen);
+	    res = NULL;
+	}
+    }
+    return res;
 }
 
 int safe_open(struct IOStdReq *ioreq, uint scsi_unit)
 {
     ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-
     if (open_unit(scsi_unit, (void **) &ioreq->io_Unit, 0)) {
         printf("No unit at %d.%d\n", scsi_unit % 10, scsi_unit / 10);
-        ioreq->io_Error = HFERR_SelTimeout;
-        // HFERR_SelfUnit - attempted to open our own SCSI ID
         return 1;
     }
     int blkshift = ((struct scsipi_periph *) ioreq->io_Unit)->periph_blkshift;
     blksize = (1 << blkshift);
-    ioreq->io_Error = 0; // Success
 
     return 0;
 }
@@ -180,5 +153,4 @@ void safe_close(struct IOStdReq *ioreq)
 {
     close_unit((void *) ioreq->io_Unit);
 }
-
 
