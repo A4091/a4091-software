@@ -62,6 +62,28 @@ static struct NewGadget *NewGadget;
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
 
+/* Amiga hardware registers */
+#define REG_CIAAPRA      0xBFE001  // CIA-A Port A input bits [Read/Write]
+#define REG_CIAAPRA_PA0  (1<<0)    // CIA-A OVL ROM/RAM Overlay Control
+#define REG_CIAAPRA_PA1  (1<<1)    // CIA-A LED / Audio Filter (0 = bright)
+#define REG_CIAAPRA_PA2  (1<<2)    // CIA-A CHNG Disk Change
+#define REG_CIAAPRA_PA3  (1<<3)    // CIA-A WPRO Write Protect
+#define REG_CIAAPRA_PA4  (1<<4)    // CIA-A TK0 Disk Track 0
+#define REG_CIAAPRA_PA5  (1<<5)    // CIA-A RDY Disk Ready
+#define REG_CIAAPRA_PA6  (1<<6)    // CIA-A Game Port 0 fire button (pin 6)
+#define REG_CIAAPRA_PA7  (1<<7)    // CIA-A Game Port 1 fire button (pin 6)
+
+#define REG_POTGOR       0xDff016  // Paula proportional pin values [Read]
+#define REG_POTGO        0xDff034  // Paula proportional pin config [Write]
+#define REG_POTGOR_DATLX (1<<8)    // Paula Pin 32 P0X Data
+#define REG_POTGOR_OUTLX (1<<9)    // Paula Pin 32 P0X Output enable
+#define REG_POTGOR_DATLY (1<<10)   // Paula Pin 33 P0Y Data
+#define REG_POTGOR_OUTLY (1<<11)   // Paula Pin 33 P0Y Output enable
+#define REG_POTGOR_DATRX (1<<12)   // Paula Pin 35 P1X Data
+#define REG_POTGOR_OUTRX (1<<13)   // Paula Pin 35 P1X Output enable
+#define REG_POTGOR_DATRY (1<<14)   // Paula Pin 36 P1Y Data
+#define REG_POTGOR_OUTRY (1<<15)   // Paula Pin 36 P1Y Output enable
+
 static const struct TextAttr font_attr =
 {
     "topaz.font",
@@ -74,6 +96,12 @@ static void init_bootmenu(void)
 {
     UWORD pens = 0xffff;
     struct TagItem taglist[2];
+    ULONG monitor_id;
+
+    if (GfxBase->DisplayFlags & NTSC)
+        monitor_id = NTSC_MONITOR_ID | HIRES_KEY;
+    else
+        monitor_id = PAL_MONITOR_ID | HIRES_KEY;
 
     taglist[0].ti_Tag  = VTAG_BORDERSPRITE_SET;
     taglist[0].ti_Data = TRUE;
@@ -83,7 +111,7 @@ static void init_bootmenu(void)
 	SA_Depth,        2,
         SA_Font,         &font_attr,
         SA_Type,         CUSTOMSCREEN,
-        SA_DisplayID,    PAL_MONITOR_ID|HIRES_KEY,
+        SA_DisplayID,    monitor_id,
         SA_Interleaved,  TRUE,
         SA_Draggable,    FALSE,
         SA_Quiet,        TRUE,
@@ -743,13 +771,23 @@ void boot_menu(void)
     GfxBase       = (struct GfxBase *)OpenLibrary("graphics.library",0);
     GadToolsBase  = OpenLibrary("gadtools.library",36);
 
-    if (!((1<<6) & *((volatile char *)0xBFE001))) {
-	    printf("LMB pressed.\n");
+    /* Check left mouse button */
+    if (!(REG_CIAAPRA_PA6 & *((volatile char *)REG_CIAAPRA))) {
+        printf("LMB pressed.\n");
         return;
     }
-    if (((1<<10) & *((volatile UWORD *)0xDFF016))) {
-	    printf("RMB mouse not pressed.\n");
-	return;
+
+    /* Configure Paula POTGOR pins as input */
+    *(volatile UWORD *)REG_POTGO = 0xffff;
+
+    /* Wait for Paula to refresh GPIO state */
+    WaitTOF();
+    WaitTOF();
+
+    /* Check right mouse button */
+    if (REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) {
+        printf("RMB mouse not pressed.\n");
+        return;
     }
 
     printf("Bootmenu: enter\n");
