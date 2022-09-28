@@ -216,6 +216,7 @@ void add_cdrom(struct MountData *md)
     struct FileSysEntry *fse=NULL;
     char *execName = real_device_name;
     char dosName[] = "CD0";
+    static unsigned int cnt = 0;
 
     ULONG parmPkt[] = {
         (ULONG) dosName,
@@ -244,6 +245,7 @@ void add_cdrom(struct MountData *md)
     if (add_cdromfilesystem())
         fse=scan_filesystems();
 
+    dosname[2]='0' + cnt;
     struct DeviceNode *node = MakeDosNode(parmPkt);
 
     if (!node) {
@@ -269,6 +271,7 @@ void add_cdrom(struct MountData *md)
     }
 
     AddBootNode(2, ADNF_STARTPROC, node, md->configDev);
+    cnt++;
 }
 
 int
