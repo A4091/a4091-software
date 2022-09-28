@@ -175,7 +175,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     }
 
     if (romboot) {
-        parse_rdb(asave->as_cd, dev);
+        mount_drives(asave->as_cd, dev);
         boot_menu();
     }
 

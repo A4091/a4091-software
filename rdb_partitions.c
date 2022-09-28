@@ -34,36 +34,41 @@ extern int blksize;
 
 struct FileSysResource *FileSysResBase = NULL;
 
-static uint32_t *_block; // shared storage for 1 block
+struct MountData {
+    struct IOStdReq     *ioreq;
+    struct Library      *device;
+    struct ConfigDev    *configDev;
+    uint8_t             *block;
+    unsigned int        unit;
+    ULONG               PartitionList;
+    ULONG               FileSysHeaderList;
+};
 
 void
-find_partitions(struct ConfigDev *cd, struct RigidDiskBlock *rdb, struct IOStdReq *ioreq, int unit)
+find_partitions(struct MountData *md)
 {
     int cur_partition = 0;
     uint8_t tmp;
-    uint32_t *block = _block;
 
-    if (!rdb || rdb->rdb_PartitionList == 0 ||
-		    rdb->rdb_PartitionList == 0xffffffff) {
+    if (md->PartitionList == 0 || md->PartitionList == 0xffffffff) {
         printf("No partitions on disk.\n");
         return;
     }
 
-    uint32_t cur_block = rdb->rdb_PartitionList;
+    uint32_t cur_block = md->PartitionList;
 
 next_partition:
 #ifdef DEBUG
     printf("\nBlock: %d\n", cur_block);
 #endif
-    sdcmd_read_blocks(ioreq, (uint8_t*)block, cur_block, 1);
+    sdcmd_read_blocks(md->ioreq, md->block, cur_block, 1);
 
-    uint32_t first = block[0];
-    if (first != IDNAME_PARTITION) {
-        printf("Not a valid partition: %d\n", first);
+    struct PartitionBlock *pb = (struct PartitionBlock *)md->block;
+    if (pb->pb_ID != IDNAME_PARTITION) {
+        printf("Not a valid partition: %d\n", pb->pb_ID);
         return;
     }
 
-    struct PartitionBlock *pb = (struct PartitionBlock *)block;
     tmp = pb->pb_DriveName[0];
     pb->pb_DriveName[tmp + 1] = 0x00;
 
@@ -81,7 +86,7 @@ next_partition:
     ULONG parmPkt[] = {
         (ULONG) dosName,
         (ULONG) execName,
-        unit,                  /* unit number */
+        md->unit,           /* unit number */
         0,                  /* OpenDevice flags */
         0,0,0,0,0,
         0,0,0,0,0,
@@ -108,7 +113,7 @@ next_partition:
 
       node->dn_GlobalVec = -1; // yet unclear if needed
 
-      AddBootNode(0, 0, node, cd);
+      AddBootNode(0, 0, node, md->configDev);
 #ifdef DEBUG
       printf("AddBootNode done.\n");
 #endif
@@ -206,7 +211,7 @@ int add_cdromfilesystem(void)
     return (r!=NULL);
 }
 
-void add_cdrom(struct ConfigDev *cd, int unit)
+void add_cdrom(struct MountData *md)
 {
     struct FileSysEntry *fse=NULL;
     char *execName = real_device_name;
@@ -215,7 +220,7 @@ void add_cdrom(struct ConfigDev *cd, int unit)
     ULONG parmPkt[] = {
         (ULONG) dosName,
         (ULONG) execName,
-        unit,          /* unit number */
+        md->unit,      /* unit number */
         0,             /* OpenDevice flags */
         17,            // de_TableSize
         2048>>2,       // de_SizeBlock
@@ -238,8 +243,6 @@ void add_cdrom(struct ConfigDev *cd, int unit)
 
     if (add_cdromfilesystem())
         fse=scan_filesystems();
-
-    //struct ParameterPacket *pp = &parmPkt;
 
     struct DeviceNode *node = MakeDosNode(parmPkt);
 
@@ -265,42 +268,33 @@ void add_cdrom(struct ConfigDev *cd, int unit)
         dstPatch++;
     }
 
-    AddBootNode(2, ADNF_STARTPROC, node, cd);
+    AddBootNode(2, ADNF_STARTPROC, node, md->configDev);
 }
 
 int
-parse_rdb(struct ConfigDev *cd, struct Library *dev)
+parse_rdb(struct MountData *md)
 {
     int i, j;
-    struct IOStdReq ior;
-
-    _block = AllocMem(MAX_BLOCK_SIZE, MEMF_PUBLIC);
-    if (!_block) {
-        printf("RDB: Out of memory\n");
-        return 1;
-    }
-
-    uint32_t *block=_block; // shared storage for 1 block
-
     printf("Looking for RDB!\n");
 
     for (i=0; i<7; i++) { // FIXME LUNs?
         int found = 0;
+        struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)md->block;
 
-        if (safe_open(&ior, i))
+        md->unit = i;
+
+        if (safe_open(md->ioreq, i))
             continue;
 
         for (j = 0; j < RDB_LOCATION_LIMIT; j++) {
-            sdcmd_read_blocks(&ior, (uint8_t*)block, j, 1);
-            uint32_t first = block[0];
-            if (first == IDNAME_RIGIDDISK) {
+            sdcmd_read_blocks(md->ioreq, md->block, j, 1);
+            if(rdb->rdb_ID == IDNAME_RIGIDDISK) {
                 found=1;
                 break;
             }
         }
 
         if (found) {
-            struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)block;
             printf("Unit %d: ", i);
             printf("RDB found at block %d\n", j);
 #ifdef DEBUG
@@ -308,22 +302,55 @@ parse_rdb(struct ConfigDev *cd, struct Library *dev)
             printf("\n Heads:\t\t%d", rdb->rdb_Heads);
             printf("\n Sectors:\t%d", rdb->rdb_Sectors);
             printf("\n BlockBytes:\t%d", rdb->rdb_BlockBytes);
-            printf("\n PartitionList:\t%x\n", (uint32_t)rdb->rdb_PartitionList);
+            printf("\n BadBlockList:\t%x", (uint32_t)rdb->rdb_BadBlockList);
+            printf("\n PartitionList:\t%x", (uint32_t)rdb->rdb_PartitionList);
+            printf("\n FileSysHdrLst:\t%x", (uint32_t)rdb->rdb_FileSysHeaderList);
+            printf("\n DriveInit:\t%x\n", (uint32_t)rdb->rdb_DriveInit);
 #endif
+            md->PartitionList = rdb->rdb_PartitionList;
+            md->FileSysHeaderList = rdb->rdb_FileSysHeaderList;
 
-            find_partitions(cd, rdb, &ior, i);
+            find_partitions(md);
         } else {
             // Not a sufficient test but good
             // enough for a proof of concept?
             if (asave->cdrom_boot && blksize == 2048)
-                add_cdrom(cd, i);
+                add_cdrom(md);
             else
                 printf("RDB not found!\n");
         }
 
-        safe_close(&ior);
-        memset(&ior, 0, sizeof(ior));
+        safe_close(md->ioreq);
+        memset(md->ioreq, 0, sizeof(*(md->ioreq)));
     }
-    FreeMem(_block, MAX_BLOCK_SIZE);
     return 0;
+}
+
+int mount_drives(struct ConfigDev *cd, struct Library *dev)
+{
+    int ret = 1;
+    struct MountData *md = AllocMem(sizeof(struct MountData), MEMF_CLEAR | MEMF_PUBLIC);
+    if (!md)
+        goto goodbye;
+
+    struct IOStdReq ior;
+
+    md->block = AllocMem(MAX_BLOCK_SIZE, MEMF_PUBLIC);
+    if (!md->block) {
+        printf("RDB: Out of memory\n");
+        goto goodbye;
+    }
+
+    md->ioreq = &ior;
+    md->configDev = cd;
+    md->device = dev;
+
+    ret = parse_rdb(md);
+
+goodbye:
+    if(md && md->block)
+        FreeMem(md->block, MAX_BLOCK_SIZE);
+    if (md)
+        FreeMem(md, sizeof(struct MountData));
+    return ret;
 }
