@@ -673,6 +673,11 @@ static void main_page(void)
                                      TAG_DONE);
 
     ng.ng_TopEdge= 200;
+    if (GfxBase->DisplayFlags & NTSC) {
+        ng.ng_TopEdge= 170;
+        ng.ng_LeftEdge=538;
+        ng.ng_Width = 88;
+    }
     ng.ng_GadgetText = "Boot";
     ng.ng_GadgetID   = MAIN_BOOT_ID;
     LastAdded = create_gadget(BUTTON_KIND);
