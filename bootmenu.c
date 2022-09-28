@@ -107,16 +107,20 @@ static void init_bootmenu(void)
     visualInfo = GetVisualInfoA(screen,NULL);
 }
 
+static void close_libraries(void)
+{
+    CloseLibrary(IntuitionBase);
+    CloseLibrary((struct Library *)GfxBase);
+    CloseLibrary(GadToolsBase);
+}
+
 static void cleanup_bootmenu(void)
 {
     CloseWindow(window);
     FreeVisualInfo(visualInfo);
     CloseScreen(screen);
     FreeGadgets(gadgets);
-
-    CloseLibrary(IntuitionBase);
-    CloseLibrary((struct Library *)GfxBase);
-    CloseLibrary(GadToolsBase);
+    close_libraries();
 }
 
 static struct Gadget *create_gadget_custom(UWORD kind, ULONG tag1, ...)
@@ -758,6 +762,7 @@ void boot_menu(void)
     /* Check left mouse button */
     if (!(REG_CIAAPRA_PA6 & *((volatile char *)REG_CIAAPRA))) {
         printf("LMB pressed.\n");
+        close_libraries();
         return;
     }
 
@@ -771,6 +776,7 @@ void boot_menu(void)
     /* Check right mouse button */
     if (REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) {
         printf("RMB mouse not pressed.\n");
+        close_libraries();
         return;
     }
 
