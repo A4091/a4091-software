@@ -245,7 +245,7 @@ void add_cdrom(struct MountData *md)
     if (add_cdromfilesystem())
         fse=scan_filesystems();
 
-    dosname[2]='0' + cnt;
+    dosName[2]='0' + cnt;
     struct DeviceNode *node = MakeDosNode(parmPkt);
 
     if (!node) {
