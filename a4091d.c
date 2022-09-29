@@ -167,7 +167,7 @@ iocmd_name(uint cmd)
         "TD_SEEK64",        // 26
         "TD_FORMAT64",      // 27
         "HD_SCSICMD",       // 28
-        "29",               // 29
+        "MD_SETPARAMS",     // 29
         "30",               // 30
         "31",               // 31
         "CD_INFO",          // 32
@@ -225,24 +225,29 @@ struct ioerr {
     { -5, "IOERR_BADADDRESS" },
     { -6, "IOERR_UNITBUSY" },
     { -7, "IOERR_SELFTEST" },
+    {  2, "EACCES" },
+    {  5, "EIO" },
+    { 12, "ENOMEM" },
+    { 16, "EBUSY" },
+    { 19, "ENODEV" },
     { 20, "TDERR_NotSpecified" },
     { 21, "TDERR_NoSecHdr" },
-    { 22, "TDERR_BadSecPreamble" },
+    { 22, "TDERR_BadSecPreamble" }, // also EINVAL
     { 23, "TDERR_BadSecID" },
     { 24, "TDERR_BadHdrSum" },
     { 25, "TDERR_BadSecSum" },
     { 26, "TDERR_TooFewSecs" },
     { 27, "TDERR_BadSecHdr" },
-    { 28, "TDERR_WriteProt" },
+    { 28, "TDERR_WriteProt" },      // also ENOSPC
     { 29, "TDERR_DiskChanged" },
-    { 30, "TDERR_SeekError" },
+    { 30, "TDERR_SeekError" },      // also EROFS
     { 31, "TDERR_NoMem" },
     { 32, "TDERR_BadUnitNum" },
     { 33, "TDERR_BadDriveType" },
     { 34, "TDERR_DriveInUse" },
-    { 35, "TDERR_PostReset" },
-    { 36, "CDERR_BadDataType" },   // data on disk is wrong type
-    { 37, "CDERR_InvalidState" },  // invalid cmd under current conditions
+    { 35, "TDERR_PostReset" },      // also EAGAIN
+    { 36, "CDERR_BadDataType" },    // data on disk is wrong type
+    { 37, "CDERR_InvalidState" },   // invalid cmd under current conditions
     { 40, "HFERR_SelfUnit" },
     { 41, "HFERR_DMA" },
     { 42, "HFERR_Phase" },

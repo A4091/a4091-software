@@ -254,10 +254,40 @@ cmd_do_iorequest(struct IORequest * ior)
     uint64_t        blkno;
     uint            blkshift;
     struct IOExtTD *iotd = (struct IOExtTD *) ior;
+    UWORD           cmd = ior->io_Command;
 
     ior->io_Error = 0;
-    switch (ior->io_Command) {
+    switch (cmd) {
+        case ETD_WRITE:
         case ETD_READ:
+        case ETD_MOTOR:
+        case ETD_SEEK:
+        case ETD_FORMAT:
+            cmd &= ~TDF_EXTCOM;
+            goto validate_etd;
+        case NSCMD_ETD_READ64:
+        case NSCMD_ETD_WRITE64:
+        case NSCMD_ETD_SEEK64:
+        case NSCMD_ETD_FORMAT64:
+            cmd &= ~NSCMD_TDF_EXTCOM;
+validate_etd:
+        {
+            struct scsipi_periph *periph = (struct scsipi_periph *)ior->io_Unit;
+            if (periph->periph_changenum > iotd->iotd_Count) {
+                /*
+                 * Current change count is higher than maximum allowed
+                 * change count. Reject the command.
+                 */
+                iotd->iotd_Req.io_Error = TDERR_DiskChanged;
+                ReplyMsg(&iotd->iotd_Req.io_Message);
+                return (0);
+            }
+            PRINTF_CMD("E");
+            break;
+        }
+    }
+
+    switch (cmd) {
         case CMD_READ:
             PRINTF_CMD("CMD_READ %d %"PRIx32" %"PRIx32"\n",
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
@@ -282,9 +312,7 @@ io_done:
             }
             break;
 
-        case ETD_WRITE:
         case CMD_WRITE:
-        case ETD_FORMAT:
         case TD_FORMAT:
             PRINTF_CMD("CMD_WRITE %d %"PRIx32" %"PRIx32"\n",
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
@@ -366,7 +394,6 @@ CMD_WRITE_continue:
             blkno = ((uint64_t) iotd->iotd_Req.io_Actual << (32 - blkshift)) |
                     (iotd->iotd_Req.io_Offset >> blkshift);
             goto CMD_SEEK_continue;
-        case ETD_SEEK:
         case TD_SEEK:
             PRINTF_CMD("TD_SEEK %d off=%"PRIu32"\n",
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
@@ -394,6 +421,16 @@ CMD_SEEK_continue:
             }
             // TD_GETGEOMETRY without media should return TDERR_DiskChanged 29
             break;
+
+#ifdef OLD_NSD_IDENTIFY
+        /*
+         * It is no longer recommended that TD_GETDRIVETYPE return
+         * DRIVE_NEWSTYLE for NSD-style devices.
+         */
+        case TD_GETDRIVETYPE:
+            iotd->iotd_Req.io_Actual = DRIVE_NEWSTYLE;
+            break;
+#endif
 
         case NSCMD_DEVICEQUERY: {
             struct NSDeviceQueryResult *nsd =
@@ -540,6 +577,11 @@ CMD_SEEK_continue:
             ReplyMsg(&ior->io_Message);
             break;
 
+        case TD_MOTOR:         // Turn the drive motor on or off
+            /* Just reply with success, like the C= scsi.device does */
+            ReplyMsg(&ior->io_Message);
+            break;
+
         case CMD_INVALID:      // Invalid command (0)
         case CMD_RESET:        // Not supported by SCSI
         case CMD_UPDATE:       // Not supported by SCSI
@@ -547,13 +589,10 @@ CMD_SEEK_continue:
         case CMD_FLUSH:        // Not supported by SCSI
         case TD_RAWREAD:       // Not supported by SCSI (raw bits from disk)
         case TD_RAWWRITE:      // Not supported by SCSI (raw bits to disk)
-        case TD_GETDRIVETYPE:  // Not supported by SCSI (floppy-only DRIVExxxx)
         case TD_GETNUMTRACKS:  // Not supported by SCSI (floppy-only)
         default:
             /* Unknown command */
             printf("Unknown cmd %x\n", ior->io_Command);
-            /* FALLTHROUGH */
-        case TD_MOTOR:         // Not supported by SCSI (floppy-only)
             ior->io_Error = ERROR_UNKNOWN_COMMAND;
             ReplyMsg(&ior->io_Message);
             break;

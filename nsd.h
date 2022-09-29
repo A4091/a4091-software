@@ -15,7 +15,9 @@
 
 #define NSDEVTYPE_TRACKDISK 5   // Trackdisk-like block storage device
 
+#define DRIVE_NEWSTYLE          0x4E535459L /* NSTY */
 
+#define NSCMD_TDF_EXTCOM (1<<13)  // Mask for extended NSD commands
 
 struct NSDeviceQueryResult
 {
