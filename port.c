@@ -48,19 +48,6 @@ panic(const char *fmt, ...)
     }
 }
 
-#if 0
-/*
- * I don't know what is dragging this junk in from libc, but stubbing
- * them here reduces the object size by ~12k
- */
-const struct __sFILE_fake __sf_fake_stdin =
-    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
-const struct __sFILE_fake __sf_fake_stdout =
-    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
-const struct __sFILE_fake __sf_fake_stderr =
-    {_NULL, 0, 0, 0, 0, {_NULL, 0}, 0, _NULL};
-#endif
-
 extern a4091_save_t *asave;
 
 void
