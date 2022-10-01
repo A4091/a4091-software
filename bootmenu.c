@@ -193,7 +193,7 @@ static void draw_dipswitch(UWORD x, UWORD y, UWORD on)
 
 static volatile char *dipswitch_text(int val, int num)
 {
-    static volatile char string[24];
+    static volatile char string[25];
     string[0]=0;
     switch (num) {
       case 8: strcat((char *)string, "SCSI LUNs ");
