@@ -79,7 +79,7 @@ asm("romtag:                                \n"
     "       dc.b    "XSTR(DEVICE_PRIORITY)" \n"
     "       dc.l    _device_name            \n"
     "       dc.l    _device_id_string       \n"
-    "       dc.l    _init       \n"
+    "       dc.l    _init                   \n"
     "endcode:                               \n");
 
 const char device_name[]      = DEVICE_NAME;
@@ -137,7 +137,7 @@ static char *get_device_name(void)
  *   This call is single-threaded by Exec
  * ------------------------------------------------------------
  */
-static struct Library __attribute__((used)) *
+static struct Library __attribute__((used)) __saveds *
 init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     /* !!! required !!! save a pointer to exec */
@@ -182,7 +182,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
  * This call is guaranteed to be single-threaded; only one task
  * will execute your Expunge at a time.
  */
-static BPTR __attribute__((used))
+static BPTR __attribute__((used)) __saveds
 drv_expunge(struct Library *dev asm("a6"))
 {
     ObtainSemaphore(&entry_sem);
@@ -220,7 +220,7 @@ drv_expunge(struct Library *dev asm("a6"))
  *          to be single-threaded; only one task will execute Open()
  *          at a time.
  */
-void __attribute__((used))
+void __attribute__((used)) __saveds
 drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
          uint scsi_unit asm("d0"), ULONG flags asm("d1"))
 {
@@ -263,7 +263,7 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
  *          to be single-threaded; only one task will execute Close()
  *          at a time.
  */
-static BPTR __attribute__((used))
+static BPTR __attribute__((used)) __saveds
 drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 {
     ObtainSemaphore(&entry_sem);
@@ -281,7 +281,7 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 }
 
 /* device dependent beginio function */
-static void __attribute__((used))
+static void __attribute__((used)) __saveds
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
     /* These commands are forced to always execute in immediate mode */
@@ -319,7 +319,7 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 }
 
 /* device dependent abortio function */
-static ULONG __attribute__((used))
+static ULONG __attribute__((used)) __saveds
 drv_abort_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
     printf("abort_io(%d)\n", ior->io_Command);
@@ -338,7 +338,7 @@ static const ULONG device_vectors[] =
     -1   // function table end marker
 };
 
-static struct Library __attribute__((used)) *
+static struct Library __attribute__((used)) __saveds *
 init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     SysBase = *(struct ExecBase **)4UL;

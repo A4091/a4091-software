@@ -11,6 +11,7 @@ PROGD	:= a4091d
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c scsimsg.c rdb_partitions.c bootmenu.c
 SRCS    += romfile.c battmem.c
+ASMSRCS := reloc.S baserel.S
 SRCSU   := a4091.c
 SRCSD   := a4091d.c
 SRCSM   := mounter.c
@@ -18,6 +19,7 @@ OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 OBJSM   := $(SRCSM:%.c=$(OBJDIR)/%.o)
+ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -54,8 +56,8 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
-#CFLAGS  += -mhard-float
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
+CFLAGS  += -fbaserel -msmall-code -resident
 CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
 CFLAGS += -mcpu=68020
 
@@ -129,9 +131,9 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
-$(PROG): $(OBJS) $(OBJDIR)/reloc.o
+$(PROG): $(OBJS) $(ASMOBJS)
 	@echo Building $@
-	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(OBJDIR)/reloc.o $(LDFLAGS) -o $@
+	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
 
 $(PROGU): $(OBJSU)
@@ -159,7 +161,10 @@ $(OBJDIR)/rom.o: rom.S reloc.S
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloc.o: reloc.S
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
+
+$(OBJDIR)/baserel.o: baserel.S
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
 $(OBJDIR)/assets.o: assets.S $(PROG)
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER) $(CDFILESYSTEM)

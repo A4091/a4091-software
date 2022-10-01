@@ -637,7 +637,7 @@ irq_and_timer_handler(void)
     return ((mask & int_mask) ? 1 : 0);
 }
 
-static void
+static void __saveds
 cmd_handler(void)
 {
     struct MsgPort        *msgport;
