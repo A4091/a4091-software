@@ -189,7 +189,7 @@ Romtag
         IFD COMMODORE_DEVICE
         dc.b    RTW_COLDSTART      ; UBYTE RT_FLAGS
         ELSE
-        dc.b    RTF_COLDSTART|RTF_AUTOINIT      ; UBYTE RT_FLAGS
+        dc.b    RTF_COLDSTART      ; UBYTE RT_FLAGS
         ENDIF
         dc.b    VERSION            ; UBYTE RT_VERSION
         dc.b    NT_DEVICE          ; UBYTE RT_TYPE

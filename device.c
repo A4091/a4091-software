@@ -73,13 +73,13 @@ asm("romtag:                                \n"
     "       dc.w    "XSTR(RTC_MATCHWORD)"   \n"
     "       dc.l    romtag                  \n"
     "       dc.l    endcode                 \n"
-    "       dc.b    "XSTR(RTF_AUTOINIT)"    \n"
+    "       dc.b    0                       \n"
     "       dc.b    "XSTR(DEVICE_VERSION)"  \n"
     "       dc.b    "XSTR(NT_DEVICE)"       \n"
     "       dc.b    "XSTR(DEVICE_PRIORITY)" \n"
     "       dc.l    _device_name            \n"
     "       dc.l    _device_id_string       \n"
-    "       dc.l    _auto_init_tables       \n"
+    "       dc.l    _init       \n"
     "endcode:                               \n");
 
 const char device_name[]      = DEVICE_NAME;
@@ -142,11 +142,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
-    struct Library *DOSBase = OpenLibrary("dos.library",0);
-    if (DOSBase == NULL)
-        romboot = TRUE;
-    else
-        CloseLibrary(DOSBase);
 
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
@@ -172,11 +167,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         ReleaseSemaphore(&entry_sem);
         CloseLibrary((struct Library *)ExpansionBase);
         return (NULL);
-    }
-
-    if (romboot) {
-        mount_drives(asave->as_cd, dev);
-        boot_menu();
     }
 
     dev->lib_OpenCnt--;
@@ -348,23 +338,22 @@ static const ULONG device_vectors[] =
     -1   // function table end marker
 };
 
-/*
- * ------------------------------------------------------------
- * The romtag specified that we were "RTF_AUTOINIT".  This means
- * that the RT_INIT structure member points to one of these
- * tables below. If the AUTOINIT bit was not set then RT_INIT
- * would point to a routine to run.
- *
- * MyDev_Sizeof    data space size
- * device_vectors  pointer to function initializers
- * dataTable       pointer to data initializers
- * init_device     routine to run
- * ------------------------------------------------------------
- */
-const ULONG auto_init_tables[4] =
+static struct Library __attribute__((used)) *
+init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
-        sizeof (struct Library),
-        (ULONG) device_vectors,
-        0,
-        (ULONG) init_device
-};
+    SysBase = *(struct ExecBase **)4UL;
+
+    if (seg_list == 0)
+        romboot = TRUE;
+
+    struct Library *mydev = MakeLibrary((ULONG *)&device_vectors, NULL,
+            (APTR)init_device, sizeof(struct Library), seg_list);
+    AddDevice((struct Device *)mydev);
+
+    if (romboot) {
+        mount_drives(asave->as_cd, dev);
+        boot_menu();
+    }
+
+    return mydev;
+}
