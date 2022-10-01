@@ -98,6 +98,11 @@ device_xname(void *ptr)
         return (dev->dv_xname);
 }
 
+void __restore_a4(void)
+{
+    __asm volatile("\tlea ___a4_init, a4");
+}
+
 #if 0
 unsigned int
 read_system_ticks(void)

@@ -10,7 +10,7 @@ PROGD	:= a4091d
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c scsimsg.c mounter.c bootmenu.c
 SRCS    += romfile.c battmem.c
-ASMSRCS := reloc.S baserel.S
+ASMSRCS := reloc.S
 SRCSU   := a4091.c
 SRCSD   := a4091d.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
@@ -152,10 +152,6 @@ $(OBJDIR)/rom.o: rom.S reloc.S Makefile
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloc.o: reloc.S
-	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
-
-$(OBJDIR)/baserel.o: baserel.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
