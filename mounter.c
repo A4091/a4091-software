@@ -551,7 +551,6 @@ static void FSHDAdd(struct FileSysEntry *fse, struct MountData *md)
 // Parse FileSystem Header Blocks, load and relocate filesystem if needed.
 static struct FileSysEntry *ParseFSHD(UBYTE *buf, ULONG block, ULONG dostype, struct MountData *md)
 {
-	struct ExecBase *SysBase = md->SysBase;
 	struct FileSysHeaderBlock *fshb = (struct FileSysHeaderBlock*)buf;
 	struct FileSysEntry *fse = NULL;
 
@@ -789,7 +788,6 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 // Scan PART blocks
 static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 {
-	struct ExecBase *SysBase = md->SysBase;
 	struct RigidDiskBlock *rdb = (struct RigidDiskBlock*)buf;
 	ULONG partblock = rdb->rdb_PartitionList;
 	ULONG filesysblock = rdb->rdb_FileSysHeaderList;
