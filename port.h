@@ -14,8 +14,8 @@
 #include <sys/param.h>
 
 #define PAGE_SIZE NBPG
+
 #define AMIGA_MAX_TRANSFER (1 << 20)  // Maximum DMA size (scatter-gather entry)
-// #define MAXPHYS   (1 << 20)  // Maximum physical DMA size
 #undef MAXPHYS
 #define MAXPHYS AMIGA_MAX_TRANSFER
 
@@ -23,20 +23,20 @@ struct device;
 typedef struct device *device_t;
 
 void panic(const char *s, ...);
+#if 0
 unsigned int read_system_ticks(void);
 unsigned int ticks_since_last(void);
+#endif
 int irq_and_timer_handler(void);
 
 #define __USE(x) (/*LINTED*/(void)(x))
 
-// void *device_private(void *ptr);
+void *device_private(device_t dev);
 const char *device_xname(void *dev);
 
 int bsd_splbio();
 void bsd_splx();
 
-typedef uint32_t paddr_t;
-typedef uint32_t vaddr_t;
 #define hz TICKS_PER_SECOND
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)
 #define kvtop(x) ((uint32_t)(x))
@@ -45,8 +45,6 @@ void delay(int usecs);
 
 #define __UNVOLATILE(x) ((void *)(unsigned long)(volatile void *)(x))
 #define __UNCONST(a) ((void *)(intptr_t)(a))
-
-// void _DCIAS(uint32_t paddr);
 
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
@@ -78,8 +76,6 @@ int dbgprintf(const char *fmt, ...);
 #define cv_wait(x, y)
 #define cv_broadcast(x)
 #define cv_destroy(x)
-
-void *device_private(device_t dev);
 
 #if (!defined(DEBUG_ATTACH)      && \
      !defined(DEBUG_DEVICE)      && \
