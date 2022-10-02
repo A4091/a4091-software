@@ -152,12 +152,15 @@ $(OBJDIR)/rom.o: rom.S reloc.S
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloc.o: reloc.S
+	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
 $(OBJDIR)/baserel.o: baserel.S
+	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
-$(OBJDIR)/assets.o: assets.S $(PROG)
+$(OBJDIR)/assets.o: assets.S $(PROG) Makefile
+	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER) $(CDFILESYSTEM)
 
 $(OBJDIR)/reloctest.o: reloctest.c
