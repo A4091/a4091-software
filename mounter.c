@@ -18,6 +18,11 @@
 //    this list of conditions and the following disclaimer in the documentation
 //    and/or other materials provided with the distribution.
 //
+#ifdef DEBUG_MOUNTER
+#define USE_SERIAL_OUTPUT
+#endif
+
+#include "port.h"
 
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -43,8 +48,10 @@
 #include <proto/expansion.h>
 #include <proto/dos.h>
 
-#include "debug.h"
 #include "ndkcompat.h"
+
+#define TRACE 1
+#define Trace printf
 
 #if TRACE
 #define dbg Trace
