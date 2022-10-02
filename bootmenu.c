@@ -309,8 +309,9 @@ static void about_page(void)
     SetAPen(&screen->RastPort, 1);
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
     Print("Berlin and Terry Fisher for the A4091",118,76,FALSE);
-    Print("Greetings to the Amiga community.",118,92,FALSE);
-    Print("Only Amiga makes it possible.", 192,120,FALSE);
+    Print("Original mounter by Toni Wilen",118,84,FALSE);
+    Print("Greetings to the Amiga community",118,92,FALSE);
+    Print("Only Amiga makes it possible.", 204,120,FALSE);
     Print((char *)device_id_string, 118,155,FALSE);
 
     ng.ng_LeftEdge   = 400;
