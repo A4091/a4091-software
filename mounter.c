@@ -291,7 +291,7 @@ struct RelocHunk
 };
 
 // Filesystem relocator
-static APTR relocate(struct MountData *md)
+static APTR fsrelocate(struct MountData *md)
 {
 	struct ExecBase *SysBase = md->SysBase;
 	ULONG data;
@@ -579,7 +579,7 @@ static struct FileSysEntry *ParseFSHD(UBYTE *buf, ULONG block, ULONG dostype, st
 				md->lsegblock = fshb->fhb_SegListBlocks;
 				md->lsegbuf = (struct LoadSegBlock*)(buf + md->blocksize);
 				md->lseglongs = 0;
-				APTR seg = relocate(md);
+				APTR seg = fsrelocate(md);
 				fse->fse_SegList = MKBADDR(seg);
 				// Add to FileSystem.resource if succeeded, delete entry if failure.
 				FSHDAdd(fse, md);
