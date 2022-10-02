@@ -93,7 +93,7 @@ struct MountData
 };
 
 // KS 1.3 compatibility functions
-static APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct ExecBase *SysBase)
+APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct ExecBase *SysBase)
 {
 	struct IORequest *ret = NULL;
 	if(ioReplyPort == NULL)
@@ -106,13 +106,13 @@ static APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct Ex
 	}
 	return ret;
 }
-static void W_DeleteIORequest(APTR iorequest, struct ExecBase *SysBase)
+void W_DeleteIORequest(APTR iorequest, struct ExecBase *SysBase)
 {
 	if(iorequest != NULL) {
 		FreeMem(iorequest, ((struct Message*)iorequest)->mn_Length);
 	}
 }
-static struct MsgPort *W_CreateMsgPort(struct ExecBase *SysBase)
+struct MsgPort *W_CreateMsgPort(struct ExecBase *SysBase)
 {
 	struct MsgPort *ret;
 	ret = (struct MsgPort*)AllocMem(sizeof(struct MsgPort), MEMF_PUBLIC | MEMF_CLEAR);
@@ -132,7 +132,7 @@ static struct MsgPort *W_CreateMsgPort(struct ExecBase *SysBase)
 	}
 	return NULL;
 }
-static void W_DeleteMsgPort(struct MsgPort *port, struct ExecBase *SysBase)
+void W_DeleteMsgPort(struct MsgPort *port, struct ExecBase *SysBase)
 {
 	if(port != NULL)
 	{
