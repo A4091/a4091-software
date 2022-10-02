@@ -23,6 +23,7 @@
 #include "version.h"
 #include "rdb_partitions.h"
 #include "bootmenu.h"
+#include "romfile.h"
 #include "attach.h"
 
 #ifdef DEBUG
@@ -351,6 +352,8 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     AddDevice((struct Device *)mydev);
 
     if (romboot) {
+        parse_romfiles();
+        add_cdromfilesystem();
         mount_drives(asave->as_cd, dev);
         boot_menu();
     }

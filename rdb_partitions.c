@@ -180,37 +180,6 @@ static struct FileSysEntry *scan_filesystems(void)
     return cdfs;
 }
 
-int add_cdromfilesystem(void)
-{
-    uint32_t cdfs_seglist=0;
-    struct Resident *r;
-
-    r=FindResident("cdfs");
-    if (r == NULL) {
-        int i;
-        printf("No CDFileSystem in Kickstart ROM, search A4091 ROM\n");
-        cdfs_seglist = relocate(asave->romfile[1], (uint32_t)asave->as_addr);
-        if (cdfs_seglist == 0) {
-                printf("Not found. Bailing out. (rErrno=%x)\n", rErrno);
-                return 0;
-        }
-        printf("Scanning Filesystem...\n");
-        for (i=cdfs_seglist; i<cdfs_seglist+0x400; i+=2)
-            if(*(uint16_t *)i == 0x4afc)
-                       break;
-
-        if (*(uint16_t *)i == 0x4afc)
-            r = (struct Resident *)i;
-    }
-    if (r) {
-        printf("Initializing resident filesystem @ %p\n", r);
-        InitResident(r, cdfs_seglist);
-    } else {
-	printf("No resident filesystem.\n");
-    }
-    return (r!=NULL);
-}
-
 void add_cdrom(struct MountData *md)
 {
     struct FileSysEntry *fse=NULL;
@@ -242,8 +211,7 @@ void add_cdrom(struct MountData *md)
         0x43443031,    // de_DosType = "CD01"
     };
 
-    if (add_cdromfilesystem())
-        fse=scan_filesystems();
+    fse=scan_filesystems();
 
     dosName[2]='0' + cnt;
     struct DeviceNode *node = MakeDosNode(parmPkt);

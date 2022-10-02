@@ -32,7 +32,6 @@
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
-#include "romfile.h"
 #include "battmem.h"
 #include "ndkcompat.h"
 
@@ -336,7 +335,6 @@ init_chan(device_t self, UBYTE *boardnum)
     dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
     printf("DIP switches = %02x\n", dip_switches);
 
-    parse_romfiles();
     Load_BattMem();
 
     sc->sc_dev = self;
