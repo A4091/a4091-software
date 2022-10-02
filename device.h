@@ -137,4 +137,6 @@ struct device {
 #endif
 };
 
+extern char real_device_name[];
+
 #endif /* _DEVICE_H */

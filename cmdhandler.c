@@ -47,7 +47,6 @@
 #define BIT(x)        (1 << (x))
 
 extern struct ExecBase *SysBase;
-extern char real_device_name[];
 
 a4091_save_t *asave = NULL;
 

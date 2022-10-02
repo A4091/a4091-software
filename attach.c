@@ -53,7 +53,6 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 extern struct ExecBase *SysBase;
 extern a4091_save_t *asave;
 extern int romboot;
-extern char real_device_name[];
 struct ExpansionBase *ExpansionBase;
 
 /*
