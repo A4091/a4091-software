@@ -735,7 +735,7 @@ static void AddNode(struct PartitionBlock *part, struct ParameterPacket *pp, str
 				UWORD len = strlen(name);
 				name[len++] = ':';
 				name[len] = 0;
-				void *mp = DeviceProc(name);
+				void * __attribute__((unused)) mp = DeviceProc(name);
 				dbg("DeviceProc() returned %p\n", mp);
 			}
 		}
