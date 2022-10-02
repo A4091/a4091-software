@@ -8,7 +8,6 @@ old/
 .*.sw[op]
 a4091.device
 a4091.rom
-mounter
 a4091
 a4091d
 *.adf

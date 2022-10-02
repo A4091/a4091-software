@@ -6,7 +6,6 @@ OBJDIR  := objs
 ROM	:= a4091.rom
 PROG	:= a4091.device
 PROGU	:= a4091
-PROGM	:= mounter
 PROGD	:= a4091d
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsiconf.c scsimsg.c rdb_partitions.c bootmenu.c
@@ -14,11 +13,9 @@ SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S baserel.S
 SRCSU   := a4091.c
 SRCSD   := a4091d.c
-SRCSM   := mounter.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
-OBJSM   := $(SRCSM:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 
 HOSTCC  ?= cc
@@ -62,7 +59,6 @@ CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
 CFLAGS += -mcpu=68020
 
 CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
-#CFLAGS_TOOLS += -DDEBUG_MOUNTER     # Debug mounter.c # Makes more sense when integrated
 
 # Enable to put the original Commodore driver into the ROM
 # (You will have to extract it yourself)
@@ -103,7 +99,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROGU) $(PROGM) $(PROGD) $(ROM)
+all: $(PROG) $(PROGU) $(PROGD) $(ROM)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -113,7 +109,6 @@ endef
 $(foreach SRCFILE,$(SRCS),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 $(foreach SRCFILE,$(SRCSU),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 $(foreach SRCFILE,$(SRCSD),$(eval $(call DEPEND_SRC,$(SRCFILE))))
-$(foreach SRCFILE,$(SRCSM),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 
 $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS))
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
@@ -139,10 +134,6 @@ $(PROG): $(OBJS) $(ASMOBJS)
 $(PROGU): $(OBJSU)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSU) -o $@
-
-$(PROGM): $(OBJSM)
-	@echo Building $@
-	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSM) -o $@
 
 $(PROGD): $(OBJSD)
 	@echo Building $@
@@ -197,7 +188,7 @@ clean:
 
 distclean: clean
 	@echo $@
-	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGM) $(PROGD) $(ROM)
+	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM)
 	$(QUIET)rm -r $(OBJDIR)
 
 .PHONY: verbose
