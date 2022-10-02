@@ -34,11 +34,6 @@ ER_FLAGS       EQU    (ZORRO_III_IO|ZORRO_III_EXT|ZORRO_III_RSVD)
 
 ROM_VECTOR     EQU     $0200      ; $80 in the ROM maps to $200 in the system
 
-; ROM_OFFSET describes where the a4091.device file is
-; placed in the ROM.
-; If you change this, also change rom.ld
-ROM_OFFSET EQU  (_device-RomStart)
-
         CODE
 
 *******  RomStart  ***************************************************
@@ -137,7 +132,7 @@ DiagEntry
         lea.l   IdString(pc),a1
         move.l  a1,RT_IDSTRING(a4)
 
-        move.l  #ROM_OFFSET,d0
+        move.l  #(_device-RomStart),d0
         bsr     _relocate
         tst.l   d0
         bne.s   .ok

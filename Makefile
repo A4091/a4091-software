@@ -147,7 +147,7 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/rom.o: rom.S reloc.S
+$(OBJDIR)/rom.o: rom.S reloc.S Makefile
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
