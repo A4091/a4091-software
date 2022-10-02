@@ -76,9 +76,11 @@ _relocate
 
         ; We don't know this hunk
 .RelocateFail
+        IFD HAVE_RERRNO
         ; Save hunk number in rErrno as error code
         lea     _rErrno(pc),a0
         move.l  d0,(a0)
+        ENDIF
         bsr     .RelocateCleanup
         moveq.l #0,d0 ; NULL = Failure
         movem.l (sp)+,d1-d7/a0-a6
@@ -191,9 +193,10 @@ _relocate
 .HunkEnd
         addq.l  #4,a5
         dbra    d6,.HunkLoop
-
+        IFD HAVE_ERRNO
         lea     _rErrno(pc),a0
         move.l  #0,(a0)
+        ENDIF
 
         bsr.s   CreateSegList
 
@@ -326,7 +329,9 @@ ReadHandle
 pHunks
         dc.l    0
 
+        IFD HAVE_ERRNO
         public _rErrno
 _rErrno
         dc.l    0
+        ENDIF
         CODE
