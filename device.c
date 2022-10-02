@@ -43,7 +43,7 @@
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
 
-BPTR saved_seg_list;
+static BPTR saved_seg_list;
 
 /*
  * -----------------------------------------------------------
@@ -83,12 +83,17 @@ asm("romtag:                                \n"
     "       dc.l    _init                   \n"
     "endcode:                               \n");
 
-const char device_name[]      = DEVICE_NAME;
+static const char device_name[]      = DEVICE_NAME;
 const char device_id_string[] = DEVICE_ID_STRING;
 char real_device_name[17];
-struct SignalSemaphore entry_sem;
+static struct SignalSemaphore entry_sem;
 int romboot = FALSE;
 
+/*
+ * get_device_name
+ * ---------------
+ * Creates 2nd.a4091.device, 3rd.a4091.device etc
+ */
 static char *get_device_name(void)
 {
     char *name = real_device_name;
