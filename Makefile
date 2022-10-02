@@ -8,7 +8,7 @@ PROG	:= a4091.device
 PROGU	:= a4091
 PROGD	:= a4091d
 SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
-SRCS    += sd.c scsipi_base.c scsiconf.c scsimsg.c rdb_partitions.c bootmenu.c
+SRCS    += sd.c scsipi_base.c scsiconf.c scsimsg.c mounter.c bootmenu.c
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S baserel.S
 SRCSU   := a4091.c
@@ -48,7 +48,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #CFLAGS  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
 #CFLAGS  += -DDEBUG_SD          # Debug sd.c
 #CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
-#CFLAGS  += -DDEBUG_RDB         # Debug rdb_partitions.c
+#CFLAGS  += -DDEBUG_MOUNTER     # Debug mounter.c
 #CFLAGS  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
 #CFLAGS  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 

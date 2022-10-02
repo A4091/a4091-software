@@ -49,6 +49,7 @@
 #include <proto/dos.h>
 
 #include "ndkcompat.h"
+#include "mounter.h"
 
 #define TRACE 1
 #define Trace printf
@@ -936,5 +937,33 @@ LONG MountDrive(struct MountStruct *ms)
 		CloseLibrary(&ExpansionBase->LibNode);
 	}
 	dbg("Exit code %"PRId32"\n", ret);
+	return ret;
+}
+
+int mount_drives(struct ConfigDev *cd, struct Library *dev)
+{
+	extern char real_device_name[];
+	static BOOL mounted = FALSE;
+	struct MountStruct ms;
+	int i, ret = 0;
+
+	ULONG unitNum[] = { 7,  0, 1, 2, 3, 4, 5, 6 };
+
+	printf("Mounter:\n");
+	if (!mounted) {
+		ms.deviceName = real_device_name;
+		ms.unitNum = unitNum;
+		ms.creatorName = NULL;
+		ms.configDev = cd;
+		ms.SysBase =  *(struct ExecBase **)4UL;
+
+		mounted = TRUE;
+		ret = MountDrive(&ms);
+	}
+
+	printf("ret = %x\nunitNum = { ", ret);
+	for (i=0; i<8; i++)
+		printf("%x%s", unitNum[i], i<7?", ":" }\n");
+
 	return ret;
 }

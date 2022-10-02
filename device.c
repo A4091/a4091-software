@@ -21,7 +21,7 @@
 #include "device.h"
 #include "cmdhandler.h"
 #include "version.h"
-#include "rdb_partitions.h"
+#include "mounter.h"
 #include "bootmenu.h"
 #include "romfile.h"
 #include "attach.h"
