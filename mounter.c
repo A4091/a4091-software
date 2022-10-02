@@ -70,6 +70,8 @@ extern UBYTE entrypoint, entrypoint_end;
 extern UBYTE bootblock, bootblock_end;
 #endif
 
+struct FileSysResource *FileSysResBase = NULL;
+
 struct MountData
 {
 	struct ExecBase *SysBase;
@@ -840,6 +842,118 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
+static struct FileSysEntry *scan_filesystems(void)
+{
+	struct FileSysEntry *fse, *cdfs=NULL;
+
+	/* NOTE - you should actually be in a Forbid while accessing any
+	 * system list for which no other method of arbitration is available.
+	 * However, for this example we will be printing the information
+	 * (which would break a Forbid anyway) so we won't Forbid.
+	 * In real life, you should Forbid, copy the information you need,
+	 * Permit, then print the info.
+	 */
+	if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+		printf("Cannot open %s\n",FSRNAME);
+	} else {
+		printf("DosType   Version   Creator\n");
+		printf("------------------------------------------------\n");
+		for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+			  fse->fse_Node.ln_Succ;
+			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+#ifdef DEBUG_MOUNTER
+			int x;
+			for (x=24; x>=8; x-=8)
+				putchar((fse->fse_DosType >> x) & 0xFF);
+
+			putchar((fse->fse_DosType & 0xFF) < 0x30
+							? (fse->fse_DosType & 0xFF) + 0x30
+							: (fse->fse_DosType & 0xFF));
+#endif
+			printf("	  %s%d",(fse->fse_Version >> 16)<10 ? " " : "", (fse->fse_Version >> 16));
+			printf(".%d%s",(fse->fse_Version & 0xFFFF), (fse->fse_Version & 0xFFFF)<10 ? " " : "");
+			printf("	 %s",fse->fse_Node.ln_Name);
+
+			if (fse->fse_DosType==0x43443031) {
+				cdfs=fse;
+#ifndef ALL_FILESYSTEMS
+				break;
+#endif
+			}
+		}
+
+	}
+	return cdfs;
+}
+
+// Search for Bootable CDROM
+static LONG ScanCDROM(struct MountData *md)
+{
+	struct FileSysEntry *fse=NULL;
+	char dosName[] = "CD0";
+	static unsigned int cnt = 0;
+
+	ULONG parmPkt[] = {
+		(ULONG) dosName,
+		(ULONG) md->devicename,
+		md->unitnum,	  /* unit number */
+		0,			 /* OpenDevice flags */
+		17,			// de_TableSize
+		2048>>2,	   // de_SizeBlock
+		0,			 // de_SecOrg
+		1,			 // de_Surfaces
+		1,			 // de_SectorPerBlock
+		1,			 // de_BlocksPerTrack
+		0,			 // de_Reserved
+		0,			 // de_PreAlloc
+		0,			 // de_Interleave
+		0,			 // de_LowCyl
+		0,			 // de_HighCyl
+		5,			 // de_NumBuffers
+		1,			 // de_BufMemType
+		0x100000,	  // de_MaxTransfer
+		0x7FFFFFFE,	// de_Mask
+		2,			 // de_BootPri
+		0x43443031,	// de_DosType = "CD01"
+	};
+
+	fse=scan_filesystems();
+	if (!fse) {
+		printf("Could not load filesystem\n");
+		return -1;
+	}
+
+	dosName[2]='0' + cnt;
+	struct DeviceNode *node = MakeDosNode(parmPkt);
+	if (!node) {
+		printf("Could not create DosNode\n");
+		return -1;
+	}
+
+	// TODO some consistency check that this is actually
+	// a bootable Amiga CDROM
+	// - iso toc
+	// - CDTV or CD32 disk
+
+	// Process PatchFlags.
+	ULONG *dstPatch = &node->dn_Type;
+	ULONG *srcPatch = &fse->fse_Type;
+	ULONG patchFlags = fse->fse_PatchFlags;
+	while (patchFlags) {
+		if (patchFlags & 1) {
+			*dstPatch = *srcPatch;
+		}
+		patchFlags >>= 1;
+		srcPatch++;
+		dstPatch++;
+	}
+
+	AddBootNode(2, ADNF_STARTPROC, node, md->configDev);
+	cnt++;
+
+	return 1;
+}
+
 struct MountStruct
 {
 	// Device name. ("myhddriver.device")
@@ -920,6 +1034,8 @@ LONG MountDrive(struct MountStruct *ms)
 								case 5: // CDROM
 									md->blocksize=2048;
 									ret = ScanRDSK(md);
+									if (ret==-1)
+										ret = ScanCDROM(md);
 									break;
 								case 0: // DISK
 									md->blocksize=512;
