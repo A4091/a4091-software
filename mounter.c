@@ -202,7 +202,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 	if (i == MAX_RETRIES) {
 		return FALSE;
 	}
-	ULONG v = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | (buf[i + 3 ] << 0);
+	ULONG v = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | (buf[3] << 0);
 	dbg("Read block %"PRIu32" %08"PRIx32"\n", block, v);
 	if (id != 0xffffffff) {
 		if (v != id) {
