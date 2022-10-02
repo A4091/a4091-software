@@ -101,7 +101,7 @@ irq_handler_core(a4091_save_t *save)
  * to "tst d0" if the called function wants to return anything
  * other than 0.
  */
-LONG
+LONG __saveds
 irq_handler(void)
 {
     register a4091_save_t *save asm("a1");
