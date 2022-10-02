@@ -59,7 +59,7 @@
 #define dbg
 #endif
 
-#define BLOCKSIZE 512
+#define MAX_BLOCKSIZE 2048
 #define LSEG_DATASIZE (512 / 4 - 5)
 
 #if NO_CONFIGDEV
@@ -86,9 +86,10 @@ struct MountData
 
 	ULONG unitnum;
 	LONG ret;
-	UBYTE buf[BLOCKSIZE * 3];
+	UBYTE buf[MAX_BLOCKSIZE * 3];
 	UBYTE zero[2];
 	BOOL wasLastDev;
+	int blocksize;
 };
 
 // KS 1.3 compatibility functions
@@ -165,10 +166,10 @@ static void copymem(void *dstp, void *srcp, UWORD size)
 }
 
 // Check block checksum
-static UWORD checksum(UBYTE *buf)
+static UWORD checksum(UBYTE *buf, struct MountData *md)
 {
 	ULONG chk = 0;
-	for (UWORD i = 0; i < BLOCKSIZE; i += 4) {
+	for (UWORD i = 0; i < md->blocksize; i += 4) {
 		ULONG v = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | (buf[i + 3 ] << 0);
 		chk += v;
 	}
@@ -190,7 +191,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 	request->iotd_Req.io_Command = CMD_READ;
 	request->iotd_Req.io_Offset = block << 9;
 	request->iotd_Req.io_Data = buf;
-	request->iotd_Req.io_Length = BLOCKSIZE;
+	request->iotd_Req.io_Length = md->blocksize;
 	for (i = 0; i < MAX_RETRIES; i++) {
 		LONG err = DoIO((struct IORequest*)request);
 		if (!err) {
@@ -208,7 +209,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 			return FALSE;
 		}
 	}
-	if (!checksum(buf)) {
+	if (!checksum(buf, md)) {
 		return FALSE;
 	}
 	return TRUE;
@@ -576,7 +577,7 @@ static struct FileSysEntry *ParseFSHD(UBYTE *buf, ULONG block, ULONG dostype, st
 			fse = FSHDProcess(fshb, dostype, fshb->fhb_Version, TRUE, md);
 			if (fse) {
 				md->lsegblock = fshb->fhb_SegListBlocks;
-				md->lsegbuf = (struct LoadSegBlock*)(buf + BLOCKSIZE);
+				md->lsegbuf = (struct LoadSegBlock*)(buf + md->blocksize);
 				md->lseglongs = 0;
 				APTR seg = relocate(md);
 				fse->fse_SegList = MKBADDR(seg);
@@ -758,7 +759,7 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 		struct ParameterPacket *pp = AllocMem(sizeof(struct ParameterPacket), MEMF_PUBLIC | MEMF_CLEAR);
 		if (pp) {
 			copymem(&pp->de, &part->pb_Environment, 17 * sizeof(ULONG));
-			struct FileSysEntry *fse = ParseFSHD(buf + BLOCKSIZE, filesysblock, pp->de.de_DosType, md);
+			struct FileSysEntry *fse = ParseFSHD(buf + md->blocksize, filesysblock, pp->de.de_DosType, md);
 			pp->execname = md->devicename;
 			pp->unitnum = md->unitnum;
 			pp->dosname = part->pb_DriveName + 1;
@@ -907,6 +908,7 @@ LONG MountDrive(struct MountStruct *ms)
 							md->request = request;
 							md->devicename = ms->deviceName;
 							md->unitnum = unitNum;
+							md->blocksize=512;
 							ret = ScanRDSK(md);
 							CloseDevice((struct IORequest*)request);
 							*unitNumP++ = ret;
