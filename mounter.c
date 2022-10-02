@@ -11,13 +11,13 @@
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this
 //    list of conditions and the following disclaimer.
 // 2. Redistributions in binary form must reproduce the above copyright notice,
 //    this list of conditions and the following disclaimer in the documentation
 //    and/or other materials provided with the distribution.
-// 
+//
 
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -152,7 +152,7 @@ static void copymem(void *dstp, void *srcp, UWORD size)
 	while (size != 0) {
 		*dst++ = *src++;
 		size--;
-	}	
+	}
 }
 
 // Check block checksum
@@ -316,7 +316,7 @@ static APTR relocate(struct MountData *md)
 	if (!relocHunks) {
 		return NULL;
 	}
-	
+
 	// Pre-allocate hunks
 	ULONG *prevChunk = NULL;
 	hunkCnt = 0;
@@ -345,14 +345,14 @@ static APTR relocate(struct MountData *md)
 		rh->hunkData[1] = MKBADDR(prevChunk);
 		prevChunk = &rh->hunkData[1];
 		rh->hunkData += 2;
-		
+
 		if (!firstProcessedHunk) {
 			firstProcessedHunk = (APTR)(rh->hunkData - 1);
 		}
 		hunkCnt++;
 	}
 	dbg("hunks allocated\n");
-	
+
 	// Load hunks/relocate
 	hunkCnt = 0;
 	struct RelocHunk *rh = NULL;
@@ -411,7 +411,7 @@ static APTR relocate(struct MountData *md)
 						if (hunkType == HUNK_RELOC32SHORT) {
 							if (!lseg_read_word(md, &relocOffset)) {
 								goto end;
-							}							
+							}
 						} else {
 							if (!lseg_read_long(md, &relocOffset)) {
 								goto end;
@@ -428,7 +428,7 @@ static APTR relocate(struct MountData *md)
 							hData[0] = v >> 24;
 							hData[1] = v >> 16;
 							hData[2] = v >>  8;
-							hData[3] = v >>  0;		
+							hData[3] = v >>  0;
 						} else {
 							*((ULONG*)hData) += (ULONG)rhr->hunkData;
 						}
@@ -475,7 +475,7 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 	struct ExecBase *SysBase = md->SysBase;
 	struct FileSysEntry *fse = NULL;
 	const UBYTE *creator = md->creator ? md->creator : md->zero;
-	
+
 	Forbid();
 	struct FileSysResource *fsr = OpenResource(FSRNAME);
 	if (!fsr) {
@@ -695,7 +695,7 @@ static void AddNode(struct PartitionBlock *part, struct ParameterPacket *pp, str
 		// KS 2.0+
 		if (!md->DOSBase && bootPri > -128) {
 			dbg("KS20+ Mounting as bootable: pri %08"PRIx32"\n", bootPri);
-			AddBootNode(bootPri, ADNF_STARTPROC, dn, md->configDev);	
+			AddBootNode(bootPri, ADNF_STARTPROC, dn, md->configDev);
 		} else {
 			dbg("KS20+: Mounting as non-bootable\n");
 			AddDosNode(bootPri, ADNF_STARTPROC, dn);
@@ -738,7 +738,7 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 	struct ExpansionBase *ExpansionBase = md->ExpansionBase;
 	struct PartitionBlock *part = (struct PartitionBlock*)buf;
 	ULONG nextpartblock = 0xffffffff;
-	
+
 	if (!readblock(buf, block, IDNAME_PARTITION, md)) {
 		return nextpartblock;
 	}
@@ -864,7 +864,7 @@ LONG MountDrive(struct MountStruct *ms)
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
 	struct ExecBase *SysBase = ms->SysBase;
-	
+
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
 	if (ExpansionBase) {
