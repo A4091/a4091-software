@@ -360,7 +360,7 @@ trim_spaces(char *str, size_t len)
 static const char *
 devtype_str(uint dtype)
 {
-    static const char * const dt_list[] = {
+    static const char const dt_list[][8] = {
         "Disk", "Tape", "Printer", "Proc",
         "Worm", "CDROM", "Scanner", "Optical",
         "Changer", "Comm", "ASCIT81", "ASCIT82",
