@@ -179,7 +179,7 @@ a4091.rom: $(OBJDIR)/rom.o $(OBJDIR)/assets.o rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $< $(OBJDIR)/assets.o
 	@printf "${yellow}$(PROG) is $(shell echo `wc -c < "$(PROG)"`) bytes${end}\n"
-	$(QUIET)test `wc -c < $@` -gt 32768 && printf "${red}ROM FILE EXCEEDS 32K!${end}\n" || printf "${green}ROM fits in 32k${end}\n"
+	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM fits in 64k${end}\n" )
 
 $(OBJDIR):
 	mkdir -p $@
