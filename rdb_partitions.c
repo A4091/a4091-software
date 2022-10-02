@@ -131,7 +131,44 @@ next_partition:
     return;
 }
 
+void
+find_filesystems(struct MountData *md)
+{
+    if (md->FileSysHeaderList == 0 || md->FileSysHeaderList == 0xffffffff) {
+        printf("No filesystems on disk.\n");
+        return;
+    }
 
+    uint32_t cur_block = md->FileSysHeaderList;
+
+next_filesystem:
+#ifdef DEBUG
+    printf("\nBlock: %d\n", cur_block);
+#endif
+    sdcmd_read_blocks(md->ioreq, md->block, cur_block, 1);
+
+    struct FileSysHeaderBlock *fshb = (struct FileSysHeaderBlock *)md->block;
+    if (fshb->fhb_ID != IDNAME_FILESYSHEADER) {
+        printf("Not a valid filesystem: %d\n", fshb->fhb_ID);
+        return;
+    }
+
+    printf("  DosType:\t%08x\n", fshb->fhb_DosType);
+    printf("  Version:\t%d.%d\n", fshb->fhb_Version>>16,fshb->fhb_Version&0xffff);
+    printf("  StackSize:\t%d\n", fshb->fhb_StackSize);
+    printf("  SegLstBlocks:\t%d\n", fshb->fhb_SegListBlocks);
+    printf("  Next:\t\t%d\n", fshb->fhb_Next);
+
+    if (fshb->fhb_Next != 0xFFFFFFFF) {
+        uint64_t next = fshb->fhb_Next;
+        cur_block = next;
+
+        goto next_filesystem;
+    }
+    printf("No more filesystems.\n");
+
+    return;
+}
 
 static struct FileSysEntry *scan_filesystems(void)
 {
@@ -281,6 +318,7 @@ parse_rdb(struct MountData *md)
             md->PartitionList = rdb->rdb_PartitionList;
             md->FileSysHeaderList = rdb->rdb_FileSysHeaderList;
 
+            find_filesystems(md);
             find_partitions(md);
         } else {
             // Not a sufficient test but good
