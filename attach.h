@@ -41,5 +41,6 @@ typedef struct {
     uint8_t              cdrom_boot;
 } a4091_save_t;
 
+extern a4091_save_t *asave;
 #endif /* _ATTACH_H */
 

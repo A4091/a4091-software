@@ -223,7 +223,6 @@ static char *dipswitch_text(int val, int num)
     return  string;
 }
 
-extern a4091_save_t *asave;
 static void draw_dipswitches(UWORD x, UWORD y)
 {
     struct RastPort *rp = &screen->RastPort;

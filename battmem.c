@@ -14,7 +14,6 @@
 #include "attach.h"
 #include "battmem.h"
 
-extern a4091_save_t *asave;
 struct Library *BattMemBase;
 
 int Load_BattMem(void)

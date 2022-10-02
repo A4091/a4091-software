@@ -48,8 +48,6 @@ panic(const char *fmt, ...)
     }
 }
 
-extern a4091_save_t *asave;
-
 void
 delay(int usecs)
 {

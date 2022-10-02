@@ -88,7 +88,6 @@ const char device_id_string[] = DEVICE_ID_STRING;
 char real_device_name[17];
 struct SignalSemaphore entry_sem;
 int romboot = FALSE;
-extern a4091_save_t *asave;
 
 static char *get_device_name(void)
 {

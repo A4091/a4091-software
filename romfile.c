@@ -9,8 +9,6 @@
 #include "attach.h"
 #include "reloc.h"
 
-extern a4091_save_t *asave;
-
 static uint32_t RomFetch32(uint32_t offset)
 {
     uint8_t * rombase = (uint8_t *)asave->as_addr;

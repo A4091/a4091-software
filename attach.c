@@ -51,7 +51,6 @@ void scsipi_free_all_xs(struct scsipi_channel *chan);
 #define BIT(x)        (1 << (x))
 
 extern struct ExecBase *SysBase;
-extern a4091_save_t *asave;
 extern int romboot;
 struct ExpansionBase *ExpansionBase;
 
