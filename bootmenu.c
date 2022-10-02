@@ -192,9 +192,9 @@ static void draw_dipswitch(UWORD x, UWORD y, UWORD on)
     RectFill(rp, x+12, y+2, x+30,y+6);
 }
 
-static volatile char *dipswitch_text(int val, int num)
+static char *dipswitch_text(int val, int num)
 {
-    static volatile char string[25];
+    static char string[25];
     string[0]=0;
     switch (num) {
       case 8: strcat((char *)string, "SCSI LUNs ");
@@ -212,14 +212,11 @@ static volatile char *dipswitch_text(int val, int num)
       case 4: strcat((char *)string, val?"SCSI-1 Slow":"SCSI-2 Fast");
 	      strcat((char *)string, " Bus Mode");
 	      break;
-      case 3: strcat((char *)string, "SCSI Address A");
-	      strcat((char *)string, val?"2 = 0":"2 = 1");
-	      break;
-      case 2: strcat((char *)string, "SCSI Address A");
-	      strcat((char *)string, val?"1 = 0":"1 = 1");
-	      break;
-      case 1: strcat((char *)string, "SCSI Address A");
-	      strcat((char *)string, val?"0 = 0":"0 = 1");
+      case 3:
+      case 2:
+      case 1: strcat((char *)string, "SCSI Address A? = ?");
+	      string[14] = num - 1 + '0';
+	      string[18] = val + '0';
 	      break;
     }
 
@@ -232,7 +229,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     struct RastPort *rp = &screen->RastPort;
     int i;
     UBYTE dip_switches;
-    volatile char *ret, *num="8", *hostid="Host ID: 7";
+    char *ret, *num="8", *hostid="Host ID: 7";
     num[0]='8';
 
     if (asave) {
