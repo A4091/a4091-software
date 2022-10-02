@@ -32,6 +32,7 @@
 #include <exec/io.h>
 #include <devices/trackdisk.h>
 #include <devices/hardblocks.h>
+#include <devices/scsidisk.h>
 #include <resources/filesysres.h>
 #include <libraries/expansion.h>
 #include <libraries/expansionbase.h>
@@ -48,6 +49,7 @@
 #include <proto/expansion.h>
 #include <proto/dos.h>
 
+#include "scsimsg.h"
 #include "ndkcompat.h"
 #include "mounter.h"
 
@@ -877,6 +879,7 @@ LONG MountDrive(struct MountStruct *ms)
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
 	struct ExecBase *SysBase = ms->SysBase;
+	scsi_inquiry_data_t *inq_res;
 
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
@@ -909,8 +912,27 @@ LONG MountDrive(struct MountStruct *ms)
 							md->request = request;
 							md->devicename = ms->deviceName;
 							md->unitnum = unitNum;
-							md->blocksize=512;
-							ret = ScanRDSK(md);
+							ret = -1;
+
+							err = dev_scsi_inquiry(request, unitNum, &inq_res);
+							if (err == 0) {
+								switch (inq_res->device & SID_TYPE) {
+								case 5: // CDROM
+									md->blocksize=2048;
+									ret = ScanRDSK(md);
+									break;
+								case 0: // DISK
+									md->blocksize=512;
+									ret = ScanRDSK(md);
+									break;
+								default:
+									printf("Don't know how to boot from device type %d.\n",
+										inq_res->device & 0x1f);
+									break;
+								}
+							}
+							FreeMem(inq_res, sizeof (*inq_res));
+
 							CloseDevice((struct IORequest*)request);
 							*unitNumP++ = ret;
 							if (md->wasLastDev) {
