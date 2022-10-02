@@ -35,6 +35,7 @@
 #include "scsimsg.h"
 #include "battmem.h"
 #include "amigahw.h"
+#include "mounter.h" // for Port/IOReq wrappers
 
 extern struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
@@ -373,98 +374,117 @@ int scan_disks(void)
 {
     int i;
     int cnt=0;
-    int erc;
-    struct IOExtTD tio;
-    int unit=0;
+    struct MsgPort *port = NULL;
+    struct IOExtTD *request = NULL;
     struct RastPort *rp = &screen->RastPort;
 
     int x,y;
     printf("Looking for disks!\n");
 
-    for (i=0; i<7; i++) { // FIXME LUNs?
-	//unit=i;
-        x=52;
-	y=82+(cnt*10);
-	if (safe_open((struct IOStdReq *)&tio, i))
-	    continue;
-
-	scsi_inquiry_data_t *inq_res;
-	erc = do_scsi_inquiry(&tio, unit, &inq_res);
-	if (erc == 0) {
-	    char unit_str[]="0.0";
-	    unit_str[0]='0'+i;
-            Move(rp,x,y);
-	    Text(rp, (char *)unit_str, 3);
-	    x+=48;
-	    Move(rp,x,y);
-	    Text(rp, inq_res->vendor, 8);
-	    x+=96;
-	    Move(rp,x,y);
-	    Text(rp, inq_res->product, 16);
-	    x+=176;
-	    Move(rp,x,y);
-	    Text(rp, inq_res->revision, 4);
-	    x+=48;
-	    Move(rp,x,y);
-	    const char *dtype=devtype_str(inq_res->device & SID_TYPE);
-	    Text(rp,dtype,strlen(dtype));
-	    printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
-               sizeof (inq_res->vendor),
-               sizeof (inq_res->vendor),
-               trim_spaces(inq_res->vendor, sizeof (inq_res->vendor)),
-               sizeof (inq_res->product),
-               sizeof (inq_res->product),
-               trim_spaces(inq_res->product, sizeof (inq_res->product)),
-               sizeof (inq_res->revision),
-               sizeof (inq_res->revision),
-               trim_spaces(inq_res->revision, sizeof (inq_res->revision)),
-               devtype_str(inq_res->device & SID_TYPE));
-
-	    FreeMem(inq_res, sizeof (*inq_res));
-	}
-
-        scsi_read_capacity_10_data_t *cap10;
-        cap10 = do_scsi_read_capacity_10(&tio, unit);
-        if (cap10 != NULL) {
-            uint ssize = *(uint32_t *) &cap10->length;
-            uint cap   = (*(uint32_t *) &cap10->addr + 1) / 1000;
-            uint cap_c = 0;  // KMGTPEZY
-            if (cap > 100000) {
-                cap /= 1000;
-                cap_c++;
-            }
-            cap *= ssize;
-            while (cap > 9999) {
-                cap /= 1000;
-                cap_c++;
-            }
-            printf("%5u %5u %cB\n", ssize, cap, "KMGTPEZY"[cap_c]);
-
-            x+=76;
-            Move(rp,x,y);
-            if (ssize<1000)
-                Text(rp," ",1);
-            itoa(ssize,_itoabuf,10);
-            Text(rp,_itoabuf,strlen(_itoabuf));
-
-            x+=48;
-            Move(rp,x,y);
-            if(cap<1000)
-                Text(rp," ",1);
-            if(cap<100)
-                Text(rp," ",1);
-            itoa(cap,_itoabuf,10);
-            Text(rp,_itoabuf,strlen(_itoabuf));
-            const char caps[]="KMGTPEZY";
-            Text(rp,&caps[cap_c],1);
-            Text(rp,"B",1);
-            FreeMem(cap10, sizeof (*cap10));
-        }
-        cnt++;
-        safe_close((struct IOStdReq *)&tio);
-        memset(&tio, 0, sizeof(tio));
+    port = W_CreateMsgPort(SysBase);
+    if(!port) {
+        printf("failed.\n");
+	return 0;
     }
 
+    request = (struct IOExtTD*)W_CreateIORequest(port, sizeof(struct IOExtTD), SysBase);
+    if(!request) {
+        printf("failed.\n");
+        W_DeleteMsgPort(port, SysBase);
+    }
+
+    for (i=0; i<7; i++) { // FIXME LUNs?
+        x=52;
+        y=82+(cnt*10);
+
+        ULONG unitNum = i;
+        printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
+        UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
+        if (err == 0) {
+            scsi_inquiry_data_t *inq_res;
+            //:ret = -1;
+
+            err = dev_scsi_inquiry(request, unitNum, &inq_res);
+            if (err == 0) {
+                char unit_str[]="0.0";
+                unit_str[0]='0'+(unitNum % 10);
+		unit_str[2]='0'+(unitNum / 10);
+                Move(rp,x,y);
+                Text(rp, (char *)unit_str, 3);
+                x+=48;
+                Move(rp,x,y);
+                Text(rp, inq_res->vendor, 8);
+                x+=96;
+                Move(rp,x,y);
+                Text(rp, inq_res->product, 16);
+                x+=176;
+                Move(rp,x,y);
+                Text(rp, inq_res->revision, 4);
+                x+=48;
+                Move(rp,x,y);
+                const char *dtype=devtype_str(inq_res->device & SID_TYPE);
+                Text(rp,dtype,strlen(dtype));
+                printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
+                       sizeof (inq_res->vendor),
+                       sizeof (inq_res->vendor),
+                       trim_spaces(inq_res->vendor, sizeof (inq_res->vendor)),
+                       sizeof (inq_res->product),
+                       sizeof (inq_res->product),
+                       trim_spaces(inq_res->product, sizeof (inq_res->product)),
+                       sizeof (inq_res->revision),
+                       sizeof (inq_res->revision),
+                       trim_spaces(inq_res->revision, sizeof (inq_res->revision)),
+                       devtype_str(inq_res->device & SID_TYPE));
+
+                FreeMem(inq_res, sizeof (*inq_res));
+
+            }
+
+            scsi_read_capacity_10_data_t *cap10;
+            cap10 = dev_scsi_read_capacity_10(request, unitNum);
+            if (cap10 != NULL) {
+                uint ssize = *(uint32_t *) &cap10->length;
+                uint cap   = (*(uint32_t *) &cap10->addr + 1) / 1000;
+                uint cap_c = 0;  // KMGTPEZY
+                if (cap > 100000) {
+                    cap /= 1000;
+                    cap_c++;
+                }
+                cap *= ssize;
+                while (cap > 9999) {
+                    cap /= 1000;
+                    cap_c++;
+                }
+                printf("%5u %5u %cB\n", ssize, cap, "KMGTPEZY"[cap_c]);
+
+                x+=76;
+                Move(rp,x,y);
+                if (ssize<1000)
+                    Text(rp," ",1);
+                itoa(ssize,_itoabuf,10);
+                Text(rp,_itoabuf,strlen(_itoabuf));
+
+                x+=48;
+                Move(rp,x,y);
+                if(cap<1000)
+                    Text(rp," ",1);
+                if(cap<100)
+                    Text(rp," ",1);
+                itoa(cap,_itoabuf,10);
+                Text(rp,_itoabuf,strlen(_itoabuf));
+                const char caps[]="KMGTPEZY";
+                Text(rp,&caps[cap_c],1);
+                Text(rp,"B",1);
+                FreeMem(cap10, sizeof (*cap10));
+            }
+            CloseDevice((struct IORequest*)request);
+            cnt++;
+        }
+
+    }
+
+    W_DeleteIORequest(request, SysBase);
+    W_DeleteMsgPort(port, SysBase);
     return 0;
 }
 
