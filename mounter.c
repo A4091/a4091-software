@@ -62,8 +62,10 @@
 #define BLOCKSIZE 512
 #define LSEG_DATASIZE (512 / 4 - 5)
 
+#if NO_CONFIGDEV
 extern UBYTE entrypoint, entrypoint_end;
 extern UBYTE bootblock, bootblock_end;
+#endif
 
 struct MountData
 {
@@ -591,6 +593,7 @@ static struct FileSysEntry *ParseFSHD(UBYTE *buf, ULONG block, ULONG dostype, st
 	return fse;
 }
 
+#if NO_CONFIGDEV
 // Create fake ConfigDev and DiagArea to support autoboot without requiring real autoconfig device.
 static void CreateFakeConfigDev(struct MountData *md)
 {
@@ -617,6 +620,7 @@ static void CreateFakeConfigDev(struct MountData *md)
 		md->configDev = configDev;
 	}
 }
+#endif
 
 struct ParameterPacket
 {
@@ -778,9 +782,11 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 					}
 				}
 				dbg("Mounting partition\n");
+#if NO_CONFIGDEV
 				if (!md->configDev && !md->DOSBase) {
 					CreateFakeConfigDev(md);
 				}
+#endif
 				AddNode(part, pp, dn, part->pb_DriveName + 1, md);
 				md->ret++;
 			} else {
