@@ -66,9 +66,11 @@ int dbgprintf(const char *fmt, ...);
 // #define memset(dst, value, len) SetMem(dst, value, len)
 
 #define SDT_PROBE1(v,w,x,y,z)
+#define SDT_PROBE2(u,v,w,x,y,z)
 #define SDT_PROBE3(t,u,v,w,x,y,z)
 #define KASSERT(x)
 
+#define uimin(x,y) ((x <= y) ? (x) : (y))
 #define mutex_init(x, y, z)
 #define mutex_enter(x) do { } while (0)
 #define mutex_exit(x)  do { } while (0)

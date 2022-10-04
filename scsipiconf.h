@@ -308,8 +308,8 @@ struct scsipi_channel {
 	int	chan_channel;		/* channel number */
 #endif
 	int	chan_flags;		/* channel flags */
-	int	chan_openings;		/* number of command openings */
 #ifndef PORT_AMIGA
+	int	chan_openings;		/* number of command openings */
 	int	chan_max_periph;	/* max openings per periph */
 
 	int	chan_ntargets;		/* number of targets */

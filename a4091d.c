@@ -1838,7 +1838,7 @@ main(int argc, char *argv[])
     printf("  chan_flags=%02x", chan->chan_flags);
     print_bits(bits_chan_flags, ARRAY_SIZE(bits_chan_flags), chan->chan_flags);
     printf("\n");
-    printf("  chan_openings=%d\n", chan->chan_openings);
+//  printf("  chan_openings=%d\n", chan->chan_openings);
     printf("  chan_nluns=%d\n", chan->chan_nluns);
     printf("  chan_id=%d (SCSI host ID)\n", chan->chan_id);
     printf("  chan_tflags=%d", chan->chan_tflags);
