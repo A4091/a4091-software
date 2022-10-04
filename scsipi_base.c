@@ -133,7 +133,12 @@ static void	scsipi_request_sense(struct scsipi_xfer *);
 static int	scsipi_enqueue(struct scsipi_xfer *);
 static void	scsipi_run_queue(struct scsipi_channel *chan);
 
-#ifndef PORT_AMIGA
+#ifdef PORT_AMIGA
+static void scsipi_adapter_request(struct scsipi_channel *chan,
+	                           scsipi_adapter_req_t req, void *arg);
+static struct scsipi_xfer *scsipi_get_xs(struct scsipi_periph *periph,
+                                         int flags);
+#else
 static void	scsipi_completion_thread(void *);
 #endif
 
@@ -344,6 +349,9 @@ scsipi_lookup_periph(struct scsipi_channel *chan, int target, int lun)
 }
 
 
+#ifdef PORT_AMIGA
+static
+#endif
 struct scsipi_xfer *
 scsipi_make_xs_internal(struct scsipi_periph *periph,
                         struct scsipi_generic *cmd,
@@ -558,6 +566,9 @@ scsipi_put_tag(struct scsipi_xfer *xs)
  *	When this routine is called with the channel lock held
  *	the flags must include XS_CTL_NOSLEEP.
  */
+#ifdef PORT_AMIGA
+static
+#endif
 struct scsipi_xfer *
 scsipi_get_xs(struct scsipi_periph *periph, int flags)
 {
@@ -712,6 +723,9 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
  *
  *	NOTE: Must be called with channel lock held
  */
+#ifdef PORT_AMIGA
+static
+#endif
 void
 scsipi_put_xs(struct scsipi_xfer *xs)
 {
@@ -2612,9 +2626,9 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
          * Set the LUN in the CDB if we have an older device. We also
          * set it for more modern SCSI-2 devices "just in case".
          *
-         * CDH: This code is taken from the scsi_base bustype_cmd
-         *      implementation, and is placed here to avoid a call
-         *      through indirection.
+         * For Amiga, this code is taken from the scsi_base bustype_cmd
+         * implementation, and is placed here to avoid a call through
+         * indirection.
          */
         if (periph->periph_version <= 2)
                 xs->cmd->bytes[0] |=
@@ -2686,9 +2700,9 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 			printf("invalid tag mask 0x%08x\n",
 			    XS_CTL_TAGTYPE(xs));
 #ifdef PORT_AMIGA
-			panic("Invalid tag mask %lx for cmd %02lx",
-                              XS_CTL_TAGTYPE(xs),
-                              (xs->cmd != NULL) ? xs->cmd->opcode : 0xff);
+			panic("Invalid tag mask %lx for %p cmd %02lx",
+                              XS_CTL_TAGTYPE(xs), xs,
+                              (xs->cmd != NULL) ? xs->cmd->opcode : 0xffffffff);
 #else
 			panic("scsipi_execute_xs");
 #endif
@@ -3067,7 +3081,6 @@ scsipi_async_event_max_openings(struct scsipi_channel *chan,
 			periph->periph_openings = mo->mo_openings;
 	}
 }
-#endif /* !PORT_AMIGA */
 
 /*
  * scsipi_set_xfer_mode:
@@ -3117,7 +3130,6 @@ scsipi_set_xfer_mode(struct scsipi_channel *chan, int target, int immed)
 	}
 }
 
-#ifndef PORT_AMIGA
 /*
  * scsipi_channel_reset:
  *
@@ -3351,6 +3363,9 @@ scsipi_adapter_minphys(struct scsipi_channel *chan, struct buf *bp)
 }
 #endif /* !PORT_AMIGA */
 
+#ifdef PORT_AMIGA
+static
+#endif
 void
 scsipi_adapter_request(struct scsipi_channel *chan, 
 	scsipi_adapter_req_t req, void *arg)

@@ -227,12 +227,14 @@ struct scsipi_adapter {
 #define SCSIPI_ADAPT_POLL_ONLY	0x01 /* Adaptor can't do interrupts. */
 #define SCSIPI_ADAPT_MPSAFE     0x02 /* Adaptor doesn't need kernel lock */
 
+#ifndef PORT_AMIGA
 void scsipi_adapter_minphys(struct scsipi_channel *, struct buf *);
 void scsipi_adapter_request(struct scsipi_channel *,
 	scsipi_adapter_req_t, void *);
 int scsipi_adapter_ioctl(struct scsipi_channel *, u_long,
 	void *, int, struct proc *);
 int scsipi_adapter_enable(struct scsipi_adapter *, int);
+#endif
 #endif
 
 

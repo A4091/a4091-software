@@ -467,9 +467,9 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
         return (ERROR_NO_MEMORY);
     printf("attach(%p, %d)\n", periph, scsi_target);
     periph->periph_openings  = 4;  // Max # of outstanding commands
-    periph->periph_target    = scsi_target % 10;         // SCSI target ID
-    periph->periph_lun       = (scsi_target / 10) % 10;  // SCSI LUN
-    periph->periph_dbflags   = SCSIPI_DEBUG_FLAGS;       // Full debugging
+    periph->periph_target    = target;              // SCSI target ID
+    periph->periph_lun       = lun;                 // SCSI LUN
+    periph->periph_dbflags   = SCSIPI_DEBUG_FLAGS;  // Full debugging
     periph->periph_dbflags   = 0;
     periph->periph_changenum = 1;
     periph->periph_channel   = chan;
@@ -489,6 +489,10 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     }
 
     scsipi_insert_periph(chan, periph);
+#if 0
+    /* Might be needed for A3000 / A2091 / A590 */
+    scsipi_set_xfer_mode(chan, target, 1);
+#endif
 
     return (0);
 }
