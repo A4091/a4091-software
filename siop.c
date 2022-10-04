@@ -1704,7 +1704,12 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             printf("%s: target ID %02x reselect nexus_list %p\n",
                 device_xname(sc->sc_dev), reselid,
                 sc->nexus_list.tqh_first);
+#ifdef PORT_AMIGA
+            panic("no active I/O for reselecting device %02lx.%lx",
+                  reselid, reselun);
+#else
             panic("unable to find reselecting device");
+#endif
         }
 #ifdef PORT_AMIGA
         ULONG length = sizeof (*acb);

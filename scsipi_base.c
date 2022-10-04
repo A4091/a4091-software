@@ -223,7 +223,7 @@ scsipi_enqueue(struct scsipi_xfer *xs)
         print_xs_queue(chan);
 #endif
  out:
-#if 0
+#ifndef PORT_AMIGA
 	if (xs->xs_control & XS_CTL_THAW_PERIPH)
 		scsipi_periph_thaw_locked(xs->xs_periph, 1);
 #endif
@@ -407,7 +407,9 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 			printf("invalid tag mask 0x%08x\n",
 			    XS_CTL_TAGTYPE(xs));
 #ifdef PORT_AMIGA
-			panic("invalid tag mask %x", XS_CTL_TAGTYPE(xs));
+			panic("Invalid tag mask %lx for cmd %02lx",
+                              XS_CTL_TAGTYPE(xs),
+                              (xs->cmd != NULL) ? xs->cmd->opcode : 0xff);
 #else
 			panic("scsipi_execute_xs");
 #endif
@@ -439,16 +441,21 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
 	error = scsipi_enqueue(xs);
 	if (error) {
+#ifndef PORT_AMIGA
+                /*
+                 * Eliminated for Amiga as this should not happen because:
+                 *      poll = xs->xs_control & XS_CTL_POLL
+                 * and the called function can only return non-zero in
+                 * the case where:
+                 *      (xs->xs_control & XS_CTL_POLL) != 0
+                 */
 		if (poll == 0) {
 			scsipi_printaddr(periph);
 			printf("not polling, but enqueue failed with %d\n",
 			    error);
-#ifdef PORT_AMIGA
-			panic("not polling but enqueue failed %d", error);
-#else
 			panic("scsipi_execute_xs");
-#endif
 		}
+#endif
 
 		scsipi_printaddr(periph);
 		printf("should have flushed queue?\n");
@@ -1060,7 +1067,7 @@ scsipi_done(struct scsipi_xfer *xs)
 		freezecnt++;
 	if (xs->xs_control & XS_CTL_FREEZE_PERIPH)
 		freezecnt++;
-#if 0
+#ifndef PORT_AMIGA
 	if (freezecnt != 0)
 		scsipi_periph_freeze_locked(periph, freezecnt);
 #endif
@@ -1246,7 +1253,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 			printf("request sense for a request sense ?\n");
 			/* XXX maybe we should reset the device ? */
 			/* we've been frozen because xs->error != XS_NOERROR */
-#if 0
+#ifndef PORT_AMIGA
 			scsipi_periph_thaw_locked(periph, 1);
 #endif
 			mutex_exit(chan_mtx(chan));
@@ -1280,7 +1287,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 	if ((xs->xs_control & XS_CTL_USERCMD) != 0) {
 		SC_DEBUG(periph, SCSIPI_DB3, ("calling user done()\n"));
 		mutex_enter(chan_mtx(chan));
-#if 0
+#ifndef PORT_AMIGA
 		if (xs->error != XS_NOERROR)
 			scsipi_periph_thaw_locked(periph, 1);
 #endif
@@ -1445,7 +1452,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 		xs->xs_requeuecnt++;
 		error = scsipi_enqueue(xs);
 		if (error == 0) {
-#if 0
+#ifndef PORT_AMIGA
 			scsipi_periph_thaw_locked(periph, 1);
 #endif
 			mutex_exit(chan_mtx(chan));
@@ -1457,7 +1464,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 	 * scsipi_done() freezes the queue if not XS_NOERROR.
 	 * Thaw it here.
 	 */
-#if 0
+#ifndef PORT_AMIGA
 	if (xs->error != XS_NOERROR)
 		scsipi_periph_thaw_locked(periph, 1);
 	mutex_exit(chan_mtx(chan));
