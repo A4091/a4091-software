@@ -63,7 +63,7 @@ struct ExpansionBase *ExpansionBase;
  * service task to go process them.
  */
 __attribute__((noinline))
-int
+static int
 irq_handler_core(a4091_save_t *save)
 {
     struct siop_softc *sc = save->as_device_private;
@@ -101,7 +101,7 @@ irq_handler_core(a4091_save_t *save)
  * to "tst d0" if the called function wants to return anything
  * other than 0.
  */
-LONG __saveds
+static LONG __saveds
 irq_handler(void)
 {
     register a4091_save_t *save asm("a1");
