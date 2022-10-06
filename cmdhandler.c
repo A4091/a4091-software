@@ -412,8 +412,12 @@ CMD_SEEK_continue:
             PRINTF_CMD("TD_GETGEOMETRY %d\n",
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
                     ((struct scsipi_periph *) ior->io_Unit)->periph_target);
-            rc = sd_getgeometry(iotd->iotd_Req.io_Unit,
-                                iotd->iotd_Req.io_Data, ior);
+            if (iotd->iotd_Req.io_Length < sizeof (struct DriveGeometry)) {
+                rc = IOERR_BADLENGTH;
+            } else {
+                rc = sd_getgeometry(iotd->iotd_Req.io_Unit,
+                                    iotd->iotd_Req.io_Data, ior);
+            }
             if (rc != 0) {
                 iotd->iotd_Req.io_Error = rc;
                 ReplyMsg(&ior->io_Message);
@@ -434,8 +438,8 @@ CMD_SEEK_continue:
         case NSCMD_DEVICEQUERY: {
             struct NSDeviceQueryResult *nsd =
                 (struct NSDeviceQueryResult *) iotd->iotd_Req.io_Data;
-            if (iotd->iotd_Req.io_Length < 16) {
-                ior->io_Error = ERROR_BAD_LENGTH;
+            if (iotd->iotd_Req.io_Length < sizeof (*nsd)) {
+                ior->io_Error = IOERR_BADLENGTH;
             } else {
                 nsd->DevQueryFormat      = 0;
                 nsd->SizeAvailable       = sizeof (*nsd);

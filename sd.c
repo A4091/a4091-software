@@ -881,11 +881,15 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
                                (struct scsipi_generic *) &cmd, cmd_len,
                                (uint8_t *) cap_buf, cap_len,
                                1, 1000, NULL, flags);
-    xs->amiga_ior = oxs->amiga_ior;
-    xs->xs_callback_arg = oxs->xs_callback_arg;
-    xs->xs_done_callback = geom_done_get_capacity;
+    if (__predict_false(xs == NULL)) {
+        rc = TDERR_NoMem;  // out of memory
+    } else {
+        xs->amiga_ior = oxs->amiga_ior;
+        xs->xs_callback_arg = oxs->xs_callback_arg;
+        xs->xs_done_callback = geom_done_get_capacity;
 
-    rc = scsipi_execute_xs(xs);
+        rc = scsipi_execute_xs(xs);
+    }
     if (rc != 0)
         cmd_complete(oxs->amiga_ior, rc);
 }
