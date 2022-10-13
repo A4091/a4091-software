@@ -35,6 +35,7 @@
 #include "scsimsg.h"
 #include "battmem.h"
 #include "amigahw.h"
+#include "ndkcompat.h"
 #include "mounter.h" // for Port/IOReq wrappers
 
 extern struct ExecBase *SysBase;
@@ -391,10 +392,12 @@ int scan_disks(void)
     }
 
     for (i=0; i<7; i++) { // FIXME LUNs?
+        ULONG lun = 0;
+next_lun:
         x=52;
         y=82+(cnt*10);
 
-        ULONG unitNum = i;
+        ULONG unitNum = i + lun * 10;
         printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
         UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
         if (err == 0) {
@@ -476,6 +479,10 @@ int scan_disks(void)
             }
             CloseDevice((struct IORequest*)request);
             cnt++;
+            if ((lun < 15) && (cnt < 12)) {
+                lun++;
+                goto next_lun;
+            }
         }
 
     }
@@ -783,8 +790,12 @@ void boot_menu(void)
         return;
     }
 
-    /* Configure Paula POTGOR pins as input */
-    *(volatile UWORD *)REG_POTGO = 0xffff;
+    /*
+     * Configure Paula POTGO LX + LY pins (Port 0 Button 2 + 3) as
+     * output high. Paula implements a pull-up on the pins in this
+     * mode, which may be overdriven (low) by a mouse button press.
+     */
+    *(volatile UWORD *)REG_POTGO = 0x0f00;
 
     /* Wait for Paula to refresh GPIO state */
     WaitTOF();

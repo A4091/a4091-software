@@ -2622,6 +2622,12 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	KASSERT(!cold);
 
 #ifdef PORT_AMIGA
+#ifdef DEBUG
+        if (((uint) xs > 0x10000000) || ((uint) xs < 0x02000000)) {
+            panic("Invalid xs %08lx", (uint) xs);
+            return (1);
+        }
+#endif
         /*
          * Set the LUN in the CDB if we have an older device. We also
          * set it for more modern SCSI-2 devices "just in case".
@@ -2700,9 +2706,11 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 			printf("invalid tag mask 0x%08x\n",
 			    XS_CTL_TAGTYPE(xs));
 #ifdef PORT_AMIGA
-			panic("Invalid tag mask %lx for %p cmd %02lx",
+			panic("Invalid tag mask %lx for %08lx cmd %02lx",
                               XS_CTL_TAGTYPE(xs), xs,
                               (xs->cmd != NULL) ? xs->cmd->opcode : 0xffffffff);
+			xs->xs_tag_type = MSG_SIMPLE_Q_TAG;
+			break;
 #else
 			panic("scsipi_execute_xs");
 #endif

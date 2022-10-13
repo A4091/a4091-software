@@ -98,8 +98,13 @@ int dbgprintf(const char *fmt, ...);
 
 #ifndef USE_SERIAL_OUTPUT
 #define printf(x...)   do { } while (0)
+#define vprintf(x...)  do { } while (0)
 #define vfprintf(x...) do { } while (0)
 #define putchar(x...)  do { } while (0)
 #endif
 
+#ifndef USING_BASEREL
+#undef __saveds
+#define __saveds
+#endif
 #endif /* _PORT_H */

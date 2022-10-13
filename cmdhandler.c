@@ -670,13 +670,17 @@ cmd_handler(void)
     }
 
     asave = AllocMem(sizeof (*asave), MEMF_CLEAR | MEMF_PUBLIC);
-    asave->as_device_private = AllocMem(sizeof (*asave->as_device_private),
-                                        MEMF_CLEAR | MEMF_PUBLIC);
-
     if (asave == NULL) {
         msg->io_Error = ERROR_NO_MEMORY;
         goto fail_allocmem;
     }
+    asave->as_device_private = AllocMem(sizeof (*asave->as_device_private),
+                                        MEMF_CLEAR | MEMF_PUBLIC);
+    if (asave->as_device_private == NULL) {
+        msg->io_Error = ERROR_NO_MEMORY;
+        goto fail_allocmem2;
+    }
+
 
     msg->io_Error = open_timer();
     if (msg->io_Error != 0)
@@ -687,13 +691,14 @@ cmd_handler(void)
         close_timer();
 fail_timer:
         FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
+fail_allocmem2:
         FreeMem(asave, sizeof (*asave));
 fail_allocmem:
         /* Terminate handler and give up */
         DeletePort(msgport);
 fail_msgport:
-        ReleaseSemaphore(&msg->started);
         Forbid();
+        ReleaseSemaphore(&msg->started);
         return;
     }
 

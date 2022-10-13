@@ -296,7 +296,11 @@ siop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
         if (acb == NULL) {
             scsipi_printaddr(periph);
             printf("unable to allocate acb\n");
+#ifdef PORT_AMIGA
+            panic("siop_scsipi_request: no free ACB");
+#else
             panic("siop_scsipi_request");
+#endif
         }
 #endif
 
@@ -1281,9 +1285,14 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #endif
 #ifdef DEBUG
         if (rp->siop_dsa != kvtop((void *)&acb->ds)) {
+#ifdef PORT_AMIGA
+            panic("*** siop DSA invalid: %lx != %lx ***",
+                rp->siop_dsa, (unsigned)kvtop((void *)&acb->ds));
+#else
             printf ("siop: invalid dsa: %lx %x\n", rp->siop_dsa,
                 (unsigned)kvtop((void *)&acb->ds));
             panic("*** siop DSA invalid ***");
+#endif
         }
 #endif
         target = acb->xs->xs_periph->periph_target;
@@ -1701,13 +1710,13 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             break;
         }
         if (acb == NULL) {
+#ifdef PORT_AMIGA
+            panic("No active I/O for reselecting device %02lx.%lx\nnexus %lx",
+                  reselid, reselun, sc->nexus_list.tqh_first);
+#else
             printf("%s: target ID %02x reselect nexus_list %p\n",
                 device_xname(sc->sc_dev), reselid,
                 sc->nexus_list.tqh_first);
-#ifdef PORT_AMIGA
-            panic("no active I/O for reselecting device %02lx.%lx",
-                  reselid, reselun);
-#else
             panic("unable to find reselecting device");
 #endif
         }
@@ -1836,8 +1845,27 @@ bad_phase:
              rp->siop_sbcl, acb->stat[0], acb->msg[0], acb->msg[1], rp->siop_sfbr);
     }
 #ifdef DEBUG
+#ifdef PORT_AMIGA
+    if (siop_debug & 0x20) {
+        panic("Unhandled Interrupt\n\n"
+              "istat %lx dstat %lx sstat0 %lx\n"
+              "dsps %lx dsa %lx sbcl %lx sfbr %lx\n"
+              "scripts %lx ds %lx rp %lx\n"
+              "dsp %lx dcmd %lx targt %lx\n"
+              "acb %lx ds %lx\n"
+              "sts %lx msg %lx %lx\n",
+            istat, dstat, sstat0, rp->siop_dsps, rp->siop_dsa,
+            rp->siop_sbcl, rp->siop_sfbr,
+            sc->sc_scriptspa, acb ? (unsigned)kvtop((void *)&acb->ds) : 0,
+            (unsigned)kvtop((void *)__UNVOLATILE(rp)), rp->siop_dsp,
+            *((volatile long *)&rp->siop_dcmd), target, acb,
+            acb ? &acb->ds : NULL, acb ? acb->stat[0] : 0,
+            acb ? acb->msg[0] : 0, acb ? acb->msg[1] : 0);
+    }
+#else
     if (siop_debug & 0x20)
         panic("siopchkintr: **** temp ****");
+#endif
 #endif
 #ifdef DDB
     Debugger ();

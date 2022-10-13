@@ -54,7 +54,8 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
-CFLAGS  += -fbaserel -msmall-code -resident
+#CFLAGS  += -fbaserel -resident -DUSING_BASEREL
+CFLAGS  += -msmall-code
 CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
 CFLAGS += -mcpu=68020
 

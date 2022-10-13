@@ -185,7 +185,10 @@ static UWORD checksum(UBYTE *buf, struct MountData *md)
 	return TRUE;
 }
 
-#define MAX_RETRIES 3
+
+/* a4091.device does retries internally */
+#define MAX_RETRIES 1
+
 // Read single block with retries
 static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 {

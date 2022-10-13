@@ -1160,6 +1160,31 @@ print_bits(bitdesc_t *bits, uint value)
     }
 }
 
+static void
+print_bits_dash(bitdesc_t *bits, uint value)
+{
+    uint lastbit = (uint) -1;
+    uint bit;
+    uint printed = 0;
+    for (bit = 0; value != 0; value >>= 1, bit++) {
+        if (value & 1) {
+            if (printed == 0) {
+                printed = 1;
+                printf(" %s", bits[bit]);
+                lastbit = bit;
+            }
+        } else if (printed) {
+            printed = 0;
+            if (lastbit != (bit - 1))
+                printf("-%s", bits[bit - 1]);
+        }
+    }
+    if (printed) {
+        if (lastbit != (bit - 1))
+            printf("-%s", bits[bit - 1]);
+    }
+}
+
 static int
 decode_registers(void)
 {
@@ -1761,10 +1786,8 @@ test_register_access(void)
             if (rc++ == 0)
                 printf("\n");
             if (rc < 8) {
-                printf("Reg SCRATCH %08x != %08x (diff %08x",
+                printf("Reg SCRATCH %08x != %08x (diff %08x)\n",
                        got_scratch, patt, diff_s);
-                print_bits(data_pins, diff_s);
-                printf(")\n");
             }
         }
         if (diff_t != 0) {
@@ -1772,27 +1795,25 @@ test_register_access(void)
             if (rc++ == 0)
                 printf("\n");
             if (rc < 8) {
-                printf("Reg TEMP    %08x != %08x (diff %08x",
+                printf("Reg TEMP    %08x != %08x (diff %08x)\n",
                        got_temp, next, diff_t);
-                print_bits(data_pins, diff_t);
-                printf(")\n");
             }
         }
     }
     pins_diff &= ~(stuck_high | stuck_low);
     if (stuck_high != 0) {
         printf("Stuck high: %08x", stuck_high);
-        print_bits(data_pins, stuck_high);
+        print_bits_dash(data_pins, stuck_high);
         printf(" (check for short to VCC)\n");
     }
     if (stuck_low != 0) {
         printf("Stuck low: %08x", stuck_low);
-        print_bits(data_pins, stuck_low);
+        print_bits_dash(data_pins, stuck_low);
         printf(" (check for short to GND)\n");
     }
     if (pins_diff != 0) {
         printf("Floating or bridged: %02x", pins_diff);
-        print_bits(data_pins, pins_diff);
+        print_bits_dash(data_pins, pins_diff);
         printf("\n");
     }
 

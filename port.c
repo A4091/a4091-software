@@ -37,7 +37,11 @@ panic(const char *fmt, ...)
         (char *) fmt,
         "OK",
     };
-    printf("PANIC: %s\n\n", fmt);
+    printf("PANIC: ");
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n\n");
 
     IntuitionBase = OpenLibrary("intuition.library", 37);
     if (IntuitionBase != NULL) {
