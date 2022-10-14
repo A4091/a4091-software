@@ -327,7 +327,6 @@ static APTR fsrelocate(struct MountData *md)
 	if (firstHunk < 0 || lastHunk < 0 || firstHunk > lastHunk) {
 		return NULL;
 	}
-
 	totalHunks = lastHunk - firstHunk + 1;
 	dbg("first hunk %"PRId32", last hunk %"PRId32"\n", firstHunk, lastHunk);
 	relocHunks = AllocMem(totalHunks * sizeof(struct RelocHunk), MEMF_CLEAR);
@@ -374,7 +373,7 @@ static APTR fsrelocate(struct MountData *md)
 	// Load hunks/relocate
 	hunkCnt = 0;
 	struct RelocHunk *rh = NULL;
-	while (hunkCnt < totalHunks) {
+	while (hunkCnt <= totalHunks) {
 		ULONG hunkType;
 		if (!lseg_read_long(md, &hunkType)) {
 			goto end;
@@ -387,6 +386,9 @@ static APTR fsrelocate(struct MountData *md)
 			case HUNK_BSS:
 			{
 				ULONG hunkSize;
+				if (hunkCnt >= totalHunks) {
+					goto end;  // overflow
+				}
 				rh = &relocHunks[hunkCnt++];
 				if (!lseg_read_long(md, &hunkSize)) {
 					goto end;
@@ -457,13 +459,13 @@ static APTR fsrelocate(struct MountData *md)
 			break;
 			case HUNK_END:
 			// do nothing
-			break;
+			ret = 1;
+			goto end;
 			default:
 			dbg("Unexpected HUNK!\n");
 			goto end;
 		}
 	}
-	ret = 1;
 
 end:
 	if (!ret) {
@@ -996,7 +998,7 @@ LONG MountDrive(struct MountStruct *ms)
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
 	struct ExecBase *SysBase = ms->SysBase;
-	scsi_inquiry_data_t *inq_res;
+	scsi_inquiry_data_t inq_res;
 
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
@@ -1033,7 +1035,7 @@ LONG MountDrive(struct MountStruct *ms)
 
 							err = dev_scsi_inquiry(request, unitNum, &inq_res);
 							if (err == 0) {
-								switch (inq_res->device & SID_TYPE) {
+								switch (inq_res.device & SID_TYPE) {
 								case 5: // CDROM
 									md->blocksize=2048;
 									ret = ScanRDSK(md);
@@ -1046,11 +1048,10 @@ LONG MountDrive(struct MountStruct *ms)
 									break;
 								default:
 									printf("Don't know how to boot from device type %d.\n",
-										inq_res->device & 0x1f);
+										inq_res.device & 0x1f);
 									break;
 								}
 							}
-							FreeMem(inq_res, sizeof (*inq_res));
 
 							CloseDevice((struct IORequest*)request);
 							*unitNumP++ = ret;

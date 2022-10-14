@@ -217,7 +217,7 @@ static char *dipswitch_text(int val, int num)
       case 2:
       case 1: strcat((char *)string, "SCSI Address A? = ?");
 	      string[14] = num - 1 + '0';
-	      string[18] = val + '0';
+	      string[18] = !val + '0';
 	      break;
     }
 
@@ -230,7 +230,6 @@ static void draw_dipswitches(UWORD x, UWORD y)
     int i;
     UBYTE dip_switches;
     char *ret, *num="8", *hostid="Host ID: 7";
-    num[0]='8';
 
     if (asave) {
         dip_switches = *(uint8_t *)((asave->as_addr) + 0x008c0003);
@@ -258,8 +257,8 @@ static void draw_dipswitches(UWORD x, UWORD y)
         SetAPen(rp, 1);
         SetBPen(rp, 3);
 	Move(rp, x+6,y+(i*10)+14);
+	num[0] = '8' - i;
         Text(rp, (char *)num, 1);
-	num[0]--;
 	Move(rp, x+82,y+(i*10)+14);
         SetBPen(rp, 0);
 	ret = dipswitch_text((dip_switches&(1<<(7-i))), 8-i);
@@ -401,7 +400,7 @@ next_lun:
         printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
         UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
         if (err == 0) {
-            scsi_inquiry_data_t *inq_res;
+            scsi_inquiry_data_t inq_res;
             //:ret = -1;
 
             err = dev_scsi_inquiry(request, unitNum, &inq_res);
@@ -413,38 +412,34 @@ next_lun:
                 Text(rp, (char *)unit_str, 3);
                 x+=48;
                 Move(rp,x,y);
-                Text(rp, inq_res->vendor, 8);
+                Text(rp, inq_res.vendor, 8);
                 x+=96;
                 Move(rp,x,y);
-                Text(rp, inq_res->product, 16);
+                Text(rp, inq_res.product, 16);
                 x+=176;
                 Move(rp,x,y);
-                Text(rp, inq_res->revision, 4);
+                Text(rp, inq_res.revision, 4);
                 x+=48;
                 Move(rp,x,y);
-                const char *dtype=devtype_str(inq_res->device & SID_TYPE);
+                const char *dtype=devtype_str(inq_res.device & SID_TYPE);
                 Text(rp,dtype,strlen(dtype));
                 printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
-                       sizeof (inq_res->vendor),
-                       sizeof (inq_res->vendor),
-                       trim_spaces(inq_res->vendor, sizeof (inq_res->vendor)),
-                       sizeof (inq_res->product),
-                       sizeof (inq_res->product),
-                       trim_spaces(inq_res->product, sizeof (inq_res->product)),
-                       sizeof (inq_res->revision),
-                       sizeof (inq_res->revision),
-                       trim_spaces(inq_res->revision, sizeof (inq_res->revision)),
-                       devtype_str(inq_res->device & SID_TYPE));
-
-                FreeMem(inq_res, sizeof (*inq_res));
-
+                       sizeof (inq_res.vendor),
+                       sizeof (inq_res.vendor),
+                       trim_spaces(inq_res.vendor, sizeof (inq_res.vendor)),
+                       sizeof (inq_res.product),
+                       sizeof (inq_res.product),
+                       trim_spaces(inq_res.product, sizeof (inq_res.product)),
+                       sizeof (inq_res.revision),
+                       sizeof (inq_res.revision),
+                       trim_spaces(inq_res.revision, sizeof (inq_res.revision)),
+                       devtype_str(inq_res.device & SID_TYPE));
             }
 
-            scsi_read_capacity_10_data_t *cap10;
-            cap10 = dev_scsi_read_capacity_10(request, unitNum);
-            if (cap10 != NULL) {
-                uint ssize = *(uint32_t *) &cap10->length;
-                uint cap   = (*(uint32_t *) &cap10->addr + 1) / 1000;
+            struct DriveGeometry geom;
+            if (dev_scsi_get_drivegeometry(request, &geom) == 0) {
+                uint ssize = geom.dg_SectorSize;
+                uint cap   = geom.dg_TotalSectors / 1000;
                 uint cap_c = 0;  // KMGTPEZY
                 if (cap > 100000) {
                     cap /= 1000;
@@ -475,7 +470,6 @@ next_lun:
                 const char caps[]="KMGTPEZY";
                 Text(rp,&caps[cap_c],1);
                 Text(rp,"B",1);
-                FreeMem(cap10, sizeof (*cap10));
             }
             CloseDevice((struct IORequest*)request);
             cnt++;
