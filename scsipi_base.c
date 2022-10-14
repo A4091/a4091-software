@@ -1681,7 +1681,7 @@ scsipi_get_opcodeinfo(struct scsipi_periph *periph)
 	int len = 16*1024;
 	int rc;
 	struct scsi_repsuppopcode cmd;
-	
+
 	/* refrain from asking for supported opcodes */
 	if (periph->periph_quirks & PQUIRK_NOREPSUPPOPC ||
 	    periph->periph_type == T_PROCESSOR || /* spec. */
@@ -1704,7 +1704,7 @@ scsipi_get_opcodeinfo(struct scsipi_periph *periph)
 	cmd.svcaction = RSOC_REPORT_SUPPORTED_OPCODES;
 	cmd.repoption = RSOC_RCTD|RSOC_ALL;
 	_lto4b(len, cmd.alloclen);
-	
+
 	rc = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 			    (void *)data, len, 0, 1000, NULL,
 			    XS_CTL_DATA_IN|XS_CTL_SILENT);
@@ -1713,7 +1713,7 @@ scsipi_get_opcodeinfo(struct scsipi_periph *periph)
 		int count;
                 int dlen = _4btol(data);
                 u_int8_t *c = data + 4;
-		
+
 		SC_DEBUG(periph, SCSIPI_DB3,
 			 ("supported opcode timeout-values loaded\n"));
 		SC_DEBUG(periph, SCSIPI_DB3,
@@ -1734,9 +1734,9 @@ scsipi_get_opcodeinfo(struct scsipi_periph *periph)
                         c += sizeof(struct scsi_repsupopcode_all_commands_descriptor);
                         SC_DEBUG(periph, SCSIPI_DB3,
 				 ("0x%02x(%2d) ", acd->opcode, cdblen));
-			
+
 			tot->opcode_info[acd->opcode].ti_flags = SCSIPI_TI_VALID;
-			
+
                         if (acd->flags & RSOC_ACD_SERVACTV) {
                                 SC_DEBUGN(periph, SCSIPI_DB3,
 					 ("0x%02x%02x ",
@@ -1745,7 +1745,7 @@ scsipi_get_opcodeinfo(struct scsipi_periph *periph)
                         } else {
 				SC_DEBUGN(periph, SCSIPI_DB3, ("       "));
                         }
-			
+
                         if (acd->flags & RSOC_ACD_CTDP
 			    && dlen >= (int)sizeof(struct scsi_repsupopcode_timeouts_descriptor)) {
                                 struct scsi_repsupopcode_timeouts_descriptor *td
@@ -1800,20 +1800,20 @@ scsipi_update_timeouts(struct scsipi_xfer *xs)
 	u_int8_t cmd;
 	int timeout;
 	struct scsipi_opinfo *oi;
-	
+
 	if (xs->timeout <= 0) {
-		return;	
+		return;
 	}
-	
+
 	opcs = xs->xs_periph->periph_opcs;
-	
+
 	if (opcs == NULL) {
 		return;
 	}
-	
+
 	cmd = xs->cmd->opcode;
 	oi = &opcs->opcode_info[cmd];
-	
+
 	timeout = 1000 * (int)oi->ti_timeout;
 
 
@@ -3375,7 +3375,7 @@ scsipi_adapter_minphys(struct scsipi_channel *chan, struct buf *bp)
 static
 #endif
 void
-scsipi_adapter_request(struct scsipi_channel *chan, 
+scsipi_adapter_request(struct scsipi_channel *chan,
 	scsipi_adapter_req_t req, void *arg)
 
 {
