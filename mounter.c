@@ -1095,7 +1095,12 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	struct MountStruct ms;
 	int i, ret = 0;
 
-	ULONG unitNum[] = { 7,  0, 1, 2, 3, 4, 5, 6 };
+	ULONG unitNum[9];
+
+	/* Produce unitNum at runtime */
+	unitNum[0] = 8;
+	for (i=0; i<8; i++)
+		unitNum[i+1] = i;
 
 	printf("Mounter:\n");
 	ms.deviceName = real_device_name;
