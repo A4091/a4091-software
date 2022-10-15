@@ -376,6 +376,9 @@ static APTR fsrelocate(struct MountData *md)
 	while (hunkCnt <= totalHunks) {
 		ULONG hunkType;
 		if (!lseg_read_long(md, &hunkType)) {
+			if (hunkCnt >= totalHunks) {
+				break;  // normal end
+			}
 			goto end;
 		}
 		dbg("HUNK %08"PRIx32"\n", hunkType);
@@ -459,13 +462,17 @@ static APTR fsrelocate(struct MountData *md)
 			break;
 			case HUNK_END:
 			// do nothing
-			ret = 1;
-			goto end;
+			if (hunkCnt >= totalHunks) {
+				ret = 1;  // normal end
+				goto end;
+			}
+			break;
 			default:
 			dbg("Unexpected HUNK!\n");
 			goto end;
 		}
 	}
+        ret = 1;
 
 end:
 	if (!ret) {
