@@ -54,7 +54,14 @@
 #include "mounter.h"
 
 #define TRACE 1
+#undef TRACE_LSEG
 #define Trace printf
+
+#ifdef TRACE_LSEG
+#define dbg_lseg printf
+#else
+#define dbg_lseg(x...) do { } while (0)
+#endif
 
 #if TRACE
 #define dbg Trace
@@ -94,6 +101,7 @@ struct MountData
 	UBYTE buf[MAX_BLOCKSIZE * 3];
 	UBYTE zero[2];
 	BOOL wasLastDev;
+	BOOL wasLastLun;
 	int blocksize;
 };
 
@@ -211,7 +219,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		return FALSE;
 	}
 	ULONG v = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | (buf[3] << 0);
-	dbg("Read block %"PRIu32" %08"PRIx32"\n", block, v);
+	dbg_lseg("Read block %"PRIu32" %08"PRIx32"\n", block, v);
 	if (id != 0xffffffff) {
 		if (v != id) {
 			return FALSE;
@@ -226,7 +234,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 // Read multiple longs from LSEG blocks
 static BOOL lseg_read_longs(struct MountData *md, ULONG longs, ULONG *data)
 {
-	dbg("lseg_read_longs, longs %"PRId32"  ptr %p, remaining %"PRId32"\n", longs, data, md->lseglongs);
+	dbg_lseg("lseg_read_longs, longs %"PRId32"  ptr %p, remaining %"PRId32"\n", longs, data, md->lseglongs);
 	ULONG cnt = 0;
 	md->lseghasword = FALSE;
 	while (longs > cnt) {
@@ -249,7 +257,7 @@ static BOOL lseg_read_longs(struct MountData *md, ULONG longs, ULONG *data)
 			}
 			md->lseglongs = LSEG_DATASIZE;
 			md->lsegoffset = 0;
-			dbg("lseg_read_long lseg block %"PRId32" loaded, next %"PRId32"\n", md->lsegblock, md->lsegbuf->lsb_Next);
+			dbg_lseg("lseg_read_long lseg block %"PRId32" loaded, next %"PRId32"\n", md->lsegblock, md->lsegbuf->lsb_Next);
 			md->lsegblock = md->lsegbuf->lsb_Next;
 		}
 	}
@@ -268,7 +276,7 @@ static BOOL lseg_read_long(struct MountData *md, ULONG *data)
 	} else {
 		v = lseg_read_longs(md, 1, data);
 	}
-	dbg("lseg_read_long %08"PRIx32"\n", *data);
+	dbg_lseg("lseg_read_long %08"PRIx32"\n", *data);
 	return v;
 }
 // Read single word from LSEG blocks
@@ -830,6 +838,7 @@ static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 		partblock = ParsePART(buf, partblock, filesysblock, md);
 	}
 	md->wasLastDev = (flags & RDBFF_LAST) != 0;
+	md->wasLastLun = (flags & RDBFF_LASTLUN) != 0;
 	return md->ret;
 }
 
@@ -1022,16 +1031,13 @@ LONG MountDrive(struct MountStruct *ms)
 			if(port) {
 				request = (struct IOExtTD*)W_CreateIORequest(port, sizeof(struct IOExtTD), SysBase);
 				if(request) {
-					ULONG *unitNumP = ms->unitNum;
-					ULONG unitNumVal[2];
-					unitNumVal[0] = 1;
-					unitNumVal[1] = (ULONG)unitNumP;
-					if (unitNumVal[1] < 0x100) {
-						unitNumP = &unitNumVal[0];
-					}
-					ULONG unitNumCnt = *unitNumP++;
-					while (unitNumCnt-- > 0) {
-						ULONG unitNum = *unitNumP;
+					ULONG target;
+					ULONG lun = 0;
+					BOOL do_luns = 1;  // XXX: Get flag from DIP switches
+					for (target = 0; target < 8; target++, lun = 0) {
+						ULONG unitNum;
+next_lun:
+						unitNum = target + lun * 10;
 						dbg("OpenDevice('%s', %"PRId32", %p, 0)\n", ms->deviceName, unitNum, request);
 						UBYTE err = OpenDevice(ms->deviceName, unitNum, (struct IORequest*)request, 0);
 						if (err == 0) {
@@ -1061,17 +1067,17 @@ LONG MountDrive(struct MountStruct *ms)
 							}
 
 							CloseDevice((struct IORequest*)request);
-							*unitNumP++ = ret;
+							if (do_luns && (lun++ < 8) &&
+							    (!md->wasLastLun)) {
+								goto next_lun;
+							}
+
 							if (md->wasLastDev) {
-								while (unitNumCnt-- > 0) {
-									*unitNumP++ = -2;
-								}
 								dbg("RDBFF_LAST exit\n");
 								break;
 							}
 						} else {
 							dbg("OpenDevice(%s,%"PRId32") failed: %"PRId32"\n", ms->deviceName, unitNum, (BYTE)err);
-							*unitNumP++ = -1;
 						}
 					}
 					W_DeleteIORequest(request, SysBase);
