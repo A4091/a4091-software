@@ -25,6 +25,16 @@
 #define PRINTF_CALLOUT(args...)
 #endif
 
+// amiga-gcc falls over when the data segment is entirely
+// empty. Put one short there until we know what is going on.
+//
+// Compiling with -fbaserel will result in a linker error
+// otherwise:
+//
+//   relocation truncated to fit: DREL16 against `.bss'
+//
+short bug=TRUE;
+
 void
 panic(const char *fmt, ...)
 {

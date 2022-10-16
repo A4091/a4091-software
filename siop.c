@@ -142,7 +142,11 @@ const
 
 /* default to not inhibit sync negotiation on any drive */
 u_char siop_inhibit_sync[8] = { 0, 0, 0, 0, 0, 0, 0 }; /* initialize, so patchable */
+#ifndef PORT_AMIGA
 u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
+#else
+u_char siop_allow_disc[8];
+#endif
 int siop_no_disc = 0;  // Disable Synchronous SCSI when this flag is set
 int siop_no_dma = 0;   // Disable 53C710 DMA when this flag is set
 
@@ -675,6 +679,8 @@ siopinitialize(struct siop_softc *sc)
         for (i = 0; i < 8; ++i)
             if (sc->sc_nodisconnect & (1 << i))
                 siop_allow_disc[i] = 0;
+            else
+                siop_allow_disc[i] = 3;
     }
 #endif
     if (sc->sc_nosync) {
