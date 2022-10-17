@@ -105,11 +105,14 @@ bsd_splx(int ilevel)
 const char *
 device_xname(void *ptr)
 {
+#if 0
     device_t dev = ptr;
     if (dev == NULL)
         return ("SCSI");
     else
         return (dev->dv_xname);
+#endif
+        return ("A4091");
 }
 
 void __restore_a4(void)

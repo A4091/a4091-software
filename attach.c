@@ -327,7 +327,6 @@ init_chan(device_t self, UBYTE *boardnum)
     if ((rc = a4091_validate(dev_base)))
         return (rc);
 
-    CopyMem("a4091", self->dv_xname, 6);
 
     memset(sc, 0, sizeof (*sc));
     dip_switches = *(uint8_t *)(dev_base + 0x008c0003);

@@ -1894,7 +1894,6 @@ main(int argc, char *argv[])
         printf("  as_isr=%p\n", asave->as_isr);
         show_interrupt(4, asave->as_isr);
         printf("  as_exiting=%x\n", asave->as_exiting);
-        printf("  as_device_self=%p\n", &asave->as_device_self);
         printf("  as_device_private=%p\n", asave->as_device_private);
         struct siop_softc *sc = asave->as_device_private;
 //      printf("    sc_siop_si=%p\n", sc->sc_siop_si);

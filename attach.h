@@ -30,7 +30,6 @@ typedef struct {
     struct Task          *as_svc_task;
     struct Interrupt     *as_isr;         // My interrupt server
     volatile uint8_t      as_exiting;
-    struct device         as_device_self;
     struct siop_softc    *as_device_private;
     struct MsgPort       *as_timerport[2];
     struct timerequest   *as_timerio[2];

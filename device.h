@@ -22,7 +22,6 @@
 #define TDF_DEBUG_OPEN    (1<<7)  // Open unit in debug mode (no I/O)
 
 /*
- *
  * Unfortunately many of the above overlap with Unix-style error codes
  * (ENOMEM for example).
  *
@@ -59,10 +58,13 @@
  */
 
 extern struct MsgPort *myPort;
+extern char real_device_name[];
 
-typedef struct cfdata *cfdata_t;
+
 
 #if 0
+typedef struct cfdata *cfdata_t;
+
 /*
  * Configuration data (i.e., data placed in ioconf.c).
  */
@@ -76,14 +78,12 @@ struct cfdata {
     const struct cfparent *cf_pspec;/* parent specification */
 };
 
-#endif
 /* Max size of a device external name (including terminating NUL) */
 #define DEVICE_XNAME_SIZE       16
 
 struct device {
                                     /* external name (name + unit) */
     char            dv_xname[DEVICE_XNAME_SIZE];
-#ifndef PORT_AMIGA
     devhandle_t     dv_handle;      /* this device's handle;
                                        new device_t's get INVALID */
     devclass_t      dv_class;       /* this device's classification */
@@ -134,9 +134,7 @@ struct device {
         *dv_driver_suspensors[DEVICE_SUSPENSORS_MAX],
         *dv_class_suspensors[DEVICE_SUSPENSORS_MAX];
     struct device_garbage dv_garbage;
-#endif
 };
-
-extern char real_device_name[];
+#endif
 
 #endif /* _DEVICE_H */

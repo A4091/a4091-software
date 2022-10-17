@@ -527,7 +527,7 @@ CMD_SEEK_continue:
         case CMD_ATTACH:  // Attach (open) a new SCSI device
             PRINTF_CMD("CMD_ATTACH %"PRIu32"\n", iotd->iotd_Req.io_Offset);
 
-            rc = attach(&asave->as_device_self, iotd->iotd_Req.io_Offset,
+            rc = attach(NULL, iotd->iotd_Req.io_Offset,
                         (struct scsipi_periph **) &ior->io_Unit,
                         iotd->iotd_Req.io_Length);
             if (rc != 0) {
@@ -550,7 +550,7 @@ CMD_SEEK_continue:
 
         case CMD_TERM:
             PRINTF_CMD("CMD_TERM\n");
-            deinit_chan(&asave->as_device_self);
+            deinit_chan(NULL);
             close_timer();
             asave->as_isr = NULL;
             FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
@@ -681,12 +681,11 @@ cmd_handler(void)
         goto fail_allocmem2;
     }
 
-
     msg->io_Error = open_timer();
     if (msg->io_Error != 0)
         goto fail_timer;
 
-    msg->io_Error = init_chan(&asave->as_device_self, &msg->boardnum);
+    msg->io_Error = init_chan(NULL, &msg->boardnum);
     if (msg->io_Error != 0) {
         close_timer();
 fail_timer:
