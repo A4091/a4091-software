@@ -5,5 +5,6 @@
 #define DEVICE_REVISION 23
 
 extern const char *const version_str;
+extern const char device_id_string[];
 
 #endif

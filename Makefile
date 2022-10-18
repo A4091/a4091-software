@@ -57,7 +57,7 @@ CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
 CFLAGS  += -msmall-code
 CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
-CFLAGS += -mcpu=68020
+CFLAGS += -mcpu=68060
 
 CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os
 

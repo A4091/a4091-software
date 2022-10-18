@@ -36,9 +36,6 @@
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
 #define DEVICE_NAME "a4091.device"
-#define DEVICE_ID_STRING "a4091 " XSTR(DEVICE_VERSION) "." \
-        XSTR(DEVICE_REVISION) " (" BUILD_DATE ")"
-        /* format: "name version.revision (yyyy-mm-dd)" */
 
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
@@ -84,7 +81,6 @@ asm("romtag:                                \n"
     "endcode:                               \n");
 
 static const char device_name[]      = DEVICE_NAME;
-const char device_id_string[] = DEVICE_ID_STRING;
 char real_device_name[17];
 static struct SignalSemaphore entry_sem;
 int romboot = FALSE;

@@ -36,6 +36,7 @@
 #include "battmem.h"
 #include "amigahw.h"
 #include "ndkcompat.h"
+#include "version.h"
 #include "mounter.h" // for Port/IOReq wrappers
 
 extern struct ExecBase *SysBase;
@@ -169,7 +170,7 @@ static void page_header(struct NewGadget *ng, STRPTR title)
     ng->ng_TopEdge    = 183;
 
     SetAPen(rp,1);
-    Print("Welcome to your Amiga 4091 Zorro-III SCSI-II Host Controller",0,33,TRUE);
+    Print("Welcome to your Amiga 4091 Zorro-III SCSI-2 Host Controller",0,33,TRUE);
     Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,41,TRUE);
 }
 
@@ -297,17 +298,18 @@ static void dipswitch_page(void)
     page_footer();
 }
 
-extern const char device_id_string[];
 static void about_page(void)
 {
     struct NewGadget ng;
     page_header(&ng, "About A4091");
     SetAPen(&screen->RastPort, 1);
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
-    Print("Berlin and Terry Fisher for the A4091",118,76,FALSE);
-    Print("Original mounter by Toni Wilen",118,84,FALSE);
-    Print("Greetings to the Amiga community",118,92,FALSE);
-    Print("Only Amiga makes it possible.", 204,120,FALSE);
+    Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
+    Print("based on the NetBSD/Amiga SCSI subsystem and 53C710",118,84,FALSE);
+    Print("code by many fine contributors over the years.",118,92,FALSE);
+    Print("Original RDB mounter by Toni Wilen.",118,100,FALSE);
+    Print("Greetings to the Amiga community",118,122,FALSE);
+    Print("Only Amiga makes it possible.", 204,134,FALSE);
     Print((char *)device_id_string, 118,155,FALSE);
 
     ng.ng_LeftEdge   = 400;
