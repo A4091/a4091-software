@@ -170,7 +170,7 @@ static void page_header(struct NewGadget *ng, STRPTR title)
     ng->ng_TopEdge    = 183;
 
     SetAPen(rp,1);
-    Print("Welcome to your Amiga 4091 Zorro-III SCSI-2 Host Controller",0,33,TRUE);
+    Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,33,TRUE);
     Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,41,TRUE);
 }
 
@@ -561,7 +561,7 @@ static void debug_page(void)
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, cdrom_boot, TAG_DONE);
 
     ng.ng_TopEdge    = 76;
-    ng.ng_GadgetText = "Zorro-III magic speed hack";
+    ng.ng_GadgetText = "Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget_custom(CHECKBOX_KIND,
 		                     GA_Disabled, TRUE,
