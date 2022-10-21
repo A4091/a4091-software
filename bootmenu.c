@@ -145,7 +145,7 @@ static void Print(STRPTR text, UWORD x, UWORD y, int center)
     Text(rp,text,strlen(text));
 }
 
-static void page_header(struct NewGadget *ng, STRPTR title)
+static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
 {
     struct RastPort *rp = &screen->RastPort;
     if (gadgets)
@@ -169,9 +169,11 @@ static void page_header(struct NewGadget *ng, STRPTR title)
     ng->ng_Height     = 14;
     ng->ng_TopEdge    = 183;
 
-    SetAPen(rp,1);
-    Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,33,TRUE);
-    Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,41,TRUE);
+    if (welcome) {
+        SetAPen(rp,1);
+        Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,33,TRUE);
+        Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,41,TRUE);
+    }
 }
 
 static void page_footer(void)
@@ -277,7 +279,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
 static void dipswitch_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "A4091 Diagnostics - DIP switches");
+    page_header(&ng, "A4091 Diagnostics - DIP switches", TRUE);
 
     SetRGB4(&screen->ViewPort,3,11,8,8);
 
@@ -301,7 +303,7 @@ static void dipswitch_page(void)
 static void about_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "About A4091");
+    page_header(&ng, "About A4091", TRUE);
     SetAPen(&screen->RastPort, 1);
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
     Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
@@ -396,7 +398,7 @@ int scan_disks(void)
         ULONG lun = 0;
 next_lun:
         x=52;
-        y=82+(cnt*10);
+        y=52+(cnt*10);
 
         ULONG unitNum = i + lun * 10;
         printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
@@ -475,7 +477,7 @@ next_lun:
             }
             CloseDevice((struct IORequest*)request);
             cnt++;
-            if ((lun < 15) && (cnt < 12)) {
+            if ((lun < 15) && (cnt < 14)) {
                 lun++;
                 goto next_lun;
             }
@@ -490,21 +492,21 @@ next_lun:
 
 static const struct Rectangle disk_table[] =
 {
-    { 40, 58,560,118},
-    { 42, 59, 49, 12}, // Unit
-    { 42, 72, 49,103},
-    { 92, 59, 95, 12}, // Vendor
-    { 92, 72, 95,103},
-    {188, 59,175, 12}, // Device
-    {188, 72,175,103},
-    {364, 59, 49, 12}, // Revision
-    {364, 72, 49,103},
-    {414, 59, 71, 12}, // Type
-    {414, 72, 71,103},
-    {486, 59, 47, 12}, // ssize
-    {486, 72, 47,103},
-    {534, 59, 64, 12}, // Cap
-    {534, 72, 64,103}
+    { 40, 28,560,148},
+    { 42, 29, 49, 12}, // Unit
+    { 42, 42, 49,133},
+    { 92, 29, 95, 12}, // Vendor
+    { 92, 42, 95,133},
+    {188, 29,175, 12}, // Device
+    {188, 42,175,133},
+    {364, 29, 49, 12}, // Revision
+    {364, 42, 49,133},
+    {414, 29, 71, 12}, // Type
+    {414, 42, 71,133},
+    {486, 29, 47, 12}, // ssize
+    {486, 42, 47,133},
+    {534, 29, 64, 12}, // Cap
+    {534, 42, 64,133}
 };
 
 static void disks_page(void)
@@ -512,12 +514,12 @@ static void disks_page(void)
     struct NewGadget ng;
     int i;
     ULONG tag;
-    page_header(&ng, "A4091 Diagnostics - Disks");
+    page_header(&ng, "A4091 Diagnostics - Disks", FALSE);
 
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
     SetAPen(&screen->RastPort,2);
-    Print("Unit  Vendor      Device                Rev.  Type     Blk   Size",52,68,FALSE);
+    Print("Unit  Vendor      Device                Rev.  Type     Blk   Size",52,38,FALSE);
     SetAPen(&screen->RastPort,1);
 
     ng.ng_LeftEdge   = 400;
@@ -547,7 +549,7 @@ static void disks_page(void)
 static void debug_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "A4091 Diagnostics - Debug");
+    page_header(&ng, "A4091 Diagnostics - Debug", TRUE);
 
     BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
     SetRGB4(&screen->ViewPort,3,6,8,11);
@@ -667,7 +669,7 @@ static void main_page(void)
     struct NewGadget ng;
 
     SetRGB4(&screen->ViewPort,3,6,8,11);
-    page_header(&ng, "A4091 Early Startup Menu");
+    page_header(&ng, "A4091 Early Startup Menu", TRUE);
 
     draw_card(card, ARRAY_LENGTH(card));
 
