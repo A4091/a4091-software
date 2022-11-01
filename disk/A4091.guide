@@ -1,7 +1,7 @@
 @DATABASE "A4091"
 @$VER: A4091.guide 1.0 (9.10.2022)
 @(C) Stefan Reinauer & Chris Hooper
-@SMARTWRAP
+@WORDWRAP
 @AUTHOR Stefan Reinauer & Chris Hooper
 @INDEX Index
 @NODE MAIN "A4091 Guide"
@@ -24,6 +24,7 @@
 
 ____________________________________________________________________________
 
+
 @{BODY}
                         A4091 Master Guide
 
@@ -31,27 +32,17 @@ ____________________________________________________________________________
 Guide Version 1.0                               a4091.device Version 42.23
 
 
-@{"Licence      : Legal restrictions                                       " link Licence}
-
-@{"What is it   : What is the Amiga 4091?                                  " link A4091Overview}
-
-@{"Compatibility: Compatibility guidelines & Requirements                  " link Compatibility}
-
-@{"ROM Versions : What are all the available ROM versions                  " link ROMVersions}
-
-@{"Configuration: Early Startup Menu / Configuration                       " link Configuration}
-
-@{"Contents     : What's all in this stuff in this archive                 " link Contents}
-
-@{"Installation : How to install the A4091                                 " link Install}
-
-@{"FAQ          : Frequently Asked Questions.                              " link FAQ}
-
-@{"Credits      : And credits go to ...                                    " link Credits}
-
-@{"Glossary     : What does it all mean?                                   " link Glossary}
-
-@{"History      : How it all started                                       " link History}
+     @{"Licence      : Legal restrictions                                  " link Licence}
+     @{"What is it   : What is the Amiga 4091?                             " link A4091Overview}
+     @{"Compatibility: Compatibility guidelines & Requirements             " link Compatibility}
+     @{"ROM Versions : What are all the available ROM versions             " link ROMVersions}
+     @{"Configuration: Early Startup Menu / Configuration                  " link Configuration}
+     @{"Contents     : What's all in this stuff in this archive            " link Contents}
+     @{"Installation : How to install the A4091                            " link Install}
+     @{"FAQ          : Frequently Asked Questions.                         " link FAQ}
+     @{"Credits      : And credits go to ...                               " link Credits}
+     @{"Glossary     : What does it all mean?                              " link Glossary}
+     @{"History      : How it all started                                  " link History}
 
 ____________________________________________________________________________
 
@@ -92,7 +83,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 @ENDNODE
 
-@NODE A4091Overview "What's the A4091?"
+@NODE A4091Overview "What is the A4091?"
 
 The Amiga 4091 is one of only two SCSI-II controllers ever produced for
 the Amiga's ZorroIII bus.
@@ -121,18 +112,18 @@ in an Amiga 3000 as well, with a few extra caveats
 
 There are several ROM versions out there:
 
-o) v40.13 is the last release version by Commodore for the A4091. This
-   was the default version for the A4091 Rev II as sold by DKB
+ o) v40.13 is the last release version by Commodore for the A4091. This
+    was the default version for the A4091 Rev II as sold by DKB
 
-o) v40.8, v40.10 are older (Rev I) versions of the ROM by Commodore.
+ o) v40.8, v40.10 are older (Rev I) versions of the ROM by Commodore.
 
-o) v40.20 is a version of the ROM that has been floating around the
-   internet that has a few bugs fixed
+ o) v40.20 is a version of the ROM that has been floating around the
+    internet that has a few bugs fixed
 
-o) v42.23 is the Open Source driver for the A4091. It has been written
-   from scratch based on the BSD driver for the NCR53c710. It supports
-   driver larger than 4G and booting from CDROM (with a little extra
-   work)
+ o) v42.23 is the Open Source driver for the A4091. It has been written
+    from scratch based on the BSD driver for the NCR53c710. It supports
+    driver larger than 4G and booting from CDROM (with a little extra
+    work)
 
 @ENDNODE
 
@@ -146,13 +137,13 @@ buttons to get into the AmigaOS Early Startup Menu).
 
 Here you can
 
-o) See your connected SCSI devices without booting into AmigaOS
+  o) See your connected SCSI devices without booting into AmigaOS
 
-o) See the current DIP switch configuration
+  o) See the current DIP switch configuration
 
-o) Change debug settings (like turning CDROM boot on and off)
+  o) Change debug settings (like turning CDROM boot on and off)
 
-o) Some additional information about the card
+  o) Some additional information about the card
 
 @ENDNODE
 
@@ -168,6 +159,7 @@ Here's what's on this disk
         @{"a4091           " link A4091Tool}
         @{"a4091d          " link A4091D}
         @{"devtest         " link devtest}
+        @{"rdb             " link rdb}
 
 
 @{B}A4091.guide@{UB}
@@ -178,7 +170,90 @@ Here's what's on this disk
 
 @{B}Where is the source code?@{UB}
 
+
 You can find the source code at https://github.com/A4091/
+
+@ENDNODE
+
+@NODE A4091Tool "a4091 tool"
+
+1> a4091
+A4091 0.4 (Oct  9 2022) © Chris Hooper
+
+This tool will test an installed A4091 SCSI controller for correct operation.
+Options:
+	-a  specify card address (slot or physical address): <addr>
+	-c  decode device autoconfig area
+	-d  enable debug output
+	-D  perform DMA from/to Amiga memory: <src> <dst> <len>
+	-f  ignore fact enforcer is present
+	-h  display this help text
+	-k  kill (disable) active C= A4091 device driver
+	-L  loop until failure
+	-P  probe and list all detected A4091 cards
+	-r  display NCR53C710 registers
+	-s  decode device external switches
+	-t  test card
+1>
+
+@ENDNODE
+
+@NODE A4091D "a4091d debug tool"
+
+1> a4091d
+This tool is used to show a4091.device driver internal state.
+It does not work on any other driver.
+Usage:  a4091d [<unit>]
+        a4091d -p <periph address>
+        a4091d -x <xs address>
+1>
+
+@ENDNODE
+
+@NODE devtest "Amiga devtest tool"
+
+1> devtest
+You must specify an operation to perform
+devtest 1.3 (Oct 31 2022) © Chris Hooper
+
+usage: devtest <options> <x.device> <unit>
+   -b           benchmark device performance [-bb tests latency]
+   -c <cmd>     test a specific device driver request
+   -d           also do destructive operations (write)
+   -g           test drive geometry
+   -h           display help
+   -l <loops>   run multiple times
+   -m <addr>    use specific memory (<addr> Chip Fast 24Bit Zorro -=list)
+   -o           test open/close
+   -p           probe SCSI bus for devices
+   -t           test all packet types (basic, TD64, NSD) [-tt = more]
+1>
+
+@ENDNODE
+
+@NODE rdb "Amiga rdb tool"
+
+1> rdb
+rdb 1.2 (08-Feb-2018) © Chris Hooper
+Usage: rdb [options] {disk.device} [unit] [flags]
+    -rigid            Edit fields in the Rigid Disk Block
+    -part NAME        Modify partition table parameters of NAME
+    -newpart NAME     Add new partition NAME to the RDB
+    -promote NAME     Make partition NAME first to be mounted
+    -extract DOSTYPE  Extract filesystem to a file
+    -avail            Report next available block in RDB
+    -seglist          Show seglist addresses for filesystems
+    -help             Give more help
+    Other keywords:
+         HostID BlockBytes RigidFlags BadBlockList PartitionList
+         FileSysHeaderList DriveInit Cylinders Sectors Heads Interleave Park
+         WritePreComp ReducedWrite StepRate RDBBlocksLo RDBBlocksHi LoCylinder
+         HiCylinder CylBlocks AutoParkSeconds DiskVendor DiskProduct
+         DiskRevision ControllerVendor ControllerProduct ControllerRev
+         Next Flags DevFlags DriveName Surfaces BlocksPerTrack Reserved
+         PreAlloc Interleave LowCyl HighCyl NumBuffers BufMemType MaxTransfer
+         Mask BootPri DosType
+1>
 
 @ENDNODE
 
@@ -188,128 +263,120 @@ In order to partition your drives, you can use the partitioning tool of
 your choice, e.g. HDInstTool: https://aminet.net/package/disk/misc/hdinst
 or your AmigaOS' HDToolBox.
 
-o) In HDTOOLBOX you should edit your Tool types to point to the right device:
+  o) In HDTOOLBOX you should edit your Tool types to point to the right
+     device:
 
-@{CODE}
-SCSI_DEVICE_NAME=a4091.device
-@{BODY}
+       @{B}SCSI_DEVICE_NAME=a4091.device@{UB}
 
-o) To circumvent the 4GB limit in HDToolBox with the Commodore driver, replace
-@{CODE}
-(LIMIT_4GBYTE)
-@{BODY}
-with
-@{CODE}
-LIMIT_4GBYTE=OFF
-@{BODY}
+  o) To circumvent the 4GB limit in HDToolBox with the Commodore driver,
+     replace
+     @{B}(LIMIT_4GBYTE)@{UB} with @{B}LIMIT_4GBYTE=OFF@{UB}
 
-o) Note: You can also specify these parameters on the command line when
-starting HDToolBox from a Shell
+  o) Note: You can also specify these parameters on the command line when
+     starting HDToolBox from a Shell
 
 @ENDNODE
 
-@NODE FAQ "Frequently asked questions, did you check these?"
+@NODE FAQ "Frequently asked questions"
+
 
 Some questions we have come across so far. If you encounter an issue,
 please check here first before contacting us:
 
-
+____________________________________________________________________________
 
 Q:      Does the A4091 work with Kickstart 1.3
 
-
 A:      Honestly, we have never tried. The old Commodore driver expects
-to run at least on v39 (Kickstart 3.0). The Open Source driver might be
-fixed to run on 1.3, but is it really worth it? (Patches welcome)
-
+        to run at least on v39 (Kickstart 3.0). The Open Source driver might
+        be fixed to run on 1.3, but is it really worth it? (Patches welcome)
 ____________________________________________________________________________
-
 
 Q:      CDROM Booting doesn't work for me, what do I do?
 
-
 A:      Make sure you use BootCDFileSystem from the AmigaOS 4.1 installation
-disk.
-
+        disk.
 ___________________________________________________________________________
 
-
-Q:      All of a sudden, I can't boot from CD anymore but it worked
-before.
-
+Q:      All of a sudden, I can't boot from CD anymore but it worked before.
 
 A:      Please check whether you have the RDBFF_LAST flag is set in the
 RDB of your disk. If it is, the driver might just be ignoring all CDROM
 drives coming after this disk.
-
 ____________________________________________________________________________
 
+
 @ENDNODE
+
 @NODE Credits "Credits: Thanks to all who made this possible"
 
 The A4091 project was made possible by the awesome Amiga community.
 
 @{B}Thank you!@{UB}
+
 The project wouldn't have been possible without your encouragement and
 excitement, help and information out there.
 
 Special thanks:
 
-Dave Haynie:            For developing the Amiga 4091 in the first
+@{B}Dave Haynie@{UB}: For developing the Amiga 4091 in the first
 place, but also for releasing a ton of relevant information to the Amiga
 community and enabling this project.
 
-Toni Wilen:             For a feature complete "Mounter" when Stefan was
+@{B}Toni Wilen@{UB}: For a feature complete "Mounter" when Stefan was
 still struggling to understand how to incorporate new filesystems. Also,
 for lots of great information on the inner workings of AmigaOS and for
 putting up with Stefan's patches.
 
-Olaf Barthel:           For all the information, anecdotes and for
+@{B}Olaf Barthel@{UB}: For all the information, anecdotes and for
 trackfile.device, a complete device implementation that is part of the
 AmigaOS 3.2 NDK (and nobody seems to know about this)
 
-Szymon Gosk:            For creating A4091 compatible metal brackets and
+@{B}Szymon Gosk@{UB}: For creating A4091 compatible metal brackets and
 making the design available to the Amiga community.
 
-Tim Eyre:               For scanning an original Amiga 4091 manual for
-the project.
+@{B}Tim Eyre@{UB}: For scanning an original Amiga 4091 manual for the project.
 
-Paul Rezendes (Acill) and everybody on the Acill Classics Discord chat:
-                        You guys have built an amazing little community
+@{B}Paul Rezendes (Acill)@{UB} and everybody on the Acill Classics Discord chat:
+You guys have built an amazing little community
 of highly technical Amiga enthusiasts that is a joy to be around and
 getting inspired for projects like the ReA4091.
 
-Bernie Innocenti, Francis Bernier:
-                        For helping with box and disk pictures and dimensions.
+@{B}Bernie Innocenti, Francis Bernier@{UB}:
+For helping with box and disk pictures and dimensions.
 
 @ENDNODE
+
 @NODE Glossary "Glossary"
-@{CODE}
+
+Zorro           :       The Expansion Bus in your Amiga. Like PCI, it is
+                        fully auto configuring. Zorro exists in two
+                        versions: Zorro-II, which is 16 bits wide, and
+                        available on the A2000, and Zorro-III, which is
+                        a full 32-bit wide bus deployed on the Amiga 3000
+                        and Amiga 4000.
+
+
 
 Super Buster    :       The custom chip that handles translation between
                         the 68030 FAST LOCAL BUS and the Zorro-III bus.
                         It is not worth selling your kidney for, but
                         there is still hope for a revision 12 some day.
 
-Zorro           :       The Expansion Bus in your Amiga. Like PCI, it is
-                        fully auto configuring. Zorro exists in two
-			versions: Zorro-II, which is 16 bits wide, and
-			available on the A2000, and Zorro-III, which is
-			a 32 bit wide bus deployed on the Amiga 3000 and
-			Amiga 4000.
-
 @ENDNODE
-
 @NODE History "History: How did it all begin?"
+
+@{B}Version History@{UB}
 
 Release 42.23:
 
-Initial release. Can't believe we got this far.
-
+  o) Initial release. Can't believe we got this far.
 
 @ENDNODE
 @NODE INDEX "Index"
+
 @{CODE}
+
         C...
 
         @{"Compatibility Guidelines" link COMPATIBILITY}
