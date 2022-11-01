@@ -36,6 +36,21 @@ ROM_VECTOR     EQU     $0200      ; $80 in the ROM maps to $200 in the system
 
         CODE
 
+
+* Define DRIVER_BOOT_CRASH_DEBUG to enable debug where driver will
+* "fail" to load 1 out of 4 tries. It writes specific registers to
+* fixed Physical addresses in fast memory. These are:
+*   0x07770000 The try count (only the bottom two bits matter here)
+*   0x07770004 A0 board base address
+*   0x07770008 A1
+*   0x0777000c A2 Diag/init base address
+*   0x07770010 A3 board configdev structure
+*   0x07770014 A4
+*   0x07770018 A5
+*   0x0777001c A6
+* DRIVER_BOOT_CRASH_DEBUG EQU 1
+
+
 *******  RomStart  ***************************************************
 **********************************************************************
 
@@ -136,7 +151,20 @@ DiagEntry
         bsr     _relocate
         tst.l   d0
         bne.s   .ok
-        move.w  #$0f00,$dff180               ; flash screen red (error)
+
+        *******  Show checkered purple failure screen **************************
+        movem.l d2-d3,-(sp)
+        move.w  #$0020,d2
+.fc1
+        move.w  #$ffff,d3
+.fc2
+        move.w  #$0000,$dff180               ; black
+        move.w  #$0f0c,$dff180               ; purple
+        dbra    d3,.fc2
+        dbra    d2,.fc1
+        movem.l (sp)+,d2-d3
+        *******  End checkered purple failure screen **************************
+
         moveq.l #0,d0
         movem.l (sp)+,d2-d7/a2-a6
         rts
@@ -158,8 +186,23 @@ DiagEntry
         movem.l (sp)+,d2-d7/a2-a6
         ENDIF
         moveq.l #1,d0           ; indicate "success"
-        rts
 
+        IFD DRIVER_BOOT_CRASH_DEBUG
+        *******  Debug driver boot crash *********
+        movem.l a0/d1,-(sp)
+        move.l  #_device,d1
+        move.l  a0,d1
+        move.l  #$07770020,a0
+        movem.l d1/a1-a6,-(a0)
+        subi    #1,-(a0)
+        move.l  (a0),d1
+        and.l   #$03,d1
+        bne     .ok_to_boot
+        moveq.l #0,d0           ; indicate "fail"
+.ok_to_boot
+        movem.l (sp)+,a0/d1
+        ENDIF
+        rts
 
 *******  BootEntry  **************************************************
 **********************************************************************

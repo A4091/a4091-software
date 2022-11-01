@@ -581,14 +581,14 @@ CMD_SEEK_continue:
             break;
 
         case TD_MOTOR:         // Turn the drive motor on or off
+        case CMD_UPDATE:       // Flush data to disk
+        case CMD_CLEAR:        // Force re-read of disk data (drop track buffer)
             /* Just reply with success, like the C= scsi.device does */
             ReplyMsg(&ior->io_Message);
             break;
 
         case CMD_INVALID:      // Invalid command (0)
         case CMD_RESET:        // Not supported by SCSI
-        case CMD_UPDATE:       // Not supported by SCSI
-        case CMD_CLEAR:        // Not supported by SCSI
         case CMD_FLUSH:        // Not supported by SCSI
         case TD_RAWREAD:       // Not supported by SCSI (raw bits from disk)
         case TD_RAWWRITE:      // Not supported by SCSI (raw bits to disk)

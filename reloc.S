@@ -218,7 +218,7 @@ _relocate
 ; ---------------------
 
 ; +--------------------+
-; | seg length (longs) | <-- = pHunks[x+4]
+; | seg length (longs) | <-- = pHunks[x+NUM_ENTRIES]
 ; +--------------------+ <-- seglist returned
 ; | bptr to next seg   | <-- = pHunks[x+1]
 ; +--------------------+ <-- pHunks[x] points here

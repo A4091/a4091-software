@@ -277,11 +277,23 @@ a4091_validate(uint32_t dev_base)
         rp->siop_scratch2 = patt;
         rp->siop_temp2 = next;
 
-#if 0
-        /* 68030 cache write-allocate mode bug work-around */
+        /*
+         * The cache line flushes below serve two purposes:
+         * 1) 68040 cache might still be on for the Zorro region during
+         *    pre-boot init. This can cause the wrong values to be read
+         *    from the scratch and test registers the writes to the
+         *    shadow registers do not update the cached values of the
+         *    primary registers.
+         * 2) 68030 cache write-allocate mode bug work-around. This is
+         *    where even if the cache is disabled for a region, the CPU
+         *    in rare cases might allocate a cache line on write.
+         *    This is actually not needed for 68030 because this code
+         *    does not write to the same register address as what it
+         *    reads (shadow registers of the 53C710 in the A4091 are
+         *    used for the write accesses).
+         */
         CacheClearE((void *)(&rp->siop_scratch), 4, CACRF_ClearD);
         CacheClearE((void *)(&rp->siop_temp), 4, CACRF_ClearD);
-#endif
 
         got_scratch = rp->siop_scratch;
         got_temp = rp->siop_temp;
@@ -291,9 +303,13 @@ a4091_validate(uint32_t dev_base)
             if (got_scratch != patt) {
                 printf(" scratch %08x != %08x [%08x]",
                        got_scratch, patt, got_scratch ^ patt);
+                panic("Hardware test failure\n  SCRATCH %08lx != %08lx [%08lx]",
+                       got_scratch, patt, got_scratch ^ patt);
             }
             if (got_temp != next) {
                 printf(" temp %08x != %08x [%08x]",
+                       got_temp, next, got_temp ^ next);
+                panic("Hardware test failure\n  TEMP %08lx != %08lx [%08lx]",
                        got_temp, next, got_temp ^ next);
             }
             printf("\n");

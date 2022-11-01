@@ -166,7 +166,6 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         printf("Start handler failed\n");
         dev->lib_OpenCnt--;
         ReleaseSemaphore(&entry_sem);
-        CloseLibrary((struct Library *)ExpansionBase);
         return (NULL);
     }
 
@@ -349,13 +348,16 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 
     struct Library *mydev = MakeLibrary((ULONG *)&device_vectors, NULL,
             (APTR)init_device, sizeof(struct Library), seg_list);
-    AddDevice((struct Device *)mydev);
 
-    if (romboot) {
-        parse_romfiles();
-        add_cdromfilesystem();
-        mount_drives(asave->as_cd, dev);
-        boot_menu();
+    if (mydev != NULL) {
+        AddDevice((struct Device *)mydev);
+
+        if (romboot) {
+            parse_romfiles();
+            add_cdromfilesystem();
+            mount_drives(asave->as_cd, dev);
+            boot_menu();
+        }
     }
 
     return mydev;

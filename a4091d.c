@@ -83,6 +83,7 @@ usage(void)
     printf("This tool is used to show " DEVICE_NAME " driver internal state.\n"
            "It does not work on any other driver.\n"
            "Usage:  a4091d [<unit>]\n"
+           "        a4091d -c   -- show 68040 special registers\n"
            "        a4091d -p <periph address>\n"
            "        a4091d -x <xs address>\n");
 }
@@ -132,6 +133,49 @@ print_bits(bitdesc_t *bits, uint nbits, uint value)
                 printf(" %s", bits[bit]);
         }
     }
+}
+
+#define SUPERVISOR_STATE_ENTER() { \
+                                   APTR old_stack = SuperState()
+#define SUPERVISOR_STATE_EXIT()    UserState(old_stack); \
+                                 }
+static void
+show_cpu_regs(void)
+{
+    uint32_t value;
+    uint     cur = 0;
+    static const char *const regnames[] = {
+        "ITT0", "ITT1", "DTT0", "DTT1",
+        "TC", "URP", "SRP", "VBR",
+        "SFC", "DFC"
+    };
+    uint32_t values[ARRAY_SIZE(regnames)];
+
+    SUPERVISOR_STATE_ENTER();
+    asm("movec.l ITT0,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l ITT1,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l DTT0,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l DTT1,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l TC,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l URP,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l SRP,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l VBR,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l SFC,%0" : "=r" (value));
+    values[cur++] = value;
+    asm("movec.l DFC,%0" : "=r" (value));
+    values[cur++] = value;
+    SUPERVISOR_STATE_EXIT();
+
+    for (cur = 0; cur < ARRAY_SIZE(regnames); cur++)
+        printf("%4s=%08x\n", regnames[cur], values[cur]);
 }
 
 static const char *
@@ -1648,6 +1692,9 @@ main(int argc, char *argv[])
         if (*ptr == '-') {
             while (*(++ptr) != '\0') {
                 switch (*ptr) {
+                    case 'c':
+                        show_cpu_regs();
+                        exit(0);
                     case 'p': {
                         if (++arg > argc) {
                             printf("-%c requires an argument\n", *ptr);
