@@ -35,6 +35,22 @@
 #include "battmem.h"
 #include "ndkcompat.h"
 
+/*
+ * NewMinList
+ * ----------
+ * Exec V45+ contains the NewMinList function
+ * But this is not available in Kickstart 3.1
+ * So we undefine the NDK function and implement it ourselves. 
+ */
+#undef NewMinList
+void NewMinList(struct MinList * list)
+{
+    list->mlh_Tail     = NULL;
+    list->mlh_Head     = (struct MinNode *)&list->mlh_Tail;
+    list->mlh_TailPred = (struct MinNode *)list;
+}
+
+
 void scsipi_free_all_xs(struct scsipi_channel *chan);
 
 #define ZORRO_MFG_COMMODORE     0x0202
