@@ -286,8 +286,9 @@ RomFetch
 .nextnip
         lsl.l   #8,d0
         move.b  (a0),d1
-        and.b   #$f0,d1
+        and.l   #$f0,d1
         move.b  2(a0),d2
+        and.l   #$f0,d2
         lsr.w   #4,d2
         or.b    d1,d2
 
