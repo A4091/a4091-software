@@ -191,4 +191,14 @@ distclean: clean
 	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM)
 	$(QUIET)rm -r $(OBJDIR)
 
-.PHONY: verbose
+lha: all
+	@VER=$$(awk '/define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
+	echo Creating a4091_$$VER.lha ;\
+	mkdir a4091_$$VER ;\
+	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) a4091_$$VER ;\
+	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
+	cat dist.README.txt >>a4091_$$VER/README.txt ;\
+	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
+	rm -rf a4091_$$VER
+
+.PHONY: verbose all

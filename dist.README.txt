@@ -1,0 +1,9 @@
+
+This is a build of the open source device driver for the
+Commodore A4091 SCSI2 controller.
+
+Source repository:
+    https://github.com/A4091/a4091-software
+
+A4091 SCSI II Host Controller on Github
+    https://github.com/A4091
