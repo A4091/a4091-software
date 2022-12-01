@@ -832,12 +832,12 @@ a4091_remove_driver_from_devlist(void)
     do {
         cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
         if (cdev != NULL) {
-            if (pos == count) {
+            count++;
+            if ((pos == 0) || (pos == count)) {
                 addr = (uint32_t) cdev->cd_BoardAddr;
                 printf("found %08x %p %p\n", addr, cdev, cdev->cd_Driver);
                 break;
             }
-            count++;
         }
     } while (cdev != NULL);
 
@@ -935,7 +935,7 @@ a4091_state_takeover(void)
         a4091_add_local_irq_handler();
         a4091_disable_driver_irq_handler(0);
 
-        a4091_save.reg_istat = get_ncrreg8(REG_ISTAT);
+        a4091_save.reg_istat = 0;
 
 #if 0
         /* Stop SCRIPTS processor */
@@ -954,14 +954,6 @@ a4091_state_takeover(void)
         }
 #endif
 
-#if 1
-        /* Soft reset SCRIPTS processor (SIOP) */
-        if (runtime_flags & FLAG_DEBUG)
-            printf("Soft resetting SIOP\n");
-        set_ncrreg8(REG_ISTAT, a4091_save.reg_istat | REG_ISTAT_RST);
-        (void) get_ncrreg8(REG_ISTAT);
-        set_ncrreg8(REG_ISTAT, a4091_save.reg_istat);
-#endif
 #if 0
         a4091_save.reg_dcntl = get_ncrreg8(REG_DCNTL);
         set_ncrreg8(REG_DCNTL, a4091_save.reg_dcntl | REG_DCNTL_SSM);
@@ -974,14 +966,18 @@ a4091_state_takeover(void)
         }
 #endif
 
-        /* Reset NCR 53C710 */
-        set_ncrreg8(REG_ISTAT, a4091_save.reg_istat | REG_ISTAT_RST);
+        /* Soft reset 53C710 SCRIPTS processor (SIOP) */
+        if (runtime_flags & FLAG_DEBUG)
+            printf("Soft resetting SIOP\n");
+        set_ncrreg8(REG_ISTAT, REG_ISTAT_RST);
+        (void) get_ncrreg8(REG_ISTAT);
 
         tick_start = read_system_ticks();
         while ((get_ncrreg8(REG_ISTAT) & REG_ISTAT_RST) == 0)
-            if (access_timeout("ISTAT_RST timeout", 2, tick_start))
+            if (access_timeout("ISTAT_RST timeout", 4, tick_start))
                 break;
 
+        /* Clear reset state */
         set_ncrreg8(REG_ISTAT, a4091_save.reg_istat & ~REG_ISTAT_RST);
 
 #if 0
@@ -1665,10 +1661,11 @@ test_device_access(void)
 
     /* Verify autoconfig area header contents */
     for (pass = 0; pass < 100; pass++) {
-        tick_start = read_system_ticks();
         for (i = 0; i < NUM_ZORRO_EXPECTED_REGS; i++) {
-            uint8_t regval = get_creg(i * 4);
-            if (access_timeout("\n53C710 loop access timeout", 4, tick_start)) {
+            uint8_t regval;
+            tick_start = read_system_ticks();
+            regval = get_creg(i * 4);
+            if (access_timeout("\n53C710 loop access timeout", 1, tick_start)) {
                 rc = 1;
                 goto fail;
             }
@@ -1799,6 +1796,9 @@ test_register_access(void)
                        got_temp, next, diff_t);
             }
         }
+        /* Change pattern */
+        if (rot == 128)
+            next = ~0xf0e7c0a5;
     }
     pins_diff &= ~(stuck_high | stuck_low);
     if (stuck_high != 0) {
@@ -2981,9 +2981,9 @@ a4091_list(uint32_t addr)
     do {
         cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
         if (cdev != NULL) {
+            count++;
             if (((addr > 0x10) && ((uint32_t) cdev->cd_BoardAddr != addr)) ||
-                ((addr <= 0x10) && (count != addr))) {
-                count++;
+                ((addr > 0) && (addr <= 0x10) && (count != addr))) {
                 continue;
             }
             if (did_header == 0) {
@@ -2991,7 +2991,8 @@ a4091_list(uint32_t addr)
                 printf("  Index Address  Size     Flags\n");
             }
             printf("  %-3d   %08x %08"PRIx32,
-                   count, (uint32_t) cdev->cd_BoardAddr, cdev->cd_BoardSize);
+                   count, (uint32_t) cdev->cd_BoardAddr,
+                   cdev->cd_BoardSize);
             if (cdev->cd_Flags & CDF_SHUTUP)
                 printf(" ShutUp");
             if (cdev->cd_Flags & CDF_CONFIGME)
@@ -3007,7 +3008,6 @@ a4091_list(uint32_t addr)
                     printf(" prod %s", cbind.cb_ProductString);
             }
             printf("\n");
-            count++;
         }
     } while (cdev != NULL);
 
@@ -3042,11 +3042,11 @@ a4091_find(uint32_t pos)
     do {
         cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
         if (cdev != NULL) {
-            if (pos == count) {
+            count++;
+            if ((pos == 0) || (pos == count)) {
                 addr = (uint32_t) cdev->cd_BoardAddr;
                 break;
             }
-            count++;
         }
     } while (cdev != NULL);
 
