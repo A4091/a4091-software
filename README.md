@@ -54,18 +54,22 @@ instead of the Open Source version. To do that, you will need the extracted
 driver in your build directory named `a3090.ld_strip` and `COMMODORE_DEVICE`
 enabled in the build flags.
 
-It is also possible to compile the ROM image without a driver at all. This is
-useful if you want to load the driver off a floppy disk but still want a ROM
-image so that the A4091 card shows up during AutoConfig(tm). In that case,
-enable `NO_DEVICE`:
 
 ```
 # Enable to put the original Commodore driver into the ROM
 # (You will have to extract it yourself)
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
 #ROMDRIVER := -DNO_DEVICE=1
-```
 
+```
+It is also possible to compile the ROM image without a driver at all. This is
+useful if you want to load the driver off a floppy disk but still want a ROM
+image so that the A4091 card shows up during AutoConfig(tm). It's also useful
+if you want to use `a4091 -t` to run diagnostics on a card, since that utility
+will operate in conflict with a driver. In that case, enable `NO_DEVICE`:
+ROMDRIVER := -DNO_DEVICE=1
+
+```
 Last but not least, this A4091 driver supports booting from CDROM (beta alert).
 In order to achieve that, you will need `BootCDFileSystem` from your Amiga
 Forever CD or the AmigaOS 4.x Boot Floppy. With that file in your source

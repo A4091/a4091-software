@@ -65,6 +65,8 @@ CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
 # (You will have to extract it yourself)
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
 #ROMDRIVER := -DNO_DEVICE=1
+# Adding -DNO_DEVICE=1 by itself will cause a ROM image to be built
+# without any driver. This is useful for board testing with "a4091 -t"
 
 #CDFILESYSTEM := -DCDFS=1
 
