@@ -1,0 +1,24 @@
+name: A4091 software CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container: sebastianbergmann/amiga-gcc
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build a4091.device
+      run: make a4091.device
+
+    - name: Build a4091.rom
+      run: make a4091.rom
+      
+    
