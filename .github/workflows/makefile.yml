@@ -10,7 +10,7 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    container: sebastianbergmann/amiga-gcc
+    container: stefanreinauer/amiga-gcc
 
     steps:
     - uses: actions/checkout@v3
@@ -20,5 +20,5 @@ jobs:
 
     - name: Build a4091.rom
       run: make a4091.rom
-      
-    
+
+
