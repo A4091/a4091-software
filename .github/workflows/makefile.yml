@@ -29,3 +29,9 @@ jobs:
 
     - name: Build LHA archive
       run: make lha
+
+    - name: Archive code coverage results
+      uses: actions/upload-artifact@v2
+      with:
+        name: Driver Pack (LHA)
+        path: a4091_??.??.lha
