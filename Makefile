@@ -201,6 +201,6 @@ lha: all
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
-	rm -rf a4091_$$VER
+	rm -rf a4091_$$VER ; cp a4091_$$VER.lha a4091_driver.lha
 
 .PHONY: verbose all
