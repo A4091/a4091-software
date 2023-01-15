@@ -34,4 +34,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Driver Pack (LHA)
-        path: a4091_??.??.lha
+        path: a4091_*.lha
