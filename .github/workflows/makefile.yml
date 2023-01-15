@@ -21,4 +21,11 @@ jobs:
     - name: Build a4091.rom
       run: make a4091.rom
 
+    - name: Build a4091 tool
+      run: make a4091
 
+    - name: Build a4091d tool
+      run: make a4091d
+
+    - name: Build LHA archive
+      run: make lha
