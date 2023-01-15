@@ -156,7 +156,7 @@ $(OBJDIR)/rom.o: rom.S reloc.S Makefile
 
 $(OBJDIR)/reloc.o: reloc.S
 	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
 
 $(OBJDIR)/assets.o: assets.S $(PROG) Makefile
 	@echo Building $@

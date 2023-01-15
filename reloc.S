@@ -76,7 +76,7 @@ _relocate
 
         ; We don't know this hunk
 .RelocateFail
-        IFD HAVE_RERRNO
+        IFD HAVE_ERRNO
         ; Save hunk number in rErrno as error code
         lea     _rErrno(pc),a0
         move.l  d0,(a0)
