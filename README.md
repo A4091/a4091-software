@@ -60,16 +60,17 @@ enabled in the build flags.
 # (You will have to extract it yourself)
 #ROMDRIVER := -DCOMMODORE_DEVICE=1
 #ROMDRIVER := -DNO_DEVICE=1
-
 ```
+
 It is also possible to compile the ROM image without a driver at all. This is
 useful if you want to load the driver off a floppy disk but still want a ROM
 image so that the A4091 card shows up during AutoConfig(tm). It's also useful
 if you want to use `a4091 -t` to run diagnostics on a card, since that utility
 will operate in conflict with a driver. In that case, enable `NO_DEVICE`:
-ROMDRIVER := -DNO_DEVICE=1
-
 ```
+ROMDRIVER := -DNO_DEVICE=1
+```
+
 Last but not least, this A4091 driver supports booting from CDROM (beta alert).
 In order to achieve that, you will need `BootCDFileSystem` from your Amiga
 Forever CD or the AmigaOS 4.x Boot Floppy. With that file in your source
