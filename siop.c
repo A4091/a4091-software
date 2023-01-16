@@ -545,6 +545,20 @@ siop_scsidone(struct siop_acb *acb, int stat)
         }
         SIOP_TRACE('d','n',stat,0);
     }
+
+#ifdef PORT_AMIGA
+    /*
+     * Call CachePostDMA here once for the whole buffer, even if it took multiple CachePreDMA calls with DMA_Continue flag
+     *
+     * Source: The MuLib Programmer’s Manual Page 40-41
+     * http://aminet.net/package/docs/misc/MuManual
+     *
+     */
+    if (acb->iob_buf != NULL && acb->iob_len != 0) {
+        CachePostDMA(&acb->iob_buf, (LONG *)&acb->iob_len, 0);
+    }
+#endif
+
     /* Put it on the free list. */
     acb->flags = ACB_FREE;
     TAILQ_INSERT_HEAD(&sc->free_list, acb, chain);
@@ -974,7 +988,14 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     addr = buf;
     dmaend = NULL;
 #ifdef PORT_AMIGA
-    ULONG flags = DMA_ReadFromRAM;
+    /* 
+     * ReadFromRAM should only be set when writing to the device
+     * When this flag is set, CachePreDMA doesn't turn off copyback mode
+     * Maybe there's some way to know here what the direction of the transfer is?
+     * We also need to match this flag at the other side
+     */
+    //ULONG flags = DMA_ReadFromRAM;
+    ULONG flags = 0;
 #endif
 
     while (count > 0) {
@@ -1036,10 +1057,8 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 
     /* push data cache for all data the 53c710 needs to access */
 #ifdef PORT_AMIGA
-    ULONG length = sizeof (struct siop_acb);
-    CachePreDMA(acb, &length, DMA_ReadFromRAM);
-    length = clen;
-    CachePreDMA(cbuf, &length, DMA_ReadFromRAM);
+    CacheClearE(acb,sizeof(struct siop_acb),CACRF_ClearD);
+    CacheClearE(cbuf,clen,CACRF_ClearD);
 #else
     dma_cachectl ((void *)acb, sizeof (struct siop_acb));
     dma_cachectl (cbuf, clen);
@@ -1317,8 +1336,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             sc->sc_sync[target].state = NEG_DONE;
         }
 #ifdef PORT_AMIGA
-        ULONG length = 1;
-        CachePostDMA(&acb->stat[0], &length, 0);
+        CacheClearE(&acb->stat[0], 1, CACRF_ClearD);
 #else
         dma_cachectl(&acb->stat[0], 1);
 #endif
@@ -1441,8 +1459,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
 #endif
 #ifdef PORT_AMIGA
-            ULONG length = sizeof (*acb);
-            CachePreDMA(acb, &length, DMA_ReadFromRAM);
+            CacheClearE(acb,sizeof(*acb),CACRF_ClearD);
 #else
             dma_cachectl ((void *)acb, sizeof(*acb));
 #endif
@@ -1640,8 +1657,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             if (j < DMAMAXIO)
                 acb->ds.chain[j].datalen = 0;
 #ifdef PORT_AMIGA
-            ULONG length = sizeof (acb->ds.chain);
-            CachePreDMA(&acb->ds.chain, &length, 0);
+            CacheClearE(&acb->ds.chain, sizeof(acb->ds.chain), CACRF_ClearD);
 #else
             /* Push and invalidate data cache line */
             DCIAS(kvtop((void *)&acb->ds.chain));
@@ -1703,8 +1719,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             sc->sc_flags |= acb->status;
             acb->status = 0;
 #ifdef PORT_AMIGA
-            ULONG length = sizeof (acb->stat[0]);
-            CachePreDMA(&acb->stat[0], &length, 0);
+            CacheClearE(&acb->stat[0], sizeof(acb->stat[0]), CACRF_ClearD);
 #else
             DCIAS(kvtop(&acb->stat[0]));
 #endif
@@ -1727,8 +1742,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #endif
         }
 #ifdef PORT_AMIGA
-        ULONG length = sizeof (*acb);
-        CachePreDMA(acb, &length, DMA_ReadFromRAM);
+        CacheClearE(acb, sizeof(*acb), CACRF_ClearD);
 #else
         dma_cachectl ((void *)acb, sizeof(*acb));
 #endif
@@ -1778,8 +1792,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         }
         /* Unrecognized message in byte */
 #ifdef PORT_AMIGA
-        ULONG length = 1;
-        CachePostDMA(&acb->msg[1], &length, 0);
+        CacheClearE(&acb->msg[1], 1, CACRF_ClearD);
 #else
         dma_cachectl (&acb->msg[1],1);
 #endif
@@ -1787,8 +1800,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             device_xname(sc->sc_dev), rp->siop_sfbr, acb->msg[1], rp->siop_sbcl);
         /* what should be done here? */
 #ifdef PORT_AMIGA
-        length = sizeof (acb->msg[1]);
-        CachePreDMA(&acb->msg[1], &length, 0);
+        CacheClearE(&acb->msg[1], sizeof(acb->msg[1]), CACRF_ClearD);
 #else
         DCIAS(kvtop(&acb->msg[1]));
 #endif
@@ -1812,9 +1824,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             goto fail_return;
         } else {
 #ifdef PORT_AMIGA
-            ULONG length = 1;
-            CachePostDMA(&acb->stat[0], &length, 0);
-            CachePostDMA(&acb->msg[0], &length, 0);
+            CacheClearE(&acb->stat[0], 1, CACRF_ClearD);
+            CacheClearE(&acb->msg[0], 1, CACRF_ClearD);
 #else
             dma_cachectl (&acb->stat[0], 1);
             dma_cachectl (&acb->msg[0], 1);
@@ -1966,8 +1977,7 @@ siopintr(register struct siop_softc *sc)
 #ifdef DEBUG
     if (siop_debug & 5) {
 #ifdef PORT_AMIGA
-        LONG length = sizeof (sc->sc_nexus->stat[0]);
-        CachePreDMA(&sc->sc_nexus->stat[0], &length, 0);
+        CacheClearE(&sc->sc_nexus->stat[0], sizeof(sc->sc_nexus->stat[0]), CACRF_ClearD);
 #else
         DCIAS(kvtop(&sc->sc_nexus->stat[0]));
 #endif
