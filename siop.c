@@ -554,7 +554,9 @@ siop_scsidone(struct siop_acb *acb, int stat)
      * http://aminet.net/package/docs/misc/MuManual
      *
      */
-    CachePostDMA(&acb->iob_buf, (LONG *)&acb->iob_len, 0);
+    if (acb->iob_buf != NULL && acb->iob_len != 0) {
+        CachePostDMA(&acb->iob_buf, (LONG *)&acb->iob_len, 0);
+    }
 #endif
 
     /* Put it on the free list. */
