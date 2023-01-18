@@ -4,6 +4,9 @@ TIME    := $(lastword $(NOW))
 
 OBJDIR  := objs
 ROM	:= a4091.rom
+ROM_ND	:= a4091_nodriver.rom
+ROM_CD	:= a4091_cdfs.rom
+ROM_COM	:= a4091_commodore.rom
 PROG	:= a4091.device
 PROGU	:= a4091
 PROGD	:= a4091d
@@ -17,6 +20,10 @@ OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
+OBJSROM := $(OBJDIR)/rom.o $(OBJDIR)/assets.o
+OBJSROM_ND  := $(OBJSROM:%.o=%_nd.o)
+OBJSROM_CD  := $(OBJSROM:%assets.o=%assets_cdfs.o)
+OBJSROM_COM := $(OBJSROM:%.o=%_com.o)
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -40,7 +47,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 # Per file debugging
 #CFLAGS  += -DDEBUG_ATTACH      # Debug attach.c
 #CFLAGS  += -DDEBUG_DEVICE      # Debug device.c
-#CFLAGS  += -DDEBUG_CMDHANDLER  # Debug commandhandler.c
+#CFLAGS  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
 #CFLAGS  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
 #CFLAGS  += -DDEBUG_PORT        # Debug port.c
 #CFLAGS  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
@@ -60,15 +67,6 @@ CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
 CFLAGS += -mcpu=68060
 
 CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
-
-# Enable to put the original Commodore driver into the ROM
-# (You will have to extract it yourself)
-#ROMDRIVER := -DCOMMODORE_DEVICE=1
-#ROMDRIVER := -DNO_DEVICE=1
-# Adding -DNO_DEVICE=1 by itself will cause a ROM image to be built
-# without any driver. This is useful for board testing with "a4091 -t"
-
-#CDFILESYSTEM := -DCDFS=1
 
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
 LDFLAGS        = -nostartfiles -nostdlib -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
@@ -102,7 +100,14 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROGU) $(PROGD) $(ROM)
+all: $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
+
+ifneq (,$(wildcard BootCDFileSystem))
+all: $(ROM_CD)
+endif
+ifneq (,$(wildcard a3090.ld_strip))
+all: $(ROM_COM)
+endif
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -117,6 +122,9 @@ $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS) $(ASMOB
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA
+$(OBJDIR)/rom_nd.o $(OBJDIR)/assets_nd.o:: ROMDRIVER += -DNO_DEVICE=1
+$(OBJDIR)/assets_cdfs.o:: ROMDRIVER += -DCDFS=1
+$(OBJDIR)/rom_com.o $(OBJDIR)/assets_com.o:: ROMDRIVER += -DCOMMODORE_DEVICE=1
 
 # XXX: Need to generate real dependency files
 $(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h port_bsd.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
@@ -133,6 +141,7 @@ $(PROG): $(OBJS) $(ASMOBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
+	@printf "${yellow}$(PROG) is "`wc -c < $@`" bytes${end}\n"
 
 $(PROGU): $(OBJSU)
 	@echo Building $@
@@ -150,17 +159,17 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/rom.o: rom.S reloc.S Makefile
-	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
-
 $(OBJDIR)/reloc.o: reloc.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
 
-$(OBJDIR)/assets.o: assets.S $(PROG) Makefile
+$(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S Makefile
 	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER) $(CDFILESYSTEM)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+
+$(OBJDIR)/assets.o $(OBJDIR)/assets_nd.o $(OBJDIR)/assets_cdfs.o $(OBJDIR)/assets_com.o: assets.S $(PROG) Makefile
+	@echo Building $@
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@
@@ -174,30 +183,34 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-a4091.rom: $(OBJDIR)/rom.o $(OBJDIR)/assets.o rom.ld
+$(ROM):     $(OBJSROM) rom.ld
+$(ROM_ND):  $(OBJSROM_ND) rom.ld
+$(ROM_CD):  $(OBJSROM_CD) rom.ld
+$(ROM_COM): $(OBJSROM_COM) rom.ld
+
+$(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM):
 	@echo Building $@
-	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $< $(OBJDIR)/assets.o
-	@printf "${yellow}$(PROG) is $(shell echo `wc -c < "$(PROG)"`) bytes${end}\n"
-	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM fits in 64k${end}\n" )
+	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $(filter %.o, $^)
+	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM $@ fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM $@ FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM $@ fits in 64k${end}\n" )
 
 $(OBJDIR):
 	mkdir -p $@
 
 clean:
 	@echo Cleaning
-	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
-	$(QUIET)rm -f $(OBJDIR)/rom.o $(OBJDIR)/rom.bin reloctest
+	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJSROM_COM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 
 distclean: clean
 	@echo $@
-	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM)
+	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM)
 	$(QUIET)rm -r $(OBJDIR)
 
 lha: all
 	$(QUIET)VER=$$(awk '/define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
-	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) a4091_$$VER ;\
+	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) a4091_$$VER ;\
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\

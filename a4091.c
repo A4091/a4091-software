@@ -779,6 +779,7 @@ a4091_enable_driver_task(void)
 
         if (runtime_flags & FLAG_DEBUG)
             printf("Restoring A4091 SCSI driver task\n");
+        Disable();
         for (node = a4091_save.driver_rtask.lh_Head;
              node->ln_Succ != NULL; node = next) {
             next = node->ln_Succ;
@@ -789,6 +790,7 @@ a4091_enable_driver_task(void)
             next = node->ln_Succ;
             AddHead(&SysBase->TaskWait, node);
         }
+        Enable();
         a4091_save.driver_task_count = 0;
     }
 }
@@ -797,43 +799,63 @@ static int
 a4091_show_or_disable_driver_task(int disable, int show)
 {
     struct Node *node;
+    struct Node *next;
     uint count = 0;
     uint pass;
-    Forbid();
-    for (pass = 0; pass < 2; pass++) {
-        if (pass == 0)
-            node = SysBase->TaskReady.lh_Head;
-        else
-            node = SysBase->TaskWait.lh_Head;
 
-        for (; node->ln_Succ != NULL; node = node->ln_Succ) {
-            const char *name = GetNodeName((struct Node *) node);
-            if ((strcmp(name, "A3090 SCSI handler") != 0) &&
-                (strcmp(name, "a4091.device") != 0))
-                continue;
+    if (show) {
+        Forbid();
+        for (pass = 0; pass < 2; pass++) {
+            if (pass == 0)
+                node = SysBase->TaskReady.lh_Head;
+            else
+                node = SysBase->TaskWait.lh_Head;
 
-            count++;
+            for (; node->ln_Succ != NULL; node = next) {
+                struct Task *task = (struct Task *) node;
+                const char *name = GetNodeName((struct Node *) node);
+                next = node->ln_Succ;
 
-            if (disable) {
+                if ((strcmp(name, "A3090 SCSI handler") != 0) &&
+                    (strcmp(name, "a4091.device") != 0))
+                    continue;
+                printf("  Task %08x [%08x] in %s queue %s\n",
+                       (uint32_t) node, (uint32_t) task->tc_SPReg,
+                       (pass == 0) ? "Ready" : "Wait", name);
+            }
+        }
+        Permit();
+    }
+
+    if (disable) {
+        Disable();
+        for (pass = 0; pass < 2; pass++) {
+            if (pass == 0)
+                node = SysBase->TaskReady.lh_Head;
+            else
+                node = SysBase->TaskWait.lh_Head;
+
+            for (; node->ln_Succ != NULL; node = next) {
+                const char *name = GetNodeName((struct Node *) node);
+                next = node->ln_Succ;
+
+                if ((strcmp(name, "A3090 SCSI handler") != 0) &&
+                    (strcmp(name, "a4091.device") != 0))
+                    continue;
+
                 Remove(node);
                 if (pass == 0)
                     AddHead(&a4091_save.driver_rtask, node);
                 else
                     AddHead(&a4091_save.driver_wtask, node);
                 a4091_save.driver_task_count++;
-            }
-            if (show) {
-                struct Task *task = (struct Task *) node;
-                printf("  Task %08x [%08x] in %s queue %s\n",
-                       (uint32_t) node, (uint32_t) task->tc_SPReg,
-                       (pass == 0) ? "Ready" : "Wait", name);
+                count++;
             }
         }
-    }
-    Permit();
-    if ((count > 0) && disable) {
-        printf("Suspended A4091 driver task%s\n",
-               (count > 1) ? "s" : "");
+        Enable();
+        if (count > 0) {
+            printf("Suspended A4091 driver task%s\n", (count > 1) ? "s" : "");
+        }
     }
     return (count);
 }

@@ -655,7 +655,6 @@ siopinitialize(struct siop_softc *sc)
      */
     sc->sc_scriptspa = kvtop((void *)__UNCONST(scripts));
 
-// printf("CDH: scripts=%lx\n", sc->sc_scriptspa);
     /*
      * malloc sc_acb to ensure that DS is on a long word boundary.
      */
