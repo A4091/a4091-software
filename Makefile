@@ -159,13 +159,16 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
+$(OBJDIR)/version.i: version.h
+	$(QUIET)awk '/#define DEVICE_/{print $$2" EQU "$$3}' $< > $@
+
 $(OBJDIR)/reloc.o: reloc.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
 
-$(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S Makefile
+$(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
 	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/assets.o $(OBJDIR)/assets_nd.o $(OBJDIR)/assets_cdfs.o $(OBJDIR)/assets_com.o: assets.S $(PROG) Makefile
 	@echo Building $@
@@ -207,7 +210,7 @@ distclean: clean
 	$(QUIET)rm -r $(OBJDIR)
 
 lha: all
-	$(QUIET)VER=$$(awk '/define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
+	$(QUIET)VER=$$(awk '/#define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
 	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) a4091_$$VER ;\

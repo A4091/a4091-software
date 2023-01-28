@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 0.5 ("__DATE__") © Chris Hooper";
+const char *version = "\0$VER: A4091 0.6 ("__DATE__") © Chris Hooper";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,10 +42,14 @@ const char *version = "\0$VER: A4091 0.5 ("__DATE__") © Chris Hooper";
 #define A4091_OFFSET_REGISTERS  0x00800000
 #define A4091_OFFSET_SWITCHES   0x008c0003
 
+#define A4000T_SCSI_BASE        0x00dd0000
+#define A4000T_OFFSET_REGISTERS 0x00000040
+#define A4000T_OFFSET_SWITCHES  0x00003000
+
 #define ZORRO_MFG_COMMODORE     0x0202
 #define ZORRO_PROD_A4091        0x0054
 
-#define A4091_INTPRI 30
+#define A4091_INTPRI 31
 #define A4091_IRQ    3
 
 extern struct ExecBase *SysBase;
@@ -58,6 +62,7 @@ extern struct ExecBase *SysBase;
 
 #define FLAG_DEBUG            0x01        /* Debug output */
 #define FLAG_MORE_DEBUG       0x02        /* More debug output */
+#define FLAG_IS_A4000T        0x04        /* A4000T onboard SCSI controller */
 
 #define SUPERVISOR_STATE_ENTER() { \
                                    APTR old_stack = SuperState()
@@ -167,7 +172,7 @@ extern struct ExecBase *SysBase;
 #define REG_DSTAT_BF    BIT(5)  // Bus fault
 #define REG_DSTAT_DFE   BIT(7)  // DMA FIFO empty
 
-#define REG_SCNTL1_ASEP BIT(2)  // Assert even SCSI data partity
+#define REG_SCNTL1_ASEP BIT(2)  // Assert even SCSI data parity
 #define REG_SCNTL1_RST  BIT(3)  // Assert reset on SCSI bus
 #define REG_SCNTL1_ADB  BIT(6)  // Assert SCSI data bus (SODL/SOCL registers)
 
@@ -197,28 +202,26 @@ typedef unsigned long long uint64_t;
 
 typedef unsigned int   uint;
 
-static void a4091_state_restore(void);
+static void a4091_state_restore(int skip_reset);
 
 static uint               runtime_flags = 0;
 static const char * const expansion_library_name = "expansion.library";
 
 typedef struct {
-    uint32_t addr;
-    uint32_t intcount;                   // Total interrupts
-    uint8_t  card_owned;
-    uint8_t  cleanup_installed;
-    uint8_t  reg_dcntl;
-    uint8_t  reg_istat;
-    uint32_t driver_isr_count;     // Number of driver ISRs captured
-    uint32_t driver_task_count;    // Number of driver tasks captured
     struct Interrupt *local_isr;   // Temporary interrupt server
-    struct List      driver_isrs;  // SCSI driver interrupt server list
-    struct List      driver_rtask; // SCSI driver ready task list
-    struct List      driver_wtask; // SCSI driver waiting task list
+    uint32_t reg_addr;             // Base address of device registers
+    volatile uint32_t intcount;    // Total interrupts
     volatile uint8_t ireg_istat;   // ISTAT captured by interrupt handler
     volatile uint8_t ireg_sien;    // SIEN captured by interrupt handler
     volatile uint8_t ireg_sstat0;  // SSTAT0 captured by interrupt handler
     volatile uint8_t ireg_dstat;   // DSTAT captured by interrupt handler
+    uint8_t  card_owned;           // Task current owns device interrupts
+    uint8_t  cleanup_installed;    // Cleanup on exit code installed
+    uint32_t driver_isr_count;     // Number of driver ISRs captured
+    uint32_t driver_task_count;    // Number of driver tasks captured
+    struct List      driver_isrs;  // SCSI driver interrupt server list
+    struct List      driver_rtask; // SCSI driver ready task list
+    struct List      driver_wtask; // SCSI driver waiting task list
 } a4091_save_t;
 
 static a4091_save_t a4091_save;
@@ -230,7 +233,7 @@ check_break(void)
 {
     if (SetSignal(0, 0) & SIGBREAKF_CTRL_C) {
         printf("^C Abort\n");
-        a4091_state_restore();
+        a4091_state_restore(!(runtime_flags & FLAG_DEBUG));
         exit(1);
     }
 }
@@ -242,6 +245,42 @@ read_system_ticks(void)
     DateStamp(&ds);  /* Measured latency is ~250us on A3000 A3640 */
     return ((uint64_t) (ds.ds_Days * 24 * 60 +
                         ds.ds_Minute) * 60 * TICKS_PER_SECOND + ds.ds_Tick);
+}
+
+static uint64_t
+read_system_ticks_sync(void)
+{
+    uint64_t stick = read_system_ticks();
+    uint64_t tick;
+    while ((tick = read_system_ticks()) == stick)
+        ;
+    return (tick);
+}
+
+/*
+ * get_milli_ticks
+ * ---------------
+ * Returns the number of fractional ticks (thousandths) which have elapsed
+ * past the specified tick. This is done by counting the number of OS
+ * calls to DateStamp() before the tick counter rolls over. The resolution
+ * is likely not accurate past the tenths place, as on an A4000T with A3640,
+ * the Amiga can only do about 58 calls per tick.
+ */
+uint
+get_milli_ticks(uint64_t ltick)
+{
+    uint64_t ctick;
+    uint64_t etick;
+    uint left_count = 0;
+    uint full_count = 0;
+    while ((ctick = read_system_ticks()) == ltick)
+        left_count++;
+    while ((etick = read_system_ticks()) == ctick)
+        full_count++;
+
+    if (left_count > full_count)
+        left_count = full_count;
+    return ((full_count * (ctick - ltick) - left_count) * 1000 / full_count);
 }
 
 static const char * const z2_config_sizes[] =
@@ -261,14 +300,23 @@ static const char * const config_subsizes[] =
     "4MB", "6MB", "8MB", "10MB", "12MB", "14MB", "Rsvd1", "Rsvd2"
 };
 
-static uint32_t a4091_base;  // Base address for current card
+static uint32_t a4091_base;           // Base address for current card
+static uint32_t a4091_rom_base;       // ROM base address
+static uint32_t a4091_reg_base;       // Registers base address
+static uint32_t a4091_switch_base;    // Switches base address
 
 static uint8_t
 get_creg(uint reg)
 {
-    uint8_t hi = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg);
-    uint8_t lo = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg + 0x100);
-    return ((hi & 0xf0) | (lo >> 4));
+    uint8_t hi;
+    uint8_t lo;
+    if (runtime_flags & FLAG_IS_A4000T) {
+        return (0);  // No Zorro config for 53C710 in A4000T
+    } else {
+        hi = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg);
+        lo = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg + 0x100);
+        return ((hi & 0xf0) | (lo >> 4));
+    }
 }
 
 #if 0
@@ -487,7 +535,7 @@ static const ncr_regdefs_t ncr_regdefs[] =
     { 0x0b, 1, 1, 0, "SFBR",     "SCSI first byte received" },
     { 0x0a, 1, 1, 0, "SIDL",     "SCSI input data latch" },
     { 0x09, 1, 1, 0, "SBDL",     "SCSI bus data lines" },
-    { 0x08, 1, 1, 0, "SBCL",     "SCSI bus contol lines", bits_sbcl },
+    { 0x08, 1, 1, 0, "SBCL",     "SCSI bus control lines", bits_sbcl },
     { 0x0f, 1, 1, 0, "DSTAT",    "DMA status", bits_dstat },
     { 0x0e, 1, 1, 0, "SSTAT0",   "SCSI status 0", bits_sstat0 },
     { 0x0d, 1, 1, 0, "SSTAT1",   "SCSI status 1", bits_sstat1 },
@@ -520,44 +568,51 @@ static const ncr_regdefs_t ncr_regdefs[] =
 };
 
 static uint8_t
-get_ncrreg8_noglob(uint32_t a4091_base, uint reg)
+get_ncrreg8_noglob(uint32_t a4091_regs, uint reg)
 {
-    return (*ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg));
+    return (*ADDR8(a4091_regs + reg));
+}
+
+static void
+set_ncrreg8_noglob(uint32_t a4091_regs, uint reg, uint8_t value)
+{
+    *ADDR8(a4091_regs + 0x40 + reg) = value;
 }
 
 static uint8_t
 get_ncrreg8(uint reg)
 {
-    return (*ADDR8(a4091_base + A4091_OFFSET_REGISTERS + reg));
+    uint8_t value = *ADDR8(a4091_reg_base + reg);
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] R %02x\n", a4091_reg_base + reg, value);
+    return (value);
 }
 
 static uint32_t
 get_ncrreg32(uint reg)
 {
-    return (*ADDR32(a4091_base + A4091_OFFSET_REGISTERS + reg));
+    uint32_t value = *ADDR32(a4091_reg_base + reg);
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] R %08x\n", a4091_reg_base + reg, value);
+    return (value);
 }
 
 /* Write at shadow register (+0x40) to avoid 68030 write-allocate bug */
 static void
 set_ncrreg8(uint reg, uint8_t value)
 {
-    *ADDR8(a4091_base + A4091_OFFSET_REGISTERS + 0x40 + reg) = value;
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] W %02x\n", a4091_reg_base + reg, value);
+    *ADDR8(a4091_reg_base + 0x40 + reg) = value;
 }
 
 static void
 set_ncrreg32(uint reg, uint32_t value)
 {
-    *ADDR32(a4091_base + A4091_OFFSET_REGISTERS + 0x40 + reg) = value;
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] W %08x\n", a4091_reg_base + reg, value);
+    *ADDR32(a4091_reg_base + 0x40 + reg) = value;
 }
-
-#if 0
-static void
-flush_ncrreg32(uint reg)
-{
-    CacheClearE((void *)(a4091_base + A4091_OFFSET_REGISTERS + reg), 4,
-                CACRF_ClearD);
-}
-#endif
 
 /*
  * access_timeout
@@ -601,25 +656,56 @@ access_timeout(const char *msg, uint32_t ticks, uint64_t tick_start)
 static void
 a4091_reset(void)
 {
-    set_ncrreg8(REG_DCNTL, REG_DCNTL_EA);   // Enable Ack: allow register writes
+    if (runtime_flags & FLAG_IS_A4000T)
+        set_ncrreg8(REG_DCNTL, REG_DCNTL_EA);   // Enable Ack: allow reg writes
     set_ncrreg8(REG_ISTAT, REG_ISTAT_RST);  // Reset
     (void) get_ncrreg8(REG_ISTAT);          // Push out write
 
     set_ncrreg8(REG_ISTAT, 0);              // Clear reset
     (void) get_ncrreg8(REG_ISTAT);          // Push out write
+    Delay(1);
+
+    /* SCSI Core clock (37.51-50 MHz) */
+    if (runtime_flags & FLAG_IS_A4000T)
+        set_ncrreg8(REG_DCNTL, REG_DCNTL_COM | REG_DCNTL_CFD2 | REG_DCNTL_EA);
+    else
+        set_ncrreg8(REG_DCNTL, REG_DCNTL_COM | REG_DCNTL_CFD2);
 
     set_ncrreg8(REG_SCID, BIT(7));          // Set SCSI ID
-    set_ncrreg8(REG_DCNTL, REG_DCNTL_EA);   // SCSI Core clock (37.51-50 MHz)
 
     set_ncrreg8(REG_DWT, 0xff);             // 25MHz DMA timeout: 640ns * 0xff
-#if 0
-    /* Set DMA interrupt enable on Bus Fault, Abort, or Illegal instruction */
-    set_ncrreg8(REG_DIEN, REG_DIEN_BF | REG_DIEN_ABRT | REG_DIEN_ILD);
-#endif
 
-    // Reset Enable Acknowlege and Function Control One (FC1) bits?
+    const int burst_mode = 8;
+    switch (burst_mode) {
+        default:
+        case 1:
+            /* 1-transfer burst, FC = 101 -- works on A3000 */
+            set_ncrreg8(REG_DMODE, REG_DMODE_BLE0 | REG_DMODE_FC2);
+            break;
+        case 2:
+            /* 2-transfer burst, FC = 101 */
+            set_ncrreg8(REG_DMODE, REG_DMODE_BLE1 | REG_DMODE_FC2);
+            break;
+        case 4:
+            /* 4-transfer burst, FC = 101 */
+            set_ncrreg8(REG_DMODE, REG_DMODE_BLE2 | REG_DMODE_FC2);
+            break;
+        case 8:
+            /* 8-transfer burst, FC = 101 */
+            set_ncrreg8(REG_DMODE, REG_DMODE_BLE3 | REG_DMODE_FC2);
+            break;
+    }
+
+    if ((runtime_flags & FLAG_IS_A4000T) == 0) {
+        /* Disable cache line bursts */
+        set_ncrreg8(REG_CTEST7, get_ncrreg8(REG_CTEST7) | REG_CTEST4_CDIS);
+    }
+
+    /* Disable interrupts */
+    set_ncrreg8(REG_DIEN, 0);
 }
 
+#if 0
 /*
  * a4091_abort
  * -----------
@@ -641,34 +727,41 @@ a4091_abort(void)
             break;
     }
 }
+#endif
 
 /*
  * a4091_irq_handler
  * -----------------
- * Handle interupts from the 53C710 SCSI controller
+ * Handle interrupts from the 53C710 SCSI controller
  */
 LONG
 a4091_irq_handler(void)
 {
     register a4091_save_t *save asm("a1");
 
-    uint8_t       istat = get_ncrreg8_noglob(save->addr, REG_ISTAT);
+    uint8_t istat = get_ncrreg8_noglob(save->reg_addr, REG_ISTAT);
+
+    if (istat == 0)
+        return (0);
+
+    if (istat & REG_ISTAT_ABRT)
+        set_ncrreg8_noglob(save->reg_addr, REG_ISTAT, 0);
 
     if ((istat & (REG_ISTAT_DIP | REG_ISTAT_SIP)) != 0) {
+        uint prev_istat = save->ireg_istat;
         /*
          * If ISTAT_SIP is set, read SSTAT0 register to determine cause
          * If ISTAT_DIP is set, read DSTAT register to determine cause
          */
         save->ireg_istat  = istat;
-        save->ireg_sien   = get_ncrreg8_noglob(save->addr, REG_SIEN);
-        save->ireg_sstat0 = get_ncrreg8_noglob(save->addr, REG_SSTAT0);
-        save->ireg_dstat  = get_ncrreg8_noglob(save->addr, REG_DSTAT);
+        save->ireg_sien   = get_ncrreg8_noglob(save->reg_addr, REG_SIEN);
+        save->ireg_sstat0 = get_ncrreg8_noglob(save->reg_addr, REG_SSTAT0);
+        save->ireg_dstat  = get_ncrreg8_noglob(save->reg_addr, REG_DSTAT);
 
         save->intcount++;
 
-        if (save->intcount == 1)
+        if (prev_istat == 0)
             return (1);  // Handled
-//      return (1);  // Handled
     }
 
     return (0);  // Not handled
@@ -677,28 +770,30 @@ a4091_irq_handler(void)
 static void
 a4091_add_local_irq_handler(void)
 {
-    a4091_save.intcount = 0;
-    a4091_save.local_isr = AllocMem(sizeof (*a4091_save.local_isr),
-                                    MEMF_CLEAR | MEMF_PUBLIC);
-    a4091_save.local_isr->is_Node.ln_Type = NT_INTERRUPT;
-    a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI;
-    a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
-    a4091_save.local_isr->is_Data         = &a4091_save;
-    a4091_save.local_isr->is_Code         = (VOID (*)()) a4091_irq_handler;
+    if (a4091_save.local_isr == NULL) {
+        a4091_save.intcount = 0;
+        a4091_save.local_isr = AllocMem(sizeof (*a4091_save.local_isr),
+                                        MEMF_CLEAR | MEMF_PUBLIC);
+        a4091_save.local_isr->is_Node.ln_Type = NT_INTERRUPT;
+        a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI;
+        a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
+        a4091_save.local_isr->is_Data         = &a4091_save;
+        a4091_save.local_isr->is_Code         = (VOID (*)()) a4091_irq_handler;
 
-    if (runtime_flags & FLAG_DEBUG)
-        printf("my irq handler=%x %x\n",
-               (uint32_t) &a4091_save, (uint32_t) a4091_save.local_isr);
-    AddIntServer(A4091_IRQ, a4091_save.local_isr);
+        if (runtime_flags & FLAG_DEBUG)
+            printf("my irq handler=%x %x\n",
+                   (uint32_t) &a4091_save, (uint32_t) a4091_save.local_isr);
+        AddIntServer(A4091_IRQ, a4091_save.local_isr);
+    }
 }
 
 static void
 a4091_remove_local_irq_handler(void)
 {
-    if (a4091_save.local_isr != 0) {
+    if (a4091_save.local_isr != NULL) {
         RemIntServer(A4091_IRQ, a4091_save.local_isr);
         FreeMem(a4091_save.local_isr, sizeof (*a4091_save.local_isr));
-        a4091_save.local_isr = 0;
+        a4091_save.local_isr = NULL;
     }
 }
 
@@ -717,6 +812,7 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
     struct List      *slist = iv->iv_Data;
     struct Interrupt *s;
     uint   count = 0;
+    const char *suspend_name = "";
 
     if (EMPTY(slist))
         return (0);
@@ -724,16 +820,28 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
     Disable();
     for (s = FIRST(slist); NEXTINT(s); s = NEXTINT(s)) {
         const char *name = GetNodeName((struct Node *) s);
-        if ((strcmp(name, "NCR SCSI") != 0) &&
-            (strcmp(name, "a4091.device") != 0))
-            continue;  // No match
+        if (runtime_flags & FLAG_IS_A4000T) {
+            if ((strcmp(name, "NCR SCSI") != 0) &&
+                (strcmp(name, "A4091 test") != 0))
+                continue;  // No match
+        } else {
+            if ((strcmp(name, "NCR SCSI") != 0) &&
+                (strcmp(name, "A4091 test") != 0) &&
+                (strcmp(name, "a4091.device") != 0))
+                continue;  // No match
+            if (((uint32_t) s->is_Code >= 0x00f00000) &&
+                ((uint32_t) s->is_Code <= 0x00ffffff))
+                continue;  // Match, but driver is in Kickstart ROM
+        }
+        if (s == a4091_save.local_isr)
+            continue;  /* Don't show or clobber our own ISR handler */
 
         count++;
         if (show || (runtime_flags & FLAG_DEBUG)) {
             Enable();
-            printf("  INT%x %08x %08x %08x %s\n",
-                   A4091_IRQ, (uint32_t) s->is_Code, (uint32_t) s->is_Data,
-                   (uint32_t) &s->is_Node, name);
+            printf("  INT%x \"%s\" %08x %08x %08x\n",
+                   A4091_IRQ, name, (uint32_t) s->is_Code,
+                   (uint32_t) s->is_Data, (uint32_t) &s->is_Node);
             Disable();
         }
         if (disable) {
@@ -742,13 +850,15 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
             RemIntServer(A4091_IRQ, (struct Interrupt *) node);
             AddHead(&a4091_save.driver_isrs, node);
             a4091_save.driver_isr_count++;
+            suspend_name = name;
             break;
         }
     }
     Enable();
     if ((count > 0) && disable) {
-        printf("Suspended A4091 driver IRQ handler%s\n",
-               (count > 1) ? "s" : "");
+        printf("%s driver IRQ handler%s %s\n",
+               (disable & 2) ? "Killed" : "Suspended",
+               (count > 1) ? "s" : "", suspend_name);
     }
     return (count);
 }
@@ -796,12 +906,27 @@ a4091_enable_driver_task(void)
 }
 
 static int
+is_handler_task(const char *name)
+{
+    if (runtime_flags & FLAG_IS_A4000T) {
+        if (strcmp(name, "A4000T SCSI handler") != 0)
+            return (0);
+    } else {
+        if ((strcmp(name, "A3090 SCSI handler") != 0) &&
+            (strcmp(name, "a4091.device") != 0))
+            return (0);
+    }
+    return (1);
+}
+
+static int
 a4091_show_or_disable_driver_task(int disable, int show)
 {
     struct Node *node;
     struct Node *next;
     uint count = 0;
     uint pass;
+    const char *suspend_name = "";
 
     if (show) {
         Forbid();
@@ -816,18 +941,19 @@ a4091_show_or_disable_driver_task(int disable, int show)
                 const char *name = GetNodeName((struct Node *) node);
                 next = node->ln_Succ;
 
-                if ((strcmp(name, "A3090 SCSI handler") != 0) &&
-                    (strcmp(name, "a4091.device") != 0))
-                    continue;
-                printf("  Task %08x [%08x] in %s queue %s\n",
-                       (uint32_t) node, (uint32_t) task->tc_SPReg,
-                       (pass == 0) ? "Ready" : "Wait", name);
+                if (is_handler_task(name)) {
+                    printf("  Task \"%s\" %08x [%08x] in %s queue\n",
+                           name, (uint32_t) node, (uint32_t) task->tc_SPReg,
+                           (pass == 0) ? "Ready" : "Wait");
+                    count++;
+                }
             }
         }
         Permit();
     }
 
     if (disable) {
+        uint scount = 0;
         Disable();
         for (pass = 0; pass < 2; pass++) {
             if (pass == 0)
@@ -839,23 +965,25 @@ a4091_show_or_disable_driver_task(int disable, int show)
                 const char *name = GetNodeName((struct Node *) node);
                 next = node->ln_Succ;
 
-                if ((strcmp(name, "A3090 SCSI handler") != 0) &&
-                    (strcmp(name, "a4091.device") != 0))
-                    continue;
-
-                Remove(node);
-                if (pass == 0)
-                    AddHead(&a4091_save.driver_rtask, node);
-                else
-                    AddHead(&a4091_save.driver_wtask, node);
-                a4091_save.driver_task_count++;
-                count++;
+                if (is_handler_task(name)) {
+                    Remove(node);
+                    if (pass == 0)
+                        AddHead(&a4091_save.driver_rtask, node);
+                    else
+                        AddHead(&a4091_save.driver_wtask, node);
+                    a4091_save.driver_task_count++;
+                    suspend_name = name;
+                    scount++;
+                }
             }
         }
         Enable();
-        if (count > 0) {
-            printf("Suspended A4091 driver task%s\n", (count > 1) ? "s" : "");
+        if (scount > 0) {
+            printf("%s driver task%s %s\n",
+                   (disable & 2) ? "Killed" : "Suspended",
+                   (scount > 1) ? "s" : "", suspend_name);
         }
+        count = scount;
     }
     return (count);
 }
@@ -945,8 +1073,8 @@ kill_driver(void)
     /* XXX: Should first unmount filesystems served by the driver */
     attempt_driver_expunge();
     a4091_reset();
-    a4091_show_or_disable_driver_irq_handler(1, 1);
-    a4091_show_or_disable_driver_task(1, 0);
+    a4091_show_or_disable_driver_irq_handler(2, 1);
+    a4091_show_or_disable_driver_task(2, 1);
     a4091_remove_driver_from_devlist();
     a4091_save.driver_isr_count  = 0;  // Prevent ISRs from being reinstalled
     a4091_save.driver_task_count = 0;  // Prevent Tasks from being reinstalled
@@ -960,11 +1088,14 @@ kill_driver(void)
  * private interrupt handler.
  */
 static void
-a4091_state_restore(void)
+a4091_state_restore(int skip_reset)
 {
     if (a4091_save.card_owned) {
         a4091_save.card_owned = 0;
-        a4091_reset();
+        set_ncrreg8(REG_DIEN, 0);
+        set_ncrreg8(REG_ISTAT, 0);
+        if (skip_reset == 0)
+            a4091_reset();
         a4091_enable_driver_irq_handler();
         a4091_remove_local_irq_handler();
         a4091_enable_driver_task();
@@ -979,6 +1110,7 @@ a4091_state_restore(void)
     }
 }
 
+
 /*
  * a4091_cleanup
  * -------------
@@ -987,7 +1119,7 @@ a4091_state_restore(void)
 static void
 a4091_cleanup(void)
 {
-    a4091_state_restore();
+    a4091_state_restore(!(runtime_flags & FLAG_DEBUG));
 }
 
 /*
@@ -998,8 +1130,6 @@ a4091_cleanup(void)
 static void
 a4091_state_takeover(int flag_suspend)
 {
-    uint64_t tick_start;
-
     if (a4091_save.cleanup_installed == 0) {
         a4091_save.cleanup_installed = 1;
         atexit(a4091_cleanup);
@@ -1020,15 +1150,13 @@ a4091_state_takeover(int flag_suspend)
             a4091_show_or_disable_driver_task(1, 0);
         }
 
-        a4091_save.reg_istat = 0;
-
 #if 0
         /* Stop SCRIPTS processor */
         if (!is_running_in_uae()) {
             /* Below line causes segfault or hang of FS-UAE */
             // XXX: How can we tell if the SCRIPTS processor is running?
             printf("Stopping SIOP\n");
-            set_ncrreg8(REG_ISTAT, a4091_save.reg_istat | REG_ISTAT_ABRT);
+            set_ncrreg8(REG_ISTAT, REG_ISTAT_ABRT);
             (void) get_ncrreg8(REG_ISTAT);
 
             tick_start = read_system_ticks();
@@ -1038,8 +1166,7 @@ a4091_state_takeover(int flag_suspend)
             }
         }
 
-        a4091_save.reg_dcntl = get_ncrreg8(REG_DCNTL);
-        set_ncrreg8(REG_DCNTL, a4091_save.reg_dcntl | REG_DCNTL_SSM);
+        set_ncrreg8(REG_DCNTL, get_ncrreg8(REG_DCNTL) | REG_DCNTL_SSM);
         (void) get_ncrreg8(REG_DCNTL);
 
         tick_start = read_system_ticks();
@@ -1052,16 +1179,7 @@ a4091_state_takeover(int flag_suspend)
         /* Soft reset 53C710 SCRIPTS processor (SIOP) */
         if (runtime_flags & FLAG_DEBUG)
             printf("Soft resetting SIOP\n");
-        set_ncrreg8(REG_ISTAT, REG_ISTAT_RST);
-        (void) get_ncrreg8(REG_ISTAT);
-
-        tick_start = read_system_ticks();
-        while ((get_ncrreg8(REG_ISTAT) & REG_ISTAT_RST) == 0)
-            if (access_timeout("ISTAT_RST timeout", 4, tick_start))
-                break;
-
-        /* Clear reset state */
-        set_ncrreg8(REG_ISTAT, a4091_save.reg_istat & ~REG_ISTAT_RST);
+        a4091_reset();
     }
 }
 
@@ -1080,7 +1198,7 @@ __attribute__((aligned(16)))
 uint32_t dma_mem_move_script[] = {
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
-    0x00000000,              // Destination adddress (TEMP)
+    0x00000000,              // Destination address (TEMP)
     0x98080000, 0x00000000,  // Transfer Control Opcode=011 (Interrupt and stop)
 };
 
@@ -1088,16 +1206,16 @@ __attribute__((aligned(16)))
 uint32_t dma_mem_move_script_quad[] = {
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
-    0x00000000,              // Destination adddress (TEMP)
+    0x00000000,              // Destination address (TEMP)
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
-    0x00000000,              // Destination adddress (TEMP)
+    0x00000000,              // Destination address (TEMP)
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
-    0x00000000,              // Destination adddress (TEMP)
+    0x00000000,              // Destination address (TEMP)
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
-    0x00000000,              // Destination adddress (TEMP)
+    0x00000000,              // Destination address (TEMP)
     0x98080000, 0x00000000,  // Transfer Control Opcode=011 (Interrupt and stop)
 };
 
@@ -1120,42 +1238,9 @@ uint32_t script_write_to_reg[] = {
 };
 
 static void
-dma_init_siop(void)
+dma_clear_istat(void)
 {
     uint8_t istat;
-
-    if (runtime_flags & FLAG_MORE_DEBUG)
-        printf("Initializing SIOP\n");
-
-    a4091_abort();
-    a4091_reset();
-
-    /* SCLK=37.51-50.0 MHz, 53C710 */
-    set_ncrreg8(REG_DCNTL, REG_DCNTL_CFD2 | REG_DCNTL_COM);
-
-    const int burst_mode = 8;
-    switch (burst_mode) {
-        default:
-        case 1:
-            /* 1-transfer burst, FC = 101 -- works on A3000 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE0 | REG_DMODE_FC2);
-            break;
-        case 2:
-            /* 2-transfer burst, FC = 101 -- seems to work on A3000 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE1 | REG_DMODE_FC2);
-            break;
-        case 4:
-            /* 4-transfer burst, FC = 101 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE2 | REG_DMODE_FC2);
-            break;
-        case 8:
-            /* 8-transfer burst, FC = 101 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE3 | REG_DMODE_FC2);
-            break;
-    }
-
-    /* Disable cache line bursts */
-    set_ncrreg8(REG_CTEST7, get_ncrreg8(REG_CTEST7) | REG_CTEST4_CDIS);
 
     /* Clear pending interrupts */
     while (((istat = get_ncrreg8(REG_ISTAT)) & 0x03) != 0) {
@@ -1164,6 +1249,9 @@ dma_init_siop(void)
 
         if (istat & REG_ISTAT_DIP)
             (void) get_ncrreg8(REG_DSTAT);
+
+        if (istat & (REG_ISTAT_RST | REG_ISTAT_ABRT))
+            set_ncrreg8(REG_ISTAT, 0);
 
         if (istat & (REG_ISTAT_DIP | REG_ISTAT_SIP))
             Delay(1);
@@ -1174,16 +1262,20 @@ static int
 execute_script(uint32_t *script)
 {
     int rc = 0;
-    int count = 0;
+    int count = 1;
     uint8_t istat;
     uint8_t dstat;
     uint64_t tick_start;
 
     a4091_save.ireg_istat = 0;
 
+    tick_start = read_system_ticks();
+
+    /* Enable interrupts and start script */
+    set_ncrreg8(REG_DIEN, REG_DIEN_ILD | REG_DIEN_WTD | REG_DIEN_SIR |
+                REG_DIEN_SSI | REG_DIEN_ABRT | REG_DIEN_BF);
     set_ncrreg32(REG_DSP, (uint32_t) script);
 
-    tick_start = read_system_ticks();
     while (1) {
         istat = a4091_save.ireg_istat;
         if (istat & (REG_ISTAT_ABRT | REG_ISTAT_DIP)) {
@@ -1196,7 +1288,7 @@ execute_script(uint32_t *script)
             a4091_save.ireg_istat = 0;
             printf("istat=%02x\n", istat);
         }
-        if ((count & 7) == 0) {
+        if ((count & 0xffff) == 0) {
             uint8_t istat = get_ncrreg8(REG_ISTAT);
             if (istat & (REG_ISTAT_ABRT | REG_ISTAT_DIP)) {
                 dstat = get_ncrreg8(REG_DSTAT);
@@ -1222,7 +1314,7 @@ got_dstat:
             }
         }
 
-        if (((count & 31) == 0) &&
+        if (((count & 0xff) == 0) &&
             access_timeout("SIOP timeout", 30, tick_start)) {
             printf("ISTAT=%02x %02x DSTAT=%02x %02x SSTAT0=%02x "
                    "SSTAT1=%02x SSTAT2=%02x\n",
@@ -1237,6 +1329,8 @@ got_dstat:
     }
 
 fail:
+    /* Disable interrupts */
+    set_ncrreg8(REG_DIEN, 0);
     return (rc);
 }
 
@@ -1401,13 +1495,13 @@ dma_mem_to_scratch(uint32_t src)
     set_ncrreg8(REG_CTEST5, ctest5 &
                 ~(REG_CTEST5_DACK | REG_CTEST5_DREQ | REG_CTEST5_DDIR));
 
-    printf("src=%x [%08x]\n", src, *(uint32_t *) src);
+    printf("src=%x [%08x]\n", src, *ADDR32(src));
 
     /* Assign source address */
     set_ncrreg32(REG_DSPS, src);
 
     /* Assign destination address */
-    set_ncrreg32(REG_TEMP, a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH);
+    set_ncrreg32(REG_TEMP, a4091_reg_base + REG_SCRATCH);
 
     /*
      * Set DMA command and byte count
@@ -1495,7 +1589,7 @@ dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
 static int
 dma_mem_to_scratch(uint32_t src)
 {
-    uint32_t dst = a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH;
+    uint32_t dst = a4091_reg_base + REG_SCRATCH;
     return (dma_mem_to_mem(src, dst, 4));
 }
 
@@ -1507,7 +1601,8 @@ dma_mem_to_scratch(uint32_t src)
 static int
 dma_scratch_to_mem(uint32_t dst)
 {
-    uint32_t src = a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH;
+    uint32_t src = a4091_reg_base + REG_SCRATCH;
+
     return (dma_mem_to_mem(src, dst, 4));
 }
 
@@ -1519,8 +1614,9 @@ dma_scratch_to_mem(uint32_t dst)
 static int
 dma_scratch_to_temp(void)
 {
-    uint32_t src = a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH;
-    uint32_t dst = a4091_base + A4091_OFFSET_REGISTERS + REG_TEMP;
+    uint32_t src = a4091_reg_base + REG_SCRATCH;
+    uint32_t dst = a4091_reg_base + REG_TEMP;
+
     return (dma_mem_to_mem(src, dst, 4));
 }
 
@@ -1559,11 +1655,6 @@ dma_mem_to_mem_quad(volatile APTR src, volatile APTR dst, uint32_t len,
     if (runtime_flags & FLAG_DEBUG)
         printf("DMA from %08x to %08x len %08x\n",
                (uint32_t) src, (uint32_t) dst, len);
-
-#if 0
-    /* Hold destination address constant */
-    set_ncrreg8(REG_DMODE, get_ncrreg8(REG_DSTAT) | REG_DMODE_FAM);
-#endif
 
     rc = execute_script(script);
 
@@ -1629,8 +1720,17 @@ show_dip(uint8_t switches, int bit)
 static int
 decode_switches(void)
 {
-    uint8_t switches = *ADDR8(a4091_base + A4091_OFFSET_SWITCHES);
-    printf("A4091 Rear-access DIP switches\n");
+    uint8_t switches;
+
+    if (runtime_flags & FLAG_IS_A4000T) {
+        switches = *ADDR32(a4091_switch_base);
+        printf("A4000T");
+    } else {
+        switches = *ADDR8(a4091_switch_base);
+        printf("A4091");
+    }
+    printf(" Rear-access DIP switches\n");
+
     show_dip(switches, 7);
     printf("SCSI LUNs %s\n", (switches & BIT(7)) ? "Enabled" : "Disabled");
     show_dip(switches, 6);
@@ -1828,21 +1928,24 @@ test_device_access(void)
 
     /* Measure access speed against possible bus timeout */
     tick_start = read_system_ticks();
-    (void) *ADDR32(a4091_base + A4091_OFFSET_ROM);
+    (void) *ADDR32(a4091_rom_base);
     if (access_timeout("ROM access timeout", 2, tick_start)) {
         /* Try again */
-        (void) *ADDR32(a4091_base + A4091_OFFSET_ROM);
+        (void) *ADDR32(a4091_rom_base);
         if (access_timeout("ROM access timeout", 2, tick_start)) {
             rc = 1;
             goto fail;
         }
     }
 
-    (void) *ADDR32(a4091_base + A4091_OFFSET_REGISTERS);
+    (void) *ADDR32(a4091_reg_base);
     if (access_timeout("\n53C710 access timeout", 2, tick_start)) {
         rc = 1;
         goto fail;
     }
+
+    if (runtime_flags & FLAG_IS_A4000T)
+        goto fail;  // Skip autoconfig test
 
     /* Verify autoconfig area header contents */
     for (pass = 0; pass < 100; pass++) {
@@ -1944,7 +2047,8 @@ test_register_access(void)
             break;
     }
 
-    dma_init_siop();
+    a4091_reset();
+    dma_clear_istat();
 
     /* Verify status registers have been cleared */
     rc += check_ncrreg_bits(1, REG_ISTAT, "ISTAT", 0xff);
@@ -2385,7 +2489,7 @@ fail:
  * the way.
  *
  * 1. Put the 53C710 in loopback mode (this lets the host directly modify
- *    SCSI bus dignals).
+ *    SCSI bus signals).
  * 2. Trigger a selection, with the 53C710 acting as SCSI initiator
  * 3. The host will act as a fake target device.
  * 4. Verify correct selection sequence takes place.
@@ -2785,6 +2889,30 @@ alloc_power2_addr(uint bit, uint32_t **ret_addr1, uint alloc_addr1_only)
     return (NULL);
 }
 
+/*
+ * is_valid_ram
+ * ------------
+ * Returns non-zero when the specified address is in a system memory
+ * block. The address is valid regardless of whether the RAM is currently
+ * free or allocated.
+ */
+int
+is_valid_ram(uint32_t addr)
+{
+    struct ExecBase  *eb = SysBase;
+    struct MemHeader *mem;
+
+    for (mem = (struct MemHeader *)eb->MemList.lh_Head;
+         mem->mh_Node.ln_Succ != NULL;
+         mem = (struct MemHeader *)mem->mh_Node.ln_Succ) {
+        uint32_t base = (uint32_t) mem;
+        uint32_t top  = (uint32_t) mem->mh_Upper;
+        if ((addr >= base) && (addr < top))
+            return (1);
+    }
+    return (0);
+}
+
 #if 0
 static void
 nonfunctional_tests(void)
@@ -2793,8 +2921,7 @@ nonfunctional_tests(void)
      * Attempt to inject a command at REG_DSPS which will get fetched
      * and executed as a SCRIPTS command. DOES NOT WORK.
      */
-    uint32_t *addr = (uint32_t *) (a4091_base + A4091_OFFSET_REGISTERS +
-                                   REG_DSPS);
+    uint32_t *addr = ADDR32((a4091_reg_base + REG_DSPS);
     addr[0] = 0x98080000;
     addr[1] = 0x00000000;
 //  set_ncrreg32(REG_SCRATCH, 0x00000000);
@@ -2811,7 +2938,7 @@ nonfunctional_tests(void)
     set_ncrreg32(REG_DSPS, 0);
     set_ncrreg32(REG_DCNTL, get_ncrreg32(REG_DCNTL) | REG_DCNTL_STD);
     decode_registers();
-    dma_init_siop();
+    dma_clear_istat();
 }
 #endif
 
@@ -2835,17 +2962,42 @@ test_bus_access(void)
     uint32_t  stuck_low   = 0xffffffff;
     uint32_t  tested_high = 0;
     uint32_t  tested_low  = 0;
+    uint32_t  start_intcount;
+    uint64_t  tick_start;
 
     show_test_state("Bus access test:", -1);
 
     a4091_reset();
-    dma_init_siop();
+    dma_clear_istat();
+
+    /* Verify interrupts can be triggered by the 53C710 */
+    start_intcount = a4091_save.intcount;
+    tick_start = read_system_ticks();
+
+    set_ncrreg8(REG_DIEN, REG_DIEN_ABRT);  // Set DMA interrupt enable on Abort
+    set_ncrreg8(REG_ISTAT, REG_ISTAT_ABRT);
+    while (a4091_save.intcount == start_intcount) {
+        if (access_timeout("Could not trigger interrupt", 2, tick_start)) {
+            printf("ISTAT=%02x %02x DSTAT=%02x %02x SSTAT0=%02x "
+                   "SSTAT1=%02x SSTAT2=%02x\n",
+                   a4091_save.ireg_istat, get_ncrreg8(REG_ISTAT),
+                   a4091_save.ireg_dstat, get_ncrreg8(REG_DSTAT),
+                   get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
+                   get_ncrreg8(REG_SSTAT2));
+            show_test_state("Bus access test:", 1);
+            return (1);
+        }
+    }
+    if ((a4091_save.ireg_istat & REG_ISTAT_ABRT) == 0) {
+        printf("Interrupt triggered, but abort status not captured\n");
+        show_test_state("Bus access test:", 1);
+        return (1);
+    }
 
     /*
-     * Start by executing a script at the base address of the ROM.
-     * The values here are actually the Zorro config area, and for
-     * the A4091, the first value is 0x90f8ff00, which is an
-     * conditional RETURN command.
+     * Execute a script at the base address of the ROM. The values here
+     * on the A4091 are actually the Zorro config area, where the first
+     * value is 0x90f8ff00. This is a conditional RETURN command.
      * So long as the fetch works, this script should just return success.
      *
      * 0x90f8ff00:
@@ -2866,9 +3018,9 @@ test_bus_access(void)
      *    11111111 = Mask to compare
      *    00000000 = Data to be compared
      */
-    rc = execute_script((uint32_t *) a4091_base);
+    rc = execute_script((uint32_t *) a4091_rom_base);
     if (rc != 0) {
-        printf("SCRIPTS fetch from A4091 ROM failed\n");
+        printf("SCRIPTS fetch from A4091 ROM %08x failed\n", a4091_rom_base);
     }
 
     /* Try to execute a script from each power-of-2 address */
@@ -2883,7 +3035,7 @@ test_bus_access(void)
         }
 
         a4091_reset();
-        dma_init_siop();
+        dma_clear_istat();
         script_write_reg_setup(saddr1, REG_SCRATCH, 0x5a);
 
         if (saddr0 != NULL) {
@@ -3030,7 +3182,14 @@ test_dma(void)
         rc = dma_scratch_to_temp();
 
         if (rc != 0) {
-            printf("DMA failed at pos %x\n", pos);
+            printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->TEMP");
+            scratch = get_ncrreg32(REG_SCRATCH);
+            temp    = get_ncrreg32(REG_TEMP);
+            diff    = scratch ^ temp;
+            printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x\n",
+                   a4091_reg_base + REG_SCRATCH,
+                   a4091_reg_base + REG_TEMP,
+                   scratch, (diff != 0) ? "!" : "", temp);
             goto fail_dma;
         }
 
@@ -3046,13 +3205,11 @@ test_dma(void)
                 printf("\n");
             if (scratch != wdata) {
                 printf("  SCRATCH %08x: %08x != written %08x\n",
-                       a4091_base + A4091_OFFSET_REGISTERS + REG_TEMP,
-                       scratch, wdata);
+                       a4091_reg_base + REG_TEMP, scratch, wdata);
             } else {
                 printf("  SCRATCH %08x to TEMP: %08x != expected %08x "
                        "(diff %08x)\n",
-                       a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH,
-                       wdata, temp, diff);
+                       a4091_reg_base + REG_SCRATCH, wdata, temp, diff);
             }
         }
     }
@@ -3063,18 +3220,23 @@ test_dma(void)
     /* DMA test 2: transfer from RAM to the SCRATCH register */
     for (pos = 0; pos < dma_len; pos += 4) {
         addr = (uint32_t) src + pos;
-        *(uint32_t *) addr = rand32();
+        *ADDR32(addr) = rand32();
         CachePreDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
         rc = dma_mem_to_scratch(addr);
         CachePostDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
 
         if (rc != 0) {
-            printf("DMA failed at pos %x\n", pos);
+            printf("DMA failed at pos %x for %s\n", pos, "RAM->SCRATCH");
+            scratch = get_ncrreg32(REG_SCRATCH);
+            diff    = *ADDR32(addr) ^ scratch;
+            printf("  Addr %08x to SCRATCH %08x: %08x %s= expected %08x\n",
+                   addr, a4091_reg_base + REG_SCRATCH,
+                   scratch, (diff != 0) ? "!" : "", *ADDR32(addr));
             goto fail_dma;
         }
 
         scratch = get_ncrreg32(REG_SCRATCH);
-        diff = *(uint32_t *)addr ^ scratch;
+        diff = *ADDR32(addr) ^ scratch;
         if (diff != 0) {
             /*
              * This test is not aborted on data mismatch errors, so that
@@ -3085,8 +3247,8 @@ test_dma(void)
                     printf("\n");
                 printf("  Addr %08x to SCRATCH %08x: %08x != expected %08x "
                        "(diff %08x)\n",
-                       addr, a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH,
-                       scratch, *(uint32_t *)addr, diff);
+                       addr, a4091_reg_base + REG_SCRATCH,
+                       scratch, *ADDR32(addr), diff);
             }
         }
     }
@@ -3098,18 +3260,23 @@ test_dma(void)
     for (pos = 0; pos < dma_len; pos += 4) {
         uint32_t wdata = rand32();
         addr = (uint32_t) src + pos;
-        *(uint32_t *) addr = ~wdata;
+        *ADDR32(addr) = ~wdata;
         set_ncrreg32(REG_SCRATCH, wdata);
         CachePreDMA((APTR) addr, &buf_handled, 0);
         rc = dma_scratch_to_mem(addr);
         CachePostDMA((APTR) addr, &buf_handled, 0);
 
         if (rc != 0) {
-            printf("DMA failed at pos %x\n", pos);
+            printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->RAM");
+            scratch = get_ncrreg32(REG_SCRATCH);
+            diff    = *ADDR32(addr) ^ scratch;
+            printf("  SCRATCH %08x to Addr %08x: %08x %s= expected %08x\n",
+                   a4091_reg_base + REG_SCRATCH, addr,
+                   *ADDR32(addr), (diff != 0) ? "!" : "", scratch);
             goto fail_dma;
         }
 
-        temp = *(uint32_t *)addr;
+        temp = *ADDR32(addr);
         diff = temp ^ wdata;
         if (diff != 0) {
             /*
@@ -3121,7 +3288,7 @@ test_dma(void)
                     printf("\n");
                 printf("  SCRATCH %08x to addr %08x: %08x != expected %08x "
                        "(diff %08x)\n",
-                       a4091_base + A4091_OFFSET_REGISTERS + REG_SCRATCH,
+                       a4091_reg_base + REG_SCRATCH,
                        addr, temp, wdata, diff);
             }
         }
@@ -3168,16 +3335,19 @@ test_dma_copy(void)
     int      bf_mismatches = 0;
     int      bf_copies = 0;
     int      bf_buffers = 0;
+    int      bf_notram = 0;
     APTR    *src;
     APTR    *dst;
     APTR    *dst_buf;
     ULONG    buf_handled;
-typedef uint32_t addrs_array[32];
-    addrs_array *bf_addr;
-    addrs_array *bf_mem;
+    uint32_t *bf_addr;
+    uint32_t *bf_mem;
     uint8_t bf_flags[32][32];
 #define BF_FLAG_COPY    0x01
 #define BF_FLAG_CORRUPT 0x02
+#define BF_FLAG_NOTRAM  0x04
+#define BF_ADDR(x, y) bf_addr[(x) * 32 + y]
+#define BF_MEM(x, y)  bf_mem[(x) * 32 + y]
 
     show_test_state("DMA copy:", -1);
 
@@ -3208,9 +3378,6 @@ typedef uint32_t addrs_array[32];
         rc = 1;
         goto fail_bfaddr_alloc;
     }
-#if 0
-printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_addr, bf_mem);
-#endif
 
     if (runtime_flags & FLAG_DEBUG)
         printf("\nDMA src=%08x dst=%08x len=%x\n",
@@ -3219,19 +3386,22 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
         for (bit2 = bit1; bit2 < 32; bit2++) {
             if (bit1 == bit2)
-                bf_addr[bit1][bit2] = ((uint32_t) dst) ^ BIT(bit1);
+                BF_ADDR(bit1, bit2) = ((uint32_t) dst) ^ BIT(bit1);
             else
-                bf_addr[bit1][bit2] = ((uint32_t) dst) ^ BIT(bit1) ^ BIT(bit2);
-            bf_mem[bit1][bit2] =
-                (uint32_t) AllocAbs(dma_len, (APTR) bf_addr[bit1][bit2]);
-            if (bf_mem[bit1][bit2] == 0) {
-                bf_mem[bit1][bit2] = (uint32_t) AllocMem(dma_len, MEMF_PUBLIC);
+                BF_ADDR(bit1, bit2) = ((uint32_t) dst) ^ BIT(bit1) ^ BIT(bit2);
+            BF_MEM(bit1, bit2) =
+                (uint32_t) AllocAbs(dma_len, (APTR) BF_ADDR(bit1, bit2));
+            if (BF_MEM(bit1, bit2) != 0) {
+                /* Got target memory -- wipe it */
+                memset((APTR) BF_MEM(bit1, bit2), 0, dma_len);
+                bf_buffers++;
+            } else if (is_valid_ram(BF_ADDR(bit1, bit2))) {
+                BF_MEM(bit1, bit2) = (uint32_t) AllocMem(dma_len, MEMF_PUBLIC);
                 bf_flags[bit1][bit2] |= BF_FLAG_COPY;
                 bf_copies++;
             } else {
-                /* Got target memory -- wipe it */
-                memset((APTR) bf_mem[bit1][bit2], 0, dma_len);
-                bf_buffers++;
+                bf_flags[bit1][bit2] |= BF_FLAG_NOTRAM;
+                bf_notram++;
             }
         }
     }
@@ -3239,26 +3409,27 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
         printf("Bit flip addrs:\n");
         for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
             for (bit2 = bit1; bit2 < 32; bit2++)
-                printf(" %08x", bf_addr[bit1][bit2]);
+                printf(" %08x", BF_ADDR(bit1, bit2));
             printf("\n");
         }
     }
-// printf("1[%x]\n", bf_mem[0][0]);
 
-    dma_init_siop();
+    a4091_reset();
+    dma_clear_istat();
     Forbid();
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
         for (bit2 = bit1; bit2 < 32; bit2++) {
             if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
-                memcpy((APTR)bf_mem[bit1][bit2], (APTR)bf_addr[bit1][bit2], dma_len);
+                memcpy((APTR)BF_MEM(bit1, bit2),
+                       (APTR)BF_ADDR(bit1, bit2), dma_len);
             }
         }
     }
     for (pass = 0; pass < 32; pass++) {
         for (pos = 0; pos < cur_dma_len; pos += 4) {
             uint32_t rvalue = rand32();
-            *(uint32_t *) ((uint32_t) src + pos) = rvalue;
-            *(uint32_t *) ((uint32_t) dst + pos) = ~rvalue;
+            *ADDR32((uint32_t) src + pos) = rvalue;
+            *ADDR32((uint32_t) dst + pos) = ~rvalue;
         }
         buf_handled = cur_dma_len;
         CachePreDMA((APTR) dst, &buf_handled, DMA_ReadFromRAM);
@@ -3267,7 +3438,6 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
         CachePreDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
         CachePreDMA((APTR) dst, &buf_handled, 0);
 
-        a4091_reset();
         rc = dma_mem_to_mem((uint32_t) src, (uint32_t) dst, cur_dma_len);
         CachePostDMA((APTR) dst, &buf_handled, 0);
         CachePostDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
@@ -3277,15 +3447,10 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
             break;
         }
 
-#if 0
-printf("4[%x] %x\n", bf_mem[0][0], *(uint32_t *)src);
-printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_addr, bf_mem);
-#endif
-
         /* Verify data landed where it was expected */
         for (pos = 0; pos < cur_dma_len; pos += 4) {
-            uint32_t svalue = *(uint32_t *) ((uint32_t) src + pos);
-            uint32_t dvalue = *(uint32_t *) ((uint32_t) dst + pos);
+            uint32_t svalue = *ADDR32((uint32_t) src + pos);
+            uint32_t dvalue = *ADDR32((uint32_t) dst + pos);
             if (svalue != dvalue) {
                 if (rc == 0) {
                     printf("\nDMA src=%08x dst=%08x len=%x\n",
@@ -3320,17 +3485,17 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
             for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
                 for (bit2 = bit1; bit2 < 32; bit2++) {
                     if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
-                        if (memcmp((APTR)bf_mem[bit1][bit2],
-                                   (APTR)bf_addr[bit1][bit2], dma_len) != 0) {
+                        if (memcmp((APTR)BF_MEM(bit1, bit2),
+                                   (APTR)BF_ADDR(bit1, bit2), dma_len) != 0) {
                             bf_flags[bit1][bit2] |= BF_FLAG_CORRUPT;
                             if (bf_mismatches++ == 0)
                                 printf("Modified RAM addresses: ");
-                            printf("<%x>", bf_addr[bit1][bit2]);
+                            printf("<%x>", BF_ADDR(bit1, bit2));
                         }
-                    } else if (mem_not_zero(bf_mem[bit1][bit2], dma_len)) {
+                    } else if (mem_not_zero(BF_MEM(bit1, bit2), dma_len)) {
                         if (bf_mismatches++ == 0)
                             printf("Modified RAM addresses: ");
-                        printf(">%x<", bf_addr[bit1][bit2]);
+                        printf(">%x<", BF_ADDR(bit1, bit2));
                     }
                 }
             }
@@ -3346,24 +3511,16 @@ printf("src=%p dst=%p dst_buf=%p bf_addr=%p bf_mem=%p\n", src, dst, dst_buf, bf_
             cur_dma_len = dma_len;
     }
     Permit();
-    if (0)
-        printf("BF buffers=%d copies=%d mismatches=%d\n",
-               bf_buffers, bf_copies, bf_mismatches);
+
+    if (bf_mismatches != 0)
+        printf("BF buffers=%d copies=%d mismatches=%d notram=%d\n",
+               bf_buffers, bf_copies, bf_mismatches, bf_notram);
 
     /* Deallocate protected memory */
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
         for (bit2 = bit1; bit2 < 32; bit2++) {
-            if (bf_mem[bit1][bit2] != 0) {
-#ifdef DEBUG_ALLOC
-                if (((uint32_t) bf_mem[bit1][bit2] >= 0x07000000) &&
-                    ((uint32_t) bf_mem[bit1][bit2] < 0x08000000)) {
-                    FreeMem((APTR) bf_mem[bit1][bit2], dma_len);
-                } else {
-                    printf("!%x!", bf_mem[bit1][bit2]);
-                }
-#else
-                FreeMem((APTR) bf_mem[bit1][bit2], dma_len);
-#endif
+            if (BF_MEM(bit1, bit2) != 0) {
+                FreeMem((APTR) BF_MEM(bit1, bit2), dma_len);
             }
         }
     }
@@ -3392,7 +3549,7 @@ fail_src_alloc:
 static int
 test_dma_copy_perf(void)
 {
-    uint      dma_len = 64 << 10;  // DMA maximum is 16MB - 1
+    uint      dma_len = 128 << 10;  // DMA maximum is 16MB - 1
     int       rc = 0;
     int       pass;
     int       total_passes = 0;
@@ -3418,12 +3575,6 @@ test_dma_copy_perf(void)
         rc = 1;
         goto fail_dst_alloc;
     }
-#if 0
-    *(uint32_t *) ((uint32_t)src + dma_len - 4) = 0x12345678;
-    *(uint32_t *) ((uint32_t)dst + dma_len - 4) = 0;
-    CACHE_LINE_WRITE((uint32_t) src, 0x10);
-    CACHE_LINE_WRITE((uint32_t) dst, 0x10);
-#endif
     buf_handled = dma_len;
     CachePreDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
     CachePreDMA(dst, &buf_handled, 0);
@@ -3433,8 +3584,8 @@ test_dma_copy_perf(void)
                (uint32_t) src, (uint32_t) dst, dma_len);
 
     a4091_reset();
-    dma_init_siop();
-    tick_start = read_system_ticks();
+    dma_clear_istat();
+    tick_start = read_system_ticks_sync();
 run_some_more:
     for (pass = 0; pass < 16; pass++) {
         total_passes++;
@@ -3445,6 +3596,7 @@ run_some_more:
     }
     if (rc == 0) {
         tick_end = read_system_ticks();
+        uint tick_milli = get_milli_ticks(tick_end);
         uint64_t ticks = tick_end - tick_start;
         uint64_t total_kb = total_passes * (dma_len / 1024) * 2 * 4;
         /*                          2=R/w, 4=4 transfers in script */
@@ -3452,12 +3604,14 @@ run_some_more:
         if (ticks < 10)
             goto run_some_more;
 
-        printf("%s: %u KB in %d ticks",
-                passfail, (uint32_t) total_kb, (uint32_t) ticks);
-        if (ticks == 0)
-            ticks = 1;
+        printf("%s: %u KB in %u.%u ticks",
+                passfail, (uint32_t) total_kb, (uint32_t) ticks,
+                (tick_milli + 50) / 100);
+        if ((ticks + tick_milli) == 0)
+            tick_milli = 1;
         printf(" (%u KB/sec)\n",
-                (uint32_t) (total_kb * TICKS_PER_SECOND / ticks));
+               (uint32_t) (total_kb * TICKS_PER_SECOND * 1000 /
+                           (ticks * 1000 + tick_milli)));
     }
     CachePostDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
     CachePostDMA(dst, &buf_handled, 0);
@@ -3529,7 +3683,6 @@ test_card(uint test_flags)
     if ((rc == 0) && (test_flags & BIT(8)))
         rc = test_scsi_pins();
 
-    a4091_state_restore();
     return (rc);
 }
 
@@ -3728,6 +3881,7 @@ main(int argc, char **argv)
     uint32_t dma[3];              /* DMA source, destination, length */
 
     __check_abort_enabled = 0;
+    memset(&a4091_save, 0, sizeof (a4091_save));
 
     for (arg = 1; arg < argc; arg++) {
         char *ptr = argv[arg];
@@ -3756,11 +3910,16 @@ main(int argc, char **argv)
                             printf("You must specify an address\n");
                             exit(1);
                         }
-                        if ((sscanf(argv[arg], "%x%n", &addr, &pos) != 1) ||
-                            (pos == 0)) {
+                        if ((argv[arg][0] == '.') && (argv[arg][1] == '\0')) {
+                            addr = A4000T_SCSI_BASE;
+                        } else if ((sscanf(argv[arg], "%x%n",
+                                           &addr, &pos) != 1) ||
+                                   (pos == 0)) {
                             printf("Invalid card address %s specified\n", ptr);
                             exit(1);
                         }
+                        if (addr == A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS)
+                            addr = A4000T_SCSI_BASE;
                         break;
                     }
                     case 'c':
@@ -3864,8 +4023,22 @@ main(int argc, char **argv)
         printf("No A4091 cards detected\n");
         exit(1);
     }
-    printf("A4091 at 0x%08x\n", a4091_base);
-    a4091_save.addr = a4091_base;  // Base address for current card
+    if (a4091_base == A4000T_SCSI_BASE)
+        runtime_flags |= FLAG_IS_A4000T;
+    printf("%s at 0x%08x\n",
+           (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : "A4091", a4091_base);
+
+    if (runtime_flags & FLAG_IS_A4000T) {
+        a4091_reg_base    = A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS;
+        a4091_rom_base    = 0x00f00000;  // Kickstart ROM base
+        a4091_switch_base = A4000T_SCSI_BASE + A4000T_OFFSET_SWITCHES;
+    } else {
+        a4091_reg_base    = a4091_base + A4091_OFFSET_REGISTERS;
+        a4091_rom_base    = a4091_base + A4091_OFFSET_ROM;
+        a4091_switch_base = a4091_base + A4091_OFFSET_SWITCHES;
+    }
+
+    a4091_save.reg_addr = a4091_reg_base;  // 53C710 registers
 
     if (flag_kill)
         rc += kill_driver();
@@ -3903,7 +4076,8 @@ main(int argc, char **argv)
         if (flag_switches)
             rc += decode_switches();
         if (flag_dma) {
-            dma_init_siop();
+            a4091_reset();
+            dma_clear_istat();
             rc += dma_mem_to_mem(dma[0], dma[1], dma[2]);
         }
         if (flag_test)
@@ -3911,7 +4085,7 @@ main(int argc, char **argv)
         check_break();
     } while ((rc == 0) && flag_loop);
 
-    a4091_state_restore();
+    a4091_state_restore(rc && !(runtime_flags & FLAG_DEBUG));
 
     return (rc);
 }
