@@ -1,6 +1,7 @@
 
 
-DISK=A4091_4223.adf
+VER=$(awk '/#define DEVICE_/{if (V != "") print V""$NF; else V=$NF}' ../version.h)
+DISK=A4091_$VER.adf
 
 echo "Downloading..."
 wget -q http://aminet.net/disk/misc/bffs16_src.lha
@@ -8,9 +9,7 @@ lha xq bffs16_src.lha
 git clone -q https://github.com/cdhooper/amiga_devtest.git
 
 echo "Building..."
-cd amiga_devtest
-make -s
-cd ..
+make -s -C amiga_devtest || exit 1
 
 echo "Creating disk..."
 xdftool $DISK format "Amiga4091"
@@ -29,3 +28,4 @@ rm -rf amiga_devtest
 
 echo "Done:"
 xdftool $DISK list
+echo "Created $DISK"
