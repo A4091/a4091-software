@@ -510,16 +510,22 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 	struct ExecBase *SysBase = md->SysBase;
 	struct FileSysEntry *fse = NULL;
 	const UBYTE *creator = md->creator ? md->creator : md->zero;
+	const char resourceName[] = "FileSystem.resource";
 
 	Forbid();
 	struct FileSysResource *fsr = OpenResource(FSRNAME);
 	if (!fsr) {
 		// FileSystem.resource didn't exist (KS 1.3), create it.
-		struct FileSysResource *fsr = AllocMem(sizeof(struct FileSysResource) + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
+		fsr = AllocMem(sizeof(struct FileSysResource) + strlen(resourceName) + 1 + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
 		if (fsr) {
+			char *FsResName  = (UBYTE *)(fsr + 1);
+			char *CreatorStr = (UBYTE *)FsResName + (strlen(resourceName) + 1);
 			NewList(&fsr->fsr_FileSysEntries);
-			strcpy((UBYTE*)(fsr + 1), creator);
-			fsr->fsr_Creator = (UBYTE*)(fsr + 1);
+			fsr->fsr_Node.ln_Type = NT_RESOURCE;
+			strcpy(FsResName, resourceName);
+			fsr->fsr_Node.ln_Name = FsResName;
+			strcpy(CreatorStr, creator);
+			fsr->fsr_Creator = CreatorStr;
 			AddTail(&SysBase->ResourceList, &fsr->fsr_Node);
 		}
 		dbg("FileSystem.resource created %p\n", fsr);
