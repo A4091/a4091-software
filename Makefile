@@ -40,25 +40,25 @@ NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 #
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
-#CFLAGS  += -DDEBUG             # Show basic debug
-#CFLAGS  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
-#CFLAGS  += -DDEBUG_CMD         # Show handler commands received
-#CFLAGS  += -DDEBUG_CALLOUT     # Show callout (timeout abort) services
+#DEBUG  += -DDEBUG             # Show basic debug
+#DEBUG  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
+#DEBUG  += -DDEBUG_CMD         # Show handler commands received
+#DEBUG  += -DDEBUG_CALLOUT     # Show callout (timeout abort) services
 # Per file debugging
-#CFLAGS  += -DDEBUG_ATTACH      # Debug attach.c
-#CFLAGS  += -DDEBUG_DEVICE      # Debug device.c
-#CFLAGS  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
-#CFLAGS  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
-#CFLAGS  += -DDEBUG_PORT        # Debug port.c
-#CFLAGS  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
-#CFLAGS  += -DDEBUG_SCSICONF    # Debug scsiconf.c
-#CFLAGS  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
-#CFLAGS  += -DDEBUG_SD          # Debug sd.c
-#CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
-#CFLAGS  += -DDEBUG_MOUNTER     # Debug mounter.c
-#CFLAGS  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
-#CFLAGS  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
-
+#DEBUG  += -DDEBUG_ATTACH      # Debug attach.c
+#DEBUG  += -DDEBUG_DEVICE      # Debug device.c
+#DEBUG  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
+#DEBUG  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
+#DEBUG  += -DDEBUG_PORT        # Debug port.c
+#DEBUG  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
+#DEBUG  += -DDEBUG_SCSICONF    # Debug scsiconf.c
+#DEBUG  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
+#DEBUG  += -DDEBUG_SD          # Debug sd.c
+#DEBUG  += -DDEBUG_SIOP        # Debug siop.c
+#DEBUG  += -DDEBUG_MOUNTER     # Debug mounter.c
+#DEBUG  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
+#DEBUG  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
+CFLAGS  += $(DEBUG)
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
