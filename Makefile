@@ -5,6 +5,7 @@ TIME    := $(lastword $(NOW))
 OBJDIR  := objs
 ROM	:= a4091.rom
 ROM_ND	:= a4091_nodriver.rom
+ROM_DB	:= a4091_debug.rom
 ROM_CD	:= a4091_cdfs.rom
 ROM_COM	:= a4091_commodore.rom
 PROG	:= a4091.device
@@ -207,16 +208,23 @@ clean:
 distclean: clean
 	@echo $@
 	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM)
-	$(QUIET)rm -r $(OBJDIR)
+	$(QUIET)rm -rf $(OBJDIR)
 
-lha: all
+lha:
+	$(QUIET)$(MAKE) distclean $(OBJDIR)
+	@echo Building a4091.rom Debug image
+	$(QUIET)$(MAKE) $(ROM) DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv $(ROM) $(ROM_DB)
+	$(QUIET)$(MAKE) distclean
+	$(QUIET)$(MAKE) all
 	$(QUIET)VER=$$(awk '/#define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
-	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) a4091_$$VER ;\
+	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_DB) $(ROM_ND) a4091_$$VER ;\
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
 	rm -rf a4091_$$VER
+	rm $(ROM_DB)
 
 .PHONY: verbose all
