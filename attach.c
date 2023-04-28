@@ -35,6 +35,8 @@
 #include "battmem.h"
 #include "ndkcompat.h"
 
+#include "a4091.h"
+
 /*
  * NewMinList
  * ----------
@@ -53,13 +55,7 @@ void NewMinList(struct MinList * list)
 
 void scsipi_free_all_xs(struct scsipi_channel *chan);
 
-#define ZORRO_MFG_COMMODORE     0x0202
-#define ZORRO_PROD_A4091        0x0054
 
-#define A4091_OFFSET_REGISTERS  0x00800000
-
-#define A4091_INTPRI 30
-#define A4091_IRQ    3
 
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile uint32_t *)(x)
@@ -361,7 +357,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
 
     memset(sc, 0, sizeof (*sc));
-    dip_switches = *(uint8_t *)(dev_base + 0x008c0003);
+    dip_switches = *(uint8_t *)(dev_base + A4091_OFFSET_SWITCHES);
     printf("DIP switches = %02x\n", dip_switches);
 
     Load_BattMem();

@@ -31,26 +31,12 @@ const char *version = "\0$VER: A4091 0.6 ("__DATE__") © Chris Hooper";
 #include <inline/alib.h>
 #include <sys/time.h>
 #include "ndkcompat.h"
+#include "a4091.h"
 
 #define CACHE_LINE_WRITE(addr, len) CacheClearE((void *)(addr), len, \
                                                 CACRF_ClearD)
 #define CACHE_LINE_DISCARD(addr, len) CacheClearE((void *)(addr), len, \
                                                   CACRF_InvalidateD)
-
-#define A4091_OFFSET_AUTOCONFIG 0x00000000
-#define A4091_OFFSET_ROM        0x00000000
-#define A4091_OFFSET_REGISTERS  0x00800000
-#define A4091_OFFSET_SWITCHES   0x008c0003
-
-#define A4000T_SCSI_BASE        0x00dd0000
-#define A4000T_OFFSET_REGISTERS 0x00000040
-#define A4000T_OFFSET_SWITCHES  0x00003000
-
-#define ZORRO_MFG_COMMODORE     0x0202
-#define ZORRO_PROD_A4091        0x0054
-
-#define A4091_INTPRI 31
-#define A4091_IRQ    3
 
 extern struct ExecBase *SysBase;
 
@@ -775,7 +761,10 @@ a4091_add_local_irq_handler(void)
         a4091_save.local_isr = AllocMem(sizeof (*a4091_save.local_isr),
                                         MEMF_CLEAR | MEMF_PUBLIC);
         a4091_save.local_isr->is_Node.ln_Type = NT_INTERRUPT;
-        a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI;
+	/* set higher priority so that the test utility can steal interrupts
+	 * from the driver when it is running.
+	 */
+        a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI + 1;
         a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
         a4091_save.local_isr->is_Data         = &a4091_save;
         a4091_save.local_isr->is_Code         = (VOID (*)()) a4091_irq_handler;
