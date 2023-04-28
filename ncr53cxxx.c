@@ -1475,9 +1475,7 @@ void	error_line()
 	}
 }
 
-char *	makefn (base, sub)
-	char *base;
-	char *sub;
+char *	makefn (char *base, char *sub)
 {
 	char *fn;
 
