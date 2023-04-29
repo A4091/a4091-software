@@ -52,6 +52,7 @@
 #include "scsimsg.h"
 #include "ndkcompat.h"
 #include "mounter.h"
+#include "a4091.h"
 
 #define TRACE 1
 #undef TRACE_LSEG
@@ -1002,6 +1003,9 @@ struct MountStruct
 	// SysBase.
 	// Offset 16.
 	struct ExecBase *SysBase;
+	// LUNs
+	// Offset 20.
+	BOOL luns;
 };
 
 // Return values:
@@ -1039,7 +1043,6 @@ LONG MountDrive(struct MountStruct *ms)
 				if(request) {
 					ULONG target;
 					ULONG lun = 0;
-					BOOL do_luns = 1;  // XXX: Get flag from DIP switches
 					for (target = 0; target < 8; target++, lun = 0) {
 						ULONG unitNum;
 next_lun:
@@ -1073,7 +1076,7 @@ next_lun:
 							}
 
 							CloseDevice((struct IORequest*)request);
-							if (do_luns && (lun++ < 8) &&
+							if (ms->luns && (lun++ < 8) &&
 							    (!md->wasLastLun)) {
 								goto next_lun;
 							}
@@ -1105,14 +1108,16 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 {
 	extern char real_device_name[];
 	struct MountStruct ms;
-	int i, ret = 0;
-
-	ULONG unitNum[9];
+	ULONG unitNum[8];
+	int i, j = 1, ret = 0;
+	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES), hostid;
+	hostid = dip_switches & 7;
 
 	/* Produce unitNum at runtime */
-	unitNum[0] = 8;
+	unitNum[0] = 7;
 	for (i=0; i<8; i++)
-		unitNum[i+1] = i;
+		if (hostid != i)
+			unitNum[j++] = i;
 
 	printf("Mounter:\n");
 	ms.deviceName = real_device_name;
@@ -1120,6 +1125,7 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.creatorName = NULL;
 	ms.configDev = cd;
 	ms.SysBase =  *(struct ExecBase **)4UL;
+	ms.luns = dip_switches & BIT(7);  // 1: LUNs enabled 0: LUNs disabled
 
 	ret = MountDrive(&ms);
 
