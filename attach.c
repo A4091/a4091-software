@@ -262,7 +262,7 @@ a4091_validate(uint32_t dev_base)
     uint     rot;
     uint     fail = 0;
 
-    siop_regmap_p rp = (siop_regmap_p) (dev_base + 0x00800000);
+    siop_regmap_p rp = (siop_regmap_p) (dev_base + A4091_OFFSET_REGISTERS);
     if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000) ||
         (dev_base & 0x00ffffff)) {
         printf("Invalid device base %x\n", dev_base);
@@ -363,7 +363,7 @@ init_chan(device_t self, UBYTE *boardnum)
     Load_BattMem();
 
     sc->sc_dev = self;
-    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + 0x00800000);
+    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4091_OFFSET_REGISTERS);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
 #ifdef DRIVER_A4000T
