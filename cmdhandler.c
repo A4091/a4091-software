@@ -44,8 +44,6 @@
 #define PRINTF_CMD(args...)
 #endif
 
-#define BIT(x)        (1 << (x))
-
 extern struct ExecBase *SysBase;
 
 a4091_save_t *asave = NULL;

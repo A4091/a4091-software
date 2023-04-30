@@ -55,12 +55,8 @@ void NewMinList(struct MinList * list)
 
 void scsipi_free_all_xs(struct scsipi_channel *chan);
 
-
-
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile uint32_t *)(x)
-
-#define BIT(x)        (1 << (x))
 
 extern struct ExecBase *SysBase;
 extern int romboot;
