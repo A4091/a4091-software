@@ -184,14 +184,14 @@ static void page_footer(void)
     GT_RefreshWindow(window,NULL);
 }
 
-static void draw_dipswitch(UWORD x, UWORD y, UWORD on)
+static void draw_dipswitch(UWORD x, UWORD y, UWORD off)
 {
     struct RastPort *rp = &screen->RastPort;
 
     SetAPen(rp, 2);
     SetOPen(rp, 1);
     RectFill(rp, x+10, y, x+52,y+8);
-    if (on)
+    if (!off)
 	x+= 20;
     SetAPen(rp, 0);
     RectFill(rp, x+12, y+2, x+30,y+6);
@@ -203,25 +203,25 @@ static char *dipswitch_text(int val, int num)
     string[0]=0;
     switch (num) {
       case 8: strcat((char *)string, "SCSI LUNs ");
-	      strcat((char *)string, val?"Enabled":"Disabled");
+	      strcat((char *)string, val?"Disabled":"Enabled");
 	      break;
       case 7: strcat((char *)string, "External Termination ");
-	      strcat((char *)string, val?"On":"Off");
+	      strcat((char *)string, val?"Off":"On");
 	      break;
-      case 6: strcat((char *)string, val?"As":"S");
+      case 6: strcat((char *)string, val?"S":"As");
 	      strcat((char *)string, "ynchronous SCSI Mode");
 	      break;
-      case 5: strcat((char *)string, val?"Long":"Short");
+      case 5: strcat((char *)string, val?"Short":"Long");
 	      strcat((char *)string, " Spinup Mode");
 	      break;
-      case 4: strcat((char *)string, val?"SCSI-1 Slow":"SCSI-2 Fast");
+      case 4: strcat((char *)string, val?"SCSI-2 Fast":"SCSI-1 Slow");
 	      strcat((char *)string, " Bus Mode");
 	      break;
       case 3:
       case 2:
       case 1: strcat((char *)string, "SCSI Address A? = ?");
 	      string[14] = num - 1 + '0';
-	      string[18] = !val + '0';
+	      string[18] = val + '0';
 	      break;
     }
 
@@ -239,9 +239,8 @@ static void draw_dipswitches(UWORD x, UWORD y)
         dip_switches = *(uint8_t *)((asave->as_addr) + A4091_OFFSET_SWITCHES);
 	printf("addr=%x\n",asave->as_addr);
 	printf("dip_switches=%x\n",dip_switches);
-	dip_switches=~dip_switches;
     } else {
-	dip_switches = 0x00;
+	dip_switches = 0xff;
     }
 
     SetAPen(rp, 1);
@@ -254,7 +253,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     RectFill(rp, x, y+2, x+70, y+90);
 
     for (i=0; i<8; i++) {
-        draw_dipswitch(x+8, y+7+(i*10), (dip_switches&(1<<(7-i))));
+        draw_dipswitch(x+8, y+7+(i*10), dip_switches&BIT(7-i));
     }
 
     for (i=0; i<8; i++) {
@@ -265,11 +264,11 @@ static void draw_dipswitches(UWORD x, UWORD y)
         Text(rp, (char *)num, 1);
 	Move(rp, x+82,y+(i*10)+14);
         SetBPen(rp, 0);
-	ret = dipswitch_text((dip_switches&(1<<(7-i))), 8-i);
+	ret = dipswitch_text(dip_switches&BIT(7-i), 8-i);
         Text(rp, (char *)ret, strlen((char *)ret));
     }
 
-    hostid[9]='0'+((~dip_switches)&0x7);
+    hostid[9]='0'+(dip_switches&7);
     SetAPen(rp, 1);
     SetBPen(rp, 0);
     Move(rp, x+280, y+64);
