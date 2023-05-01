@@ -386,7 +386,7 @@ init_chan(device_t self, UBYTE *boardnum)
      */
     memset(chan, 0, sizeof (*chan));
     chan->chan_adapter = adapt;
-    chan->chan_nluns = (dip_switches & BIT(7)) ? 8 : 1;  // SCSI LUNs enabled?
+    chan->chan_nluns = (dip_switches & BIT(7)) ? 1 : 8;  // SCSI LUNs enabled?
     chan->chan_id = dip_switches & 7;  // SCSI ID from DIP switches
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
