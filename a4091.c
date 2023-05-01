@@ -1724,9 +1724,9 @@ decode_switches(void)
     printf("SCSI LUNs %s\n", (switches & BIT(7)) ? "Enabled" : "Disabled");
     show_dip(switches, 6);
     if (switches & BIT(6))
-        printf("Internal Termination On\n");
+        printf("External Termination On\n");
     else
-        printf("External Termination Only\n");
+        printf("External Termination Off\n");
     show_dip(switches, 5);
     printf("%s SCSI Mode\n",
            (switches & BIT(5)) ? "Synchronous" : "Asynchronous");
