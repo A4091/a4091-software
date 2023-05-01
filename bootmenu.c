@@ -206,7 +206,7 @@ static char *dipswitch_text(int val, int num)
 	      strcat((char *)string, val?"Disabled":"Enabled");
 	      break;
       case 7: strcat((char *)string, "External Termination ");
-	      strcat((char *)string, val?"Off":"On");
+	      strcat((char *)string, val?"On":"Off");
 	      break;
       case 6: strcat((char *)string, val?"S":"As");
 	      strcat((char *)string, "ynchronous SCSI Mode");
