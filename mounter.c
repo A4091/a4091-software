@@ -1110,8 +1110,8 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	struct MountStruct ms;
 	ULONG unitNum[8];
 	int i, j = 1, ret = 0;
-	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES), hostid;
-	hostid = dip_switches & 7;
+	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES);
+	UBYTE hostid = dip_switches & 7;
 
 	/* Produce unitNum at runtime */
 	unitNum[0] = 7;
@@ -1125,7 +1125,7 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.creatorName = NULL;
 	ms.configDev = cd;
 	ms.SysBase =  *(struct ExecBase **)4UL;
-	ms.luns = dip_switches & BIT(7);  // 1: LUNs enabled 0: LUNs disabled
+	ms.luns = !(dip_switches & BIT(7));  // 1: LUNs enabled 0: LUNs disabled
 
 	ret = MountDrive(&ms);
 
