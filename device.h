@@ -18,6 +18,7 @@
 #define ERROR_NO_BOARD        50  // HFERR_NoBoard
 #define ERROR_BAD_BOARD       51  // (HFERR_NoBoard + 1)
 #define ERROR_SENSE_CODE      52  // (HFERR_NoBoard + 2)
+#define ERROR_NOT_READY       53  // (HFERR_NoBoard + 3)
 
 #define TDF_DEBUG_OPEN    (1<<7)  // Open unit in debug mode (no I/O)
 

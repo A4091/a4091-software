@@ -68,6 +68,10 @@ translate_xs_error(struct scsipi_xfer *xs)
              (xs->sense.scsi_sense.ascq == 0x02))) {
             return (TDERR_DiskChanged);  // No disk present
         }
+        if ((xs->sense.scsi_sense.asc == 0x04) &&
+             (xs->sense.scsi_sense.ascq == 0x01)) {
+            return (ERROR_NOT_READY);  // Disk not ready
+        }
         if (xs->sense.scsi_sense.asc == 0x27)
             return (TDERR_WriteProt);  // Write-protected
     }
