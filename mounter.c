@@ -52,6 +52,7 @@
 #include "scsimsg.h"
 #include "ndkcompat.h"
 #include "mounter.h"
+#include "device.h"
 #include "a4091.h"
 
 #define TRACE 1
@@ -196,28 +197,37 @@ static UWORD checksum(UBYTE *buf, struct MountData *md)
 }
 
 
-/* a4091.device does retries internally */
-#define MAX_RETRIES 1
+#define MAX_RETRIES 3
 
 // Read single block with retries
 static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 {
 	struct ExecBase *SysBase = md->SysBase;
 	struct IOExtTD *request = md->request;
-	UWORD i;
+	UWORD i, max_retries = MAX_RETRIES;
+	if (md->slowSpinup)
+		max_retries = 15;
 
 	request->iotd_Req.io_Command = CMD_READ;
 	request->iotd_Req.io_Offset = block << 9;
 	request->iotd_Req.io_Data = buf;
 	request->iotd_Req.io_Length = md->blocksize;
-	for (i = 0; i < MAX_RETRIES; i++) {
+	for (i = 0; i < max_retries; i++) {
 		LONG err = DoIO((struct IORequest*)request);
 		if (!err) {
 			break;
 		}
-		dbg("Read block %"PRIu32" error %"PRId32"\n", block, err);
+		if (err != ERROR_NOT_READY) {
+			dbg("Read block %"PRIu32" error %"PRId32"\n", block, err);
+			/* Error retry handled in a4091.device, fail quickly here. */
+			i = max_retries;
+			break;
+		}
+		/* Give the drive more time to spin up */
+		dbg("Drive not ready.\n");
+		delay(1000000);
 	}
-	if (i == MAX_RETRIES) {
+	if (i == max_retries) {
 		return FALSE;
 	}
 	ULONG v = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | (buf[3] << 0);
