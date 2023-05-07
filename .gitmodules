@@ -1,0 +1,6 @@
+[submodule "3rdparty/bffs"]
+	path = 3rdparty/bffs
+	url = ../../cdhooper/bffs
+[submodule "3rdparty/devtest"]
+	path = 3rdparty/devtest
+	url = ../../cdhooper/amiga_devtest
