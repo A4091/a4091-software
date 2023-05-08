@@ -38,12 +38,18 @@ jobs:
     - name: Archive CI artifacts (ROM)
       uses: actions/upload-artifact@v3
       with:
-          name: Driver (ROM)
-          path: ${{ github.workspace }}/a4091.rom
+          name: Driver (AutoBoot ROM)
+          path: ${{ github.workspace }}/a4091*.rom
 
     - name: Archive CI artifacts (LHA)
       uses: actions/upload-artifact@v3
       with:
           name: Driver (LHA)
           path: ${{ github.workspace }}/a4091_??.??.lha
+
+    - name: Archive CI artifacts (ADF)
+      uses: actions/upload-artifact@v3
+      with:
+          name: Disk Image (ADF)
+          path: ${{ github.workspace }}/disk/A4091????.adf
 
