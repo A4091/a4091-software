@@ -39,7 +39,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         title: a4091-artifacts
-          - name: "Driver (LHA)"
+          - name: Driver (LHA)
             files: ${{ github.workspace }}/a4091_??.??.lha
-          - name: Disk Image (ADF)"
+          - name: Disk Image (ADF)
             files: ${{ github.workspace }}/disk/A4091_????.adf
