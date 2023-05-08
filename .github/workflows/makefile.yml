@@ -35,9 +35,11 @@ jobs:
     - name: Build ADF disk image
       run: cd disk && ./createdisk.sh
 
-    - name: Archive code coverage results
+    - name: Archive CI artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: Driver Pack (LHA)
-        path: ${{ github.workspace }}/a4091_??.??.lha
-        path: ${{ github.workspace }}/disk/A4091_????.adf
+        title: a4091-artifacts
+          - name: "Driver (LHA)"
+            files: ${{ github.workspace }}/a4091_??.??.lha
+          - name: Disk Image (ADF)"
+            files: ${{ github.workspace }}/disk/A4091_????.adf
