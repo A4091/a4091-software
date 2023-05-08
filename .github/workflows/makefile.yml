@@ -35,14 +35,15 @@ jobs:
     - name: Build ADF disk image
       run: cd disk && ./createdisk.sh
 
-    - name: Archive CI artifacts
+    - name: Archive CI artifacts (ROM)
       uses: actions/upload-artifact@v3
       with:
           name: Driver (ROM)
           path: ${{ github.workspace }}/a4091.rom
 
+    - name: Archive CI artifacts (LHA)
+      uses: actions/upload-artifact@v3
+      with:
           name: Driver (LHA)
           path: ${{ github.workspace }}/a4091_??.??.lha
 
-          name: Disk Image (ADF)
-          path: ${{ github.workspace }}/disk/A4091_????.adf
