@@ -38,6 +38,7 @@ typedef struct {
     uint32_t             romfile[2];
     /* battmem */
     uint8_t              cdrom_boot;
+    uint8_t              ignore_last;
 } a4091_save_t;
 
 extern a4091_save_t *asave;
