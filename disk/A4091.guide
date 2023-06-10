@@ -32,7 +32,7 @@ ____________________________________________________________________________
 Guide Version 1.0                               a4091.device Version 42.23
 
 
-     @{"Licence      : Legal restrictions                                  " link Licence}
+     @{"License      : Legal restrictions                                  " link License}
      @{"What is it   : What is the Amiga 4091?                             " link A4091Overview}
      @{"Compatibility: Compatibility guidelines & Requirements             " link Compatibility}
      @{"ROM Versions : What are all the available ROM versions             " link ROMVersions}
@@ -53,7 +53,8 @@ Contacts:
  EMail:  a4091\@amiga.technology
 
 @ENDNODE
-@NODE Licence
+
+@NODE License "License"
 
 Copyright 2021-2022 Chris D Hooper, Stefan Reinauer
 
