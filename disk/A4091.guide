@@ -369,7 +369,35 @@ Super Buster    :       The custom chip that handles translation between
 
 @{B}Version History@{UB}
 
-Release 42.23:
+Release v42.25:
+
+a4091.devie
+
+  o) Fix cache handling (LIV2)
+      * Unbalanced CachePre/PostDMA calls caused issues for mmulibs
+      * Add CachePostDMA() call
+      * Remove CACRF_ClearI flag from CacheClearE calls as they're not needed
+      * Add  NULL ptr & buffer length check around the CachePostDMA call
+      * Re-enable error handling in relocation code
+
+a4091 test utility
+
+  o) Improved detection and disable/enable of driver present in system
+  o) Expunge is attempted first if driver is present
+  o) If driver is present, -f (ignore) or -S (suspend driver) must be issued
+  o) Improved DMA failure error reporting
+  o) Added new Bus Test which read tests A4091 DMA master address lines
+  o) Added new DMA SCRATCH-to-TEMP and SCRATCH-to-memory DMA master tests
+  o) Added Zorro slave A0 and A1 (byte) register access test
+
+
+Release v42.24:
+
+a4091.device
+
+  o) Kickstart 3.1 and Reloc fixes by LIV2 in #1
+
+Release v42.23:
 
   o) Initial release. Can't believe we got this far.
 
