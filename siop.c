@@ -137,7 +137,6 @@ void siop_dump_acb(struct siop_acb *);
 #endif
 
 /* 53C710 script */
-const
 #include "siop_script.out"
 
 /* default to not inhibit sync negotiation on any drive */
@@ -987,7 +986,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     addr = buf;
     dmaend = NULL;
 #ifdef PORT_AMIGA
-    /* 
+    /*
      * ReadFromRAM should only be set when writing to the device
      * When this flag is set, CachePreDMA doesn't turn off copyback mode
      * Maybe there's some way to know here what the direction of the transfer is?
