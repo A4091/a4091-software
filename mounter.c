@@ -1124,7 +1124,7 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.unitNum = unitNum;
 	ms.creatorName = NULL;
 	ms.configDev = cd;
-	ms.SysBase =  *(struct ExecBase **)4UL;
+	ms.SysBase =  SysBase;
 	ms.luns = !(dip_switches & BIT(7));  // 1: LUNs enabled 0: LUNs disabled
 
 	ret = MountDrive(&ms);
