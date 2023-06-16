@@ -40,7 +40,6 @@
 #include "mounter.h" // for Port/IOReq wrappers
 #include "a4091.h"
 
-extern struct ExecBase *SysBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *IntuitionBase;
@@ -772,7 +771,6 @@ static void event_loop(void)
 
 void boot_menu(void)
 {
-    SysBase = *(struct ExecBase **)4UL;
     printf("Bootmenu:\n");
     // Hack!?
     InitResident(FindResident("gadtools.library"), 0);
