@@ -34,7 +34,7 @@ typedef struct scsi_inquiry_data {
     uint8_t flags4;
     uint8_t reserved;
     uint8_t version_descriptor[8][2];
-} __packed scsi_inquiry_data_t;  // 74 bytes
+} __packed  __attribute__((aligned(2))) scsi_inquiry_data_t;  // 74 bytes
 
 typedef struct scsi_generic {
     uint8_t opcode;
