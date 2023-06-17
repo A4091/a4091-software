@@ -141,8 +141,11 @@ static char *get_device_name(void)
 static struct Library __used __saveds *
 init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds="
     /* !!! required !!! save a pointer to exec */
     SysBase = *(struct ExecBase **)4UL;
+#pragma GCC diagnostic pop
 
     /* save pointer to our loaded code (the SegList) */
     saved_seg_list = seg_list;
@@ -341,7 +344,10 @@ static const ULONG device_vectors[] =
 static struct Library __used __saveds *
 init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds="
     SysBase = *(struct ExecBase **)4UL;
+#pragma GCC diagnostic pop
 
     if (seg_list == 0)
         romboot = TRUE;
