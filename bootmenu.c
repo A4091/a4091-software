@@ -60,8 +60,9 @@ static struct NewGadget *NewGadget;
 #define MAIN_DIPSWITCH_ID  7
 #define MAIN_DEBUG_ID      8
 #define MAIN_BOOT_ID       9
-#define DEBUG_CDROM_BOOT_ID 10
-#define DEBUG_BOGUS_ID      11
+#define DEBUG_CDROM_BOOT_ID  10
+#define DEBUG_IGNORE_LAST_ID 11
+#define DEBUG_BOGUS_ID       12
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -551,6 +552,7 @@ static void debug_page(void)
     page_header(&ng, "A4091 Diagnostics - Debug", TRUE);
 
     BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
+    BOOL ignore_last = asave->ignore_last ? TRUE : FALSE;
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
     ng.ng_LeftEdge   = 400;
@@ -562,6 +564,12 @@ static void debug_page(void)
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, cdrom_boot, TAG_DONE);
 
     ng.ng_TopEdge    = 76;
+    ng.ng_GadgetText = "Ignore RDBFF_LAST";
+    ng.ng_GadgetID   = DEBUG_IGNORE_LAST_ID;
+    LastAdded = create_gadget(CHECKBOX_KIND);
+    GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, ignore_last, TAG_DONE);
+
+    ng.ng_TopEdge    = 92;
     ng.ng_GadgetText = "Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget_custom(CHECKBOX_KIND,
@@ -761,6 +769,10 @@ static void event_loop(void)
                     break;
                 case DEBUG_CDROM_BOOT_ID:
                     asave->cdrom_boot=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
+                    Save_BattMem();
+                    break;
+		case DEBUG_IGNORE_LAST_ID:
+                    asave->ignore_last=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
                     Save_BattMem();
                     break;
                 }

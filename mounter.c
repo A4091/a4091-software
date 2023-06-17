@@ -53,6 +53,7 @@
 #include "ndkcompat.h"
 #include "mounter.h"
 #include "a4091.h"
+#include "attach.h"
 
 #define TRACE 1
 #undef TRACE_LSEG
@@ -844,7 +845,7 @@ static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 		}
 		partblock = ParsePART(buf, partblock, filesysblock, md);
 	}
-	md->wasLastDev = (flags & RDBFF_LAST) != 0;
+	md->wasLastDev = !asave->ignore_last && (flags & RDBFF_LAST) != 0;
 	md->wasLastLun = (flags & RDBFF_LASTLUN) != 0;
 	return md->ret;
 }
@@ -1059,6 +1060,10 @@ next_lun:
 							if (err == 0) {
 								switch (inq_res.device & SID_TYPE) {
 								case 5: // CDROM
+									if (!asave->cdrom_boot) {
+										printf("CDROM boot disabled.\n");
+										break;
+									}
 									md->blocksize=2048;
 									ret = ScanRDSK(md);
 									if (ret==-1)
