@@ -224,7 +224,7 @@ sd_blocksize(void *periph_p)
 {
     struct scsipi_periph *periph = periph_p;
     int      flags;
-    uint32_t blksize = 0;
+    int blksize = 0;
     scsi_mode_sense_t modepage;
 
     if (periph->periph_blkshift != 0)
