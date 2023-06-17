@@ -15,6 +15,7 @@ dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq)
 	scsi_generic_t cmd;
 	struct SCSICmd scmd;
 	uint lun = unit / 10;
+	BYTE ret;
 
 #define SCSIPI_INQUIRY_LENGTH_SCSI2	 36
 
@@ -42,7 +43,10 @@ dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq)
 	tio->iotd_Req.io_Length  = sizeof (scmd);
 	tio->iotd_Req.io_Data	= &scmd;
 
-	return (DoIO((struct IORequest *) tio));
+	ret = DoIO((struct IORequest *) tio);
+	tio->iotd_Req.io_Data	= NULL;
+
+	return ret;
 }
 
 int
