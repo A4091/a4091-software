@@ -305,6 +305,7 @@ struct ioerr {
     { 56, "HFERR_NoBoard" },
     { 51, "ERROR_BAD_BOARD" },
     { 52, "ERROR_SENSE_CODE" },
+    { 53, "ERROR_NOT_READY" },
 };
 
 static void
