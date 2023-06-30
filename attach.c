@@ -42,7 +42,7 @@
  * ----------
  * Exec V45+ contains the NewMinList function
  * But this is not available in Kickstart 3.1
- * So we undefine the NDK function and implement it ourselves. 
+ * So we undefine the NDK function and implement it ourselves.
  */
 #undef NewMinList
 void NewMinList(struct MinList * list)

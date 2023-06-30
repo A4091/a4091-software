@@ -407,7 +407,7 @@ struct scsipi_channel {
  *      RSOC_REPORT_SUPPORTED_OPCODES can provide information
  *      at attach time.
  */
-struct scsipi_opcodes 
+struct scsipi_opcodes
 {
 	struct scsipi_opinfo
 	{
