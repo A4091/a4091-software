@@ -12,13 +12,6 @@ struct timerequest;
 struct callout;
 struct ConfigDev;
 
-int attach(device_t self, uint scsi_target, struct scsipi_periph **periph,
-           uint flags);
-void detach(struct scsipi_periph *periph);
-int periph_still_attached(void);
-int init_chan(device_t self, UBYTE *boardnum);
-void deinit_chan(device_t self);
-
 typedef struct {
     uint32_t              as_addr;
     struct ExecBase      *as_SysBase;
@@ -42,5 +35,13 @@ typedef struct {
 } a4091_save_t;
 
 extern a4091_save_t *asave;
+
+int attach(device_t self, uint scsi_target, struct scsipi_periph **periph,
+           uint flags);
+void detach(struct scsipi_periph *periph);
+int periph_still_attached(void);
+int init_chan(device_t self, UBYTE *boardnum);
+void deinit_chan(device_t self);
+
 #endif /* _ATTACH_H */
 
