@@ -102,6 +102,7 @@ close_timer(void)
 {
     int which;
 
+    printf("Shutting down timer.\n");
     if (asave->as_timer_running) {
         WaitIO(&asave->as_timerio[0]->tr_node);
         asave->as_timer_running = 0;
@@ -127,7 +128,12 @@ open_timer(void)
     int rc;
     int which;
 
+    printf("Initializing timer.\n");
     for (which = 0; which < 2; which++) {
+	if (asave->as_timerport[which] || asave->as_timerio[which]) {
+	    printf("... already initialized?\n");
+	    continue;
+	}
         asave->as_timerport[which] = CreatePort(NULL, 0);
         if (asave->as_timerport[which] == NULL) {
             close_timer();

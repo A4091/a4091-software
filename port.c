@@ -75,6 +75,10 @@ delay(int usecs)
         return;
     }
 
+    if (!asave || !asave->as_timerio[1]) {
+	printf("timer.device handle invalid.\n");
+	return;
+    }
     // We opened timer.device with UNIT_VBLANK, so
     // we use ticks here.
     struct timerequest *TimerIO = asave->as_timerio[1];
