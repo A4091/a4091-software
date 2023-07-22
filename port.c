@@ -9,10 +9,13 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <clib/debug_protos.h>
+#include <clib/alib_protos.h>
 #include <clib/exec_protos.h>
 #include <clib/intuition_protos.h>
+#include <devices/timer.h>
 #include <intuition/intuition.h>
 #include <inline/intuition.h>
+#include <exec/io.h>
 #include <exec/execbase.h>
 #include "device.h"
 #include "printf.h"
@@ -62,30 +65,71 @@ panic(const char *fmt, ...)
     }
 }
 
+static void wait_for_timer(struct timerequest *tr, struct timeval *tv)
+{
+    tr->tr_node.io_Command = TR_ADDREQUEST;
+    tr->tr_time = *tv;
+    DoIO((struct IORequest *)tr);
+}
+
+static void delete_timer(struct timerequest *tr)
+{
+    struct MsgPort *tp;
+
+    if (tr != NULL) {
+        tp = tr->tr_node.io_Message.mn_ReplyPort;
+        if (tp != NULL)
+            DeletePort(tp);
+        CloseDevice((struct IORequest *)tr);
+        DeleteExtIO((struct IORequest *)tr);
+    }
+}
+
+static struct timerequest *create_timer(ULONG unit)
+{
+    LONG error;
+    struct MsgPort *tp;
+    struct timerequest *tr;
+
+    tp = CreatePort(NULL, 0);
+    if (tp == NULL)
+	return (NULL);
+
+    tr = (struct timerequest *)
+	        CreateExtIO(tp, sizeof(struct timerequest));
+    if (tr == NULL) {
+	DeletePort(tp);
+	return (NULL);
+    }
+
+    error = OpenDevice(TIMERNAME, unit, (struct IORequest *)tr, 0L);
+    if (error) {
+        delete_timer(tr);
+	return (NULL);
+    }
+    return tr;
+}
+
 void
 delay(int usecs)
 {
-    int msec = usecs / 1000;
-    int ticks = TICKS_PER_SECOND * msec / 1000;
+    struct timerequest *tr;
+    struct timeval tv;
 
-    if (ticks == 0) {
-        usecs <<= 3;
-        for (volatile int i = usecs; i > 0; i--)
-            ;
-        return;
-    }
+    if (usecs < 20000)
+        tr = create_timer(UNIT_MICROHZ);
+    else
+        tr = create_timer(UNIT_VBLANK);
 
-    if (!asave || !asave->as_timerio[1]) {
+    if (tr == NULL) {
 	printf("timer.device handle invalid.\n");
 	return;
     }
-    // We opened timer.device with UNIT_VBLANK, so
-    // we use ticks here.
-    struct timerequest *TimerIO = asave->as_timerio[1];
-    TimerIO->tr_node.io_Command = TR_ADDREQUEST;
-    TimerIO->tr_time.tv_secs  = 0;
-    TimerIO->tr_time.tv_micro = ticks;
-    DoIO((struct IORequest *)TimerIO);
+
+    tv.tv_secs  = usecs / 1000000;
+    tv.tv_micro = usecs % 1000000;
+    wait_for_timer(tr, &tv);
+    delete_timer(tr);
 }
 
 static int bsd_ilevel = 0;

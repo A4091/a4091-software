@@ -1999,10 +1999,9 @@ main(int argc, char *argv[])
         if (is_user_abort())
             close_exit();
 
-        printf("  as_timerport[0]=%p as_timerport[1]=%p\n",
-                asave->as_timerport[0], asave->as_timerport[1]);
-        printf("  as_timerio[0]=%p   as_timerio[1]=%p\n",
-               asave->as_timerio[0], asave->as_timerio[1]);
+        printf("  as_timerport=%p\n", asave->as_timerport);
+        printf("  as_timerio=%p\n",
+               asave->as_timerio);
         callout_t *callout_head = *(asave->as_callout_head);
         callout_t *cur;
         printf("  as_callout_head=%p\n", callout_head);

@@ -24,8 +24,8 @@ typedef struct {
     struct Interrupt     *as_isr;         // My interrupt server
     volatile uint8_t      as_exiting;
     struct siop_softc    *as_device_private;
-    struct MsgPort       *as_timerport[2];
-    struct timerequest   *as_timerio[2];
+    struct MsgPort       *as_timerport;
+    struct timerequest   *as_timerio;
     struct callout      **as_callout_head;
     struct ConfigDev     *as_cd;
     uint32_t             romfile[2];
