@@ -91,7 +91,7 @@ static void init_bootmenu(void)
     taglist[1].ti_Tag  = TAG_DONE;
 
     screen = OpenScreenTags(NULL,
-	SA_Depth,        2,
+        SA_Depth,        2,
         SA_Font,         &font_attr,
         SA_Type,         CUSTOMSCREEN,
         SA_DisplayID,    monitor_id,
@@ -103,7 +103,7 @@ static void init_bootmenu(void)
         TAG_DONE);
 
     window = OpenWindowTags(NULL,
-	WA_IDCMP,         (IDCMP_RAWKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
+        WA_IDCMP,         (IDCMP_RAWKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
         WA_CustomScreen,  screen,
         WA_Flags,         (WFLG_NOCAREREFRESH | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP),
         TAG_DONE);
@@ -192,7 +192,7 @@ static void draw_dipswitch(UWORD x, UWORD y, UWORD off)
     SetOPen(rp, 1);
     RectFill(rp, x+10, y, x+52,y+8);
     if (!off)
-	x+= 20;
+        x+= 20;
     SetAPen(rp, 0);
     RectFill(rp, x+12, y+2, x+30,y+6);
 }
@@ -203,26 +203,26 @@ static char *dipswitch_text(int val, int num)
     string[0]=0;
     switch (num) {
       case 8: strcat((char *)string, "SCSI LUNs ");
-	      strcat((char *)string, val?"Disabled":"Enabled");
-	      break;
+              strcat((char *)string, val?"Disabled":"Enabled");
+              break;
       case 7: strcat((char *)string, "External Termination ");
-	      strcat((char *)string, val?"On":"Off");
-	      break;
+              strcat((char *)string, val?"On":"Off");
+              break;
       case 6: strcat((char *)string, val?"S":"As");
-	      strcat((char *)string, "ynchronous SCSI Mode");
-	      break;
+              strcat((char *)string, "ynchronous SCSI Mode");
+              break;
       case 5: strcat((char *)string, val?"Short":"Long");
-	      strcat((char *)string, " Spinup Mode");
-	      break;
+              strcat((char *)string, " Spinup Mode");
+              break;
       case 4: strcat((char *)string, val?"SCSI-2 Fast":"SCSI-1 Slow");
-	      strcat((char *)string, " Bus Mode");
-	      break;
+              strcat((char *)string, " Bus Mode");
+              break;
       case 3:
       case 2:
       case 1: strcat((char *)string, "SCSI Address A? = ?");
-	      string[14] = num - 1 + '0';
-	      string[18] = val + '0';
-	      break;
+              string[14] = num - 1 + '0';
+              string[18] = val + '0';
+              break;
     }
 
     return  string;
@@ -237,10 +237,10 @@ static void draw_dipswitches(UWORD x, UWORD y)
 
     if (asave) {
         dip_switches = *(uint8_t *)((asave->as_addr) + A4091_OFFSET_SWITCHES);
-	printf("addr=%x\n",asave->as_addr);
-	printf("dip_switches=%x\n",dip_switches);
+        printf("addr=%x\n",asave->as_addr);
+        printf("dip_switches=%x\n",dip_switches);
     } else {
-	dip_switches = 0xff;
+        dip_switches = 0xff;
     }
 
     SetAPen(rp, 1);
@@ -259,12 +259,12 @@ static void draw_dipswitches(UWORD x, UWORD y)
     for (i=0; i<8; i++) {
         SetAPen(rp, 1);
         SetBPen(rp, 3);
-	Move(rp, x+6,y+(i*10)+14);
-	num[0] = '8' - i;
+        Move(rp, x+6,y+(i*10)+14);
+        num[0] = '8' - i;
         Text(rp, (char *)num, 1);
-	Move(rp, x+82,y+(i*10)+14);
+        Move(rp, x+82,y+(i*10)+14);
         SetBPen(rp, 0);
-	ret = dipswitch_text(dip_switches&BIT(7-i), 8-i);
+        ret = dipswitch_text(dip_switches&BIT(7-i), 8-i);
         Text(rp, (char *)ret, strlen((char *)ret));
     }
 
@@ -385,7 +385,7 @@ int scan_disks(void)
     port = W_CreateMsgPort(SysBase);
     if(!port) {
         printf("failed.\n");
-	return 0;
+        return 0;
     }
 
     request = (struct IOExtTD*)W_CreateIORequest(port, sizeof(struct IOExtTD), SysBase);
@@ -411,7 +411,7 @@ next_lun:
             if (err == 0) {
                 char unit_str[]="0.0";
                 unit_str[0]='0'+(unitNum % 10);
-		unit_str[2]='0'+(unitNum / 10);
+                unit_str[2]='0'+(unitNum / 10);
                 Move(rp,x,y);
                 Text(rp, (char *)unit_str, 3);
                 x+=48;
@@ -573,7 +573,7 @@ static void debug_page(void)
     ng.ng_GadgetText = "Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget_custom(CHECKBOX_KIND,
-		                     GA_Disabled, TRUE,
+                                     GA_Disabled, TRUE,
                                      TAG_DONE);
 
     ng.ng_LeftEdge   = 400;
@@ -771,7 +771,7 @@ static void event_loop(void)
                     asave->cdrom_boot=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
                     Save_BattMem();
                     break;
-		case DEBUG_IGNORE_LAST_ID:
+                case DEBUG_IGNORE_LAST_ID:
                     asave->ignore_last=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
                     Save_BattMem();
                     break;

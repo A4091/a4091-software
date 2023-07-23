@@ -47,7 +47,7 @@ int Load_BattMem(void)
 int Save_BattMem(void)
 {
     UBYTE cdrom_boot = !asave->cdrom_boot,
-	  ignore_last = asave->ignore_last;
+          ignore_last = asave->ignore_last;
 
     if (!BattMemBase)
         return 0;
@@ -67,4 +67,3 @@ int Save_BattMem(void)
 
     return 1;
 }
-

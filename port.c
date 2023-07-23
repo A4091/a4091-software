@@ -93,19 +93,19 @@ static struct timerequest *create_timer(ULONG unit)
 
     tp = CreatePort(NULL, 0);
     if (tp == NULL)
-	return (NULL);
+        return (NULL);
 
     tr = (struct timerequest *)
-	        CreateExtIO(tp, sizeof(struct timerequest));
+                CreateExtIO(tp, sizeof(struct timerequest));
     if (tr == NULL) {
-	DeletePort(tp);
-	return (NULL);
+        DeletePort(tp);
+        return (NULL);
     }
 
     error = OpenDevice(TIMERNAME, unit, (struct IORequest *)tr, 0L);
     if (error) {
         delete_timer(tr);
-	return (NULL);
+        return (NULL);
     }
     return tr;
 }
@@ -122,8 +122,8 @@ delay(int usecs)
         tr = create_timer(UNIT_VBLANK);
 
     if (tr == NULL) {
-	printf("timer.device handle invalid.\n");
-	return;
+        printf("timer.device handle invalid.\n");
+        return;
     }
 
     tv.tv_secs  = usecs / 1000000;

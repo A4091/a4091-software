@@ -197,16 +197,16 @@ a4091_find(UBYTE *boardnum)
         struct CurrentBinding cb;
         res = GetCurrentBinding(&cb, sizeof (cb));
         printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res,
-		(char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
+                (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
         if (!res)
             return (0);
         if (cb.cb_ConfigDev != NULL) {
             struct ConfigDev *cd = cb.cb_ConfigDev;
-	    cdev = cd;
+            cdev = cd;
             as_addr = (uint32_t) (cdev->cd_BoardAddr);
             do {
                 printf("configdev %p board=%08x flags=%02x configme=%x driver=%p\n",
-			cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
+                        cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
                 cd = cd->cd_NextCD;
             } while (cd != NULL);
         }

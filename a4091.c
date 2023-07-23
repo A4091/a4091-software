@@ -761,9 +761,9 @@ a4091_add_local_irq_handler(void)
         a4091_save.local_isr = AllocMem(sizeof (*a4091_save.local_isr),
                                         MEMF_CLEAR | MEMF_PUBLIC);
         a4091_save.local_isr->is_Node.ln_Type = NT_INTERRUPT;
-	/* set higher priority so that the test utility can steal interrupts
-	 * from the driver when it is running.
-	 */
+        /* set higher priority so that the test utility can steal interrupts
+         * from the driver when it is running.
+         */
         a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI + 1;
         a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
         a4091_save.local_isr->is_Data         = &a4091_save;

@@ -68,7 +68,7 @@ int add_cdromfilesystem(void)
         printf("Found\nInitializing CDFS @%p\n", r);
         InitResident(r, cdfs_seglist);
     } else {
-	printf("Not found\nToo bad.\n");
+        printf("Not found\nToo bad.\n");
     }
     return (r!=NULL);
 }

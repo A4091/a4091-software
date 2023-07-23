@@ -94,25 +94,25 @@ static char *get_device_name(void)
 {
     char *name = real_device_name;
     for (int i=0; i<8; i++) {
-	if (i) {
-	    name[0]='0'+i+1;
-	    if (i==1)         name[1]='n';
-	    else if (i==2)    name[1]='r';
-	    else              name[1]='t';
-	    if (i==1 || i==2) name[2]='d';
-	    else              name[2]='h';
-	    name[3]='.';
-	    name[4]=0;
-	} else
+        if (i) {
+            name[0]='0'+i+1;
+            if (i==1)         name[1]='n';
+            else if (i==2)    name[1]='r';
+            else              name[1]='t';
+            if (i==1 || i==2) name[2]='d';
+            else              name[2]='h';
+            name[3]='.';
+            name[4]=0;
+        } else
             name[0]=0;
-	strcat(name, device_name);
+        strcat(name, device_name);
 
 #ifdef TEST_2ND_DEVICE
-	if (i==1)
+        if (i==1)
 #else
-	if (FindName(&SysBase->DeviceList, name)==NULL)
+        if (FindName(&SysBase->DeviceList, name)==NULL)
 #endif
-	    break;
+            break;
     }
     return name;
 }

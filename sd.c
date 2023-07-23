@@ -23,8 +23,8 @@
 #include "cmdhandler.h"
 #include "ndkcompat.h"
 
-#ifndef	SDRETRIES
-#define	SDRETRIES 2
+#ifndef SDRETRIES
+#define SDRETRIES 2
 #endif
 
 #ifndef SD_IO_TIMEOUT
