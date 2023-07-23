@@ -153,43 +153,14 @@ bsd_splx(int ilevel)
 const char *
 device_xname(void *ptr)
 {
-#if 0
-    device_t dev = ptr;
-    if (dev == NULL)
-        return ("SCSI");
-    else
-        return (dev->dv_xname);
-#endif
-        return ("A4091");
+    return ("A4091");
 }
 
-void __restore_a4(void)
+void
+__restore_a4(void)
 {
     __asm volatile("\tlea ___a4_init, a4");
 }
-
-#if 0
-unsigned int
-read_system_ticks(void)
-{
-    struct DateStamp ds;
-    DateStamp(&ds);  /* Measured latency is ~250us on A3000 A3640 */
-    return ((unsigned int) (ds.ds_Minute) * 60 * TICKS_PER_SECOND + ds.ds_Tick);
-}
-
-unsigned int
-ticks_since_last(void)
-{
-    unsigned int etime = read_system_ticks();
-    unsigned int stime;
-    static unsigned int last = 0;
-    stime = last;
-    last = etime;
-    if (etime < stime)
-        etime += 24 * 60 * 60 * TICKS_PER_SECOND;  /* Next day */
-    return (etime - stime);
-}
-#endif
 
 char *itoa(int value, char *string, int radix)
 {
@@ -220,29 +191,7 @@ char *itoa(int value, char *string, int radix)
     return string;
 }
 
-#if 0
-/* Return the index of the lowest set bit. (Counted from one) */
-int
-ffs(int i)
-{
-    int result = 0;
-
-    if (i != 0) {
-        int x;
-
-        x = (i & (-i)) - 1;
-        x -= ((x >> 1) & 0x55555555);
-        x = ((x >> 2) & 0x33333333) + (x & 0x33333333);
-        x = ((x >> 4) + x) & 0x0f0f0f0f;
-        x += (x >> 8);
-        x += (x >> 16);
-
-        result = 1 + (x & 0x3f);  /* The first bit has index 1. */
-    }
-
-    return (result);
-}
-#endif
+/* callout */
 
 callout_t *callout_head = NULL;
 
@@ -348,31 +297,3 @@ callout_run_timeouts(void)
         }
     }
 }
-
-#if 0
-void
-callout_destroy(callout_t *c);
-
-
-void
-callout_schedule(callout_t *c, int ticks);
-
-void
-callout_setfunc(callout_t *c, void (*func)(void *), void *arg);
-
-bool
-callout_halt(callout_t *c, void *interlock);
-
-
-bool
-callout_expired(callout_t *c);
-
-bool
-callout_active(callout_t *c);
-
-bool
-callout_invoking(callout_t *c);
-
-void
-callout_ack(callout_t *c);
-#endif

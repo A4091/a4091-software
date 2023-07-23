@@ -23,10 +23,6 @@ struct device;
 typedef struct device *device_t;
 
 void panic(const char *s, ...);
-#if 0
-unsigned int read_system_ticks(void);
-unsigned int ticks_since_last(void);
-#endif
 int irq_and_timer_handler(void);
 
 #define __USE(x) (/*LINTED*/(void)(x))
@@ -48,13 +44,6 @@ void delay(int usecs);
 
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
-
-// Can't assign printf() to KPrintF() because RawDoFmt() assumes 16-bit ints
-#if 0
-#undef printf
-#define printf dbgprintf
-int dbgprintf(const char *fmt, ...);
-#endif
 
 #define memcpy USE_CopyMem
 
