@@ -20,6 +20,7 @@ xdftool $DISK write rdb Tools/rdb
 xdftool $DISK write ../a4091 Tools/a4091
 xdftool $DISK write ../a4091d Tools/a4091d
 xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
+xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK write A4091.guide
 xdftool $DISK write A4091.guide.info
 xdftool $DISK write Disk.info
