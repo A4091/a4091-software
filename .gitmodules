@@ -4,3 +4,6 @@
 [submodule "3rdparty/devtest"]
 	path = 3rdparty/devtest
 	url = ../../cdhooper/amiga_devtest
+[submodule "3rdparty/RDBFlags"]
+	path = 3rdparty/RDBFlags
+	url = https://github.com/reinauer/RDBFlags
