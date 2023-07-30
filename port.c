@@ -156,11 +156,13 @@ device_xname(void *ptr)
     return ("A4091");
 }
 
+#ifdef USE_BASEREL
 void
 __restore_a4(void)
 {
     __asm volatile("\tlea ___a4_init, a4");
 }
+#endif
 
 char *itoa(int value, char *string, int radix)
 {
