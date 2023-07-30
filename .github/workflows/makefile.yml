@@ -51,5 +51,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
           name: Disk Image (ADF)
-          path: ${{ github.workspace }}/disk/A4091????.adf
+          path: ${{ github.workspace }}/disk/A4091_????.adf
 
