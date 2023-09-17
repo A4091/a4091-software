@@ -38,6 +38,9 @@
 //
 short bug=TRUE;
 
+/* Interrupt Level, >0 means interrupts are disabled */
+static int bsd_ilevel = 0;
+
 void
 panic(const char *fmt, ...)
 {
@@ -78,10 +81,10 @@ static void delete_timer(struct timerequest *tr)
 
     if (tr != NULL) {
         tp = tr->tr_node.io_Message.mn_ReplyPort;
-        if (tp != NULL)
-            DeletePort(tp);
         CloseDevice((struct IORequest *)tr);
         DeleteExtIO((struct IORequest *)tr);
+        if (tp != NULL)
+            DeletePort(tp);
     }
 }
 
@@ -116,6 +119,13 @@ delay(int usecs)
     struct timerequest *tr;
     struct timeval tv;
 
+    if(bsd_ilevel > 0) {
+        printf("delay(%d): Interrupts disabled, using delay loop.\n", usecs);
+        for (unsigned long i = 0; i < ((unsigned long)usecs << 3); i++)
+            asm("nop");
+	return;
+    }
+
     if (usecs < 20000)
         tr = create_timer(UNIT_MICROHZ);
     else
@@ -132,7 +142,6 @@ delay(int usecs)
     delete_timer(tr);
 }
 
-static int bsd_ilevel = 0;
 /* Block (nesting) interrupts */
 int
 bsd_splbio(void)
