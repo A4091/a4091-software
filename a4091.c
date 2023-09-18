@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 0.6 ("__DATE__") © Chris Hooper";
+const char *version = "\0$VER: A4091 1.0 ("__DATE__") © Chris Hooper";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +33,15 @@ const char *version = "\0$VER: A4091 0.6 ("__DATE__") © Chris Hooper";
 #include "ndkcompat.h"
 #include "a4091.h"
 
+/*
+ * gcc clib2 headers are bad (for example, no stdint definitions) and are
+ * not being included by our build.  Because of that, we need to fix up
+ * some stdio definitions.
+ */
+extern struct iob ** __iob;
+#undef stdout
+#define stdout ((FILE *)__iob[1])
+
 #define CACHE_LINE_WRITE(addr, len) CacheClearE((void *)(addr), len, \
                                                 CACRF_ClearD)
 #define CACHE_LINE_DISCARD(addr, len) CacheClearE((void *)(addr), len, \
@@ -50,10 +59,10 @@ extern struct ExecBase *SysBase;
 #define FLAG_MORE_DEBUG       0x02        /* More debug output */
 #define FLAG_IS_A4000T        0x04        /* A4000T onboard SCSI controller */
 
-#define SUPERVISOR_STATE_ENTER() { \
-                                   APTR old_stack = SuperState()
-#define SUPERVISOR_STATE_EXIT()    UserState(old_stack); \
-                                 }
+#define SUPERVISOR_STATE_ENTER()    { \
+                                      APTR old_stack = SuperState()
+#define SUPERVISOR_STATE_EXIT()       UserState(old_stack); \
+                                    }
 #define INTERRUPTS_DISABLE() Disable()  /* Disable Interrupts */
 #define INTERRUPTS_ENABLE()  Enable()   /* Enable Interrupts */
 
@@ -180,12 +189,20 @@ extern struct ExecBase *SysBase;
 
 #define NCR_FIFO_SIZE 16
 
+#define AMIGA_BERR_DSACK 0x00de0000  // Bit7=1 for BERR on timeout, else DSACK
+#define BERR_DSACK_SAVE() \
+        uint8_t old_berr_dsack = *ADDR8(AMIGA_BERR_DSACK); \
+        *ADDR8(AMIGA_BERR_DSACK) &= ~BIT(7);
+#define BERR_DSACK_RESTORE() \
+        *ADDR8(AMIGA_BERR_DSACK) = old_berr_dsack;
+
 /* Modern stdint types */
 typedef unsigned char      uint8_t;
 typedef unsigned short     uint16_t;
 typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
 
+typedef volatile APTR VAPTR;
 typedef unsigned int   uint;
 
 static void a4091_state_restore(int skip_reset);
@@ -231,6 +248,14 @@ read_system_ticks(void)
     DateStamp(&ds);  /* Measured latency is ~250us on A3000 A3640 */
     return ((uint64_t) (ds.ds_Days * 24 * 60 +
                         ds.ds_Minute) * 60 * TICKS_PER_SECOND + ds.ds_Tick);
+}
+
+static void
+print_system_ticks(void)
+{
+    struct DateStamp ds;
+    DateStamp(&ds);  /* Measured latency is ~250us on A3000 A3640 */
+    printf("d=%d m=%d t=%d\n", ds.ds_Days, ds.ds_Minute, ds.ds_Tick);
 }
 
 static uint64_t
@@ -286,10 +311,26 @@ static const char * const config_subsizes[] =
     "4MB", "6MB", "8MB", "10MB", "12MB", "14MB", "Rsvd1", "Rsvd2"
 };
 
+static uint     flag_verbose = 1;     // Run in verbose mode
 static uint32_t a4091_base;           // Base address for current card
 static uint32_t a4091_rom_base;       // ROM base address
 static uint32_t a4091_reg_base;       // Registers base address
 static uint32_t a4091_switch_base;    // Switches base address
+
+static uint8_t
+get_rom(uint off)
+{
+    if (runtime_flags & FLAG_IS_A4000T) {
+        return (0);  // No Zorro config for 53C710 in A4000T
+    } else {
+        /*
+         * ROM byte bits 7:4 are in base[addr] 31:28
+         * ROM byte bits 3:0 are in base[addr] 15:12
+         */
+        uint32_t hilo = *ADDR32(a4091_base + A4091_OFFSET_ROM + off * 4);
+        return (((hilo >> 24) & 0xf0) | ((hilo >> 12) & 0xf));
+    }
+}
 
 static uint8_t
 get_creg(uint reg)
@@ -299,8 +340,12 @@ get_creg(uint reg)
     if (runtime_flags & FLAG_IS_A4000T) {
         return (0);  // No Zorro config for 53C710 in A4000T
     } else {
-        hi = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg);
-        lo = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg + 0x100);
+        /*
+         * CREG byte bits 7:4 are in base[addr + 0x000] 7:4
+         * CREG byte bits 3:0 are in base[addr + 0x100] 7:4
+         */
+        hi = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg * 4);
+        lo = ~*ADDR8(a4091_base + A4091_OFFSET_AUTOCONFIG + reg * 4 + 0x100);
         return ((hi & 0xf0) | (lo >> 4));
     }
 }
@@ -309,8 +354,8 @@ get_creg(uint reg)
 static void
 set_creg(uint32_t addr, uint reg, uint8_t value)
 {
-    *ADDR8(addr + A4091_OFFSET_AUTOCONFIG + reg) = value;
-    *ADDR8(addr + A4091_OFFSET_AUTOCONFIG + reg + 0x100) = value << 4;
+    *ADDR8(addr + A4091_OFFSET_AUTOCONFIG + reg * 4) = value;
+    *ADDR8(addr + A4091_OFFSET_AUTOCONFIG + reg * 4 + 0x100) = value << 4;
 }
 #endif
 
@@ -381,11 +426,9 @@ decode_autoconfig(void)
         printf(" Link-to-next");
     printf("\n");
 
-    printf(" Product=0x%02x\n", show_creg(0x04) & 0xff);
+    printf(" Product=0x%02x\n", show_creg(0x01) & 0xff);
 
-    rc += autoconfig_reserved(0x0c);
-
-    value = show_creg(0x08);
+    value = show_creg(0x02);
     if (is_z3) {
         if (value & BIT(7)) {
             printf(" Device-Memory");
@@ -409,18 +452,18 @@ decode_autoconfig(void)
         printf(" SizeExt");
     printf(" %s\n", config_subsizes[value & 0x0f]);
 
-    if (autoconfig_reserved(0x0c))
+    if (autoconfig_reserved(0x03))
         rc = 1;
 
-    value32 = show_creg(0x10) << 8;
+    value32 = show_creg(0x04) << 8;
     printf(" Mfg Number high byte\n");
-    value32 |= show_creg(0x14);
+    value32 |= show_creg(0x05);
     printf(" Mfg Number low byte    Manufacturer=0x%04x\n", value32);
 
     value32 = 0;
     for (byte = 0; byte < 4; byte++) {
         value32 <<= 8;
-        value32 |= show_creg(0x18 + byte * 4);
+        value32 |= show_creg(0x06 + byte);
         printf(" Serial number byte %d", byte);
         if (byte == 3)
             printf("   Serial=0x%08x", value32);
@@ -428,14 +471,14 @@ decode_autoconfig(void)
     }
 
     if (is_autoboot) {
-        value32 = show_creg(0x28) << 8;
+        value32 = show_creg(0x10) << 8;
         printf(" Option ROM vector high\n");
-        value32 |= show_creg(0x2c);
+        value32 |= show_creg(0x11);
         printf(" Option ROM vector low  Offset=0x%04x\n", value32);
     }
-    for (byte = 0x30; byte <= 0x3c; byte += 4)
+    for (byte = 0x0c; byte <= 0x0f; byte++)
         rc += autoconfig_reserved(byte);
-    for (byte = 0x52; byte <= 0x7c; byte += 4)
+    for (byte = 0x14; byte <= 0x31; byte++)
         rc += autoconfig_reserved(byte);
 
     return (rc);
@@ -556,7 +599,9 @@ static const ncr_regdefs_t ncr_regdefs[] =
 static uint8_t
 get_ncrreg8_noglob(uint32_t a4091_regs, uint reg)
 {
-    return (*ADDR8(a4091_regs + reg));
+    uint8_t value;
+    value = *ADDR8(a4091_regs + reg);
+    return (value);
 }
 
 static void
@@ -577,7 +622,32 @@ get_ncrreg8(uint reg)
 static uint32_t
 get_ncrreg32(uint reg)
 {
+#if 1
     uint32_t value = *ADDR32(a4091_reg_base + reg);
+#else
+    /*
+     * Work around 68030 cache line allocation bug.
+     * Not sure this is needed, so the code is disabled at this time.
+     */
+    APTR addr = (APTR) (a4091_reg_base + reg);
+    uint32_t value;
+    ULONG buf_handled = 4;
+    CachePreDMA(addr, &buf_handled, DMA_ReadFromRAM);
+    value = *ADDR32(a4091_reg_base + reg);
+    CachePostDMA(addr, &buf_handled, DMA_ReadFromRAM);
+#endif
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] R %08x\n", a4091_reg_base + reg, value);
+    return (value);
+}
+
+static uint32_t
+get_ncrreg32b(uint reg)
+{
+    uint32_t value = (*ADDR8(a4091_reg_base + reg + 0) << 24) |
+                     (*ADDR8(a4091_reg_base + reg + 1) << 16) |
+                     (*ADDR8(a4091_reg_base + reg + 2) << 8) |
+                     (*ADDR8(a4091_reg_base + reg + 3));
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] R %08x\n", a4091_reg_base + reg, value);
     return (value);
@@ -598,6 +668,17 @@ set_ncrreg32(uint reg, uint32_t value)
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] W %08x\n", a4091_reg_base + reg, value);
     *ADDR32(a4091_reg_base + 0x40 + reg) = value;
+}
+
+static void
+set_ncrreg32b(uint reg, uint32_t value)
+{
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] W %08x\n", a4091_reg_base + reg, value);
+    *ADDR8(a4091_reg_base + 0x40 + reg + 0) = value >> 24;
+    *ADDR8(a4091_reg_base + 0x40 + reg + 1) = value >> 16;
+    *ADDR8(a4091_reg_base + 0x40 + reg + 2) = value >> 8;
+    *ADDR8(a4091_reg_base + 0x40 + reg + 3) = value;
 }
 
 /*
@@ -625,8 +706,9 @@ access_timeout(const char *msg, uint32_t ticks, uint64_t tick_start)
         diff = tick_end - tick_start;
         if (diff > TICKS_PER_SECOND * 10) {
             printf(": bug? %08x%08x %08x%08x\n",
-                   (uint32_t) (tick_end >> 32), (uint32_t) tick_start,
+                   (uint32_t) (tick_start >> 32), (uint32_t) tick_start,
                    (uint32_t) (tick_end >> 32), (uint32_t) tick_end);
+            print_system_ticks();
         }
         printf("\n");
         return (TRUE);
@@ -727,8 +809,9 @@ a4091_irq_handler(void)
 
     uint8_t istat = get_ncrreg8_noglob(save->reg_addr, REG_ISTAT);
 
-    if (istat == 0)
+    if (istat == 0) {
         return (0);
+    }
 
     if (istat & REG_ISTAT_ABRT)
         set_ncrreg8_noglob(save->reg_addr, REG_ISTAT, 0);
@@ -746,10 +829,10 @@ a4091_irq_handler(void)
 
         save->intcount++;
 
-        if (prev_istat == 0)
+        if (prev_istat == 0) {
             return (1);  // Handled
+        }
     }
-
     return (0);  // Not handled
 }
 
@@ -761,13 +844,14 @@ a4091_add_local_irq_handler(void)
         a4091_save.local_isr = AllocMem(sizeof (*a4091_save.local_isr),
                                         MEMF_CLEAR | MEMF_PUBLIC);
         a4091_save.local_isr->is_Node.ln_Type = NT_INTERRUPT;
-        /* set higher priority so that the test utility can steal interrupts
+        /*
+         * set higher priority so that the test utility can steal interrupts
          * from the driver when it is running.
          */
         a4091_save.local_isr->is_Node.ln_Pri  = A4091_INTPRI + 1;
         a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
         a4091_save.local_isr->is_Data         = &a4091_save;
-        a4091_save.local_isr->is_Code         = (VOID (*)()) a4091_irq_handler;
+        a4091_save.local_isr->is_Code         = (void (*)()) a4091_irq_handler;
 
         if (runtime_flags & FLAG_DEBUG)
             printf("my irq handler=%x %x\n",
@@ -1003,7 +1087,8 @@ a4091_remove_driver_from_devlist(void)
         next = node->ln_Succ;
         if (strstr(name, "scsi.device") != NULL) {
             struct Library *lib = (struct Library *) node;
-            printf("found %p %s %s\n", node, node->ln_Name, (char *)lib->lib_IdString);
+            printf("found %p %s %s\n",
+                   node, node->ln_Name, (char *)lib->lib_IdString);
         }
     }
     Permit();
@@ -1248,7 +1333,7 @@ dma_clear_istat(void)
 }
 
 static int
-execute_script(uint32_t *script)
+execute_script(uint32_t *script, ULONG script_len)
 {
     int rc = 0;
     int count = 1;
@@ -1260,6 +1345,7 @@ execute_script(uint32_t *script)
 
     tick_start = read_system_ticks();
 
+    CachePreDMA((APTR) script, &script_len, DMA_ReadFromRAM);
     /* Enable interrupts and start script */
     set_ncrreg8(REG_DIEN, REG_DIEN_ILD | REG_DIEN_WTD | REG_DIEN_SIR |
                 REG_DIEN_SSI | REG_DIEN_ABRT | REG_DIEN_BF);
@@ -1277,7 +1363,7 @@ execute_script(uint32_t *script)
             a4091_save.ireg_istat = 0;
             printf("istat=%02x\n", istat);
         }
-        if ((count & 0xffff) == 0) {
+        if ((count & 0xff) == 0) {
             uint8_t istat = get_ncrreg8(REG_ISTAT);
             if (istat & (REG_ISTAT_ABRT | REG_ISTAT_DIP)) {
                 dstat = get_ncrreg8(REG_DSTAT);
@@ -1305,10 +1391,19 @@ got_dstat:
 
         if (((count & 0xff) == 0) &&
             access_timeout("SIOP timeout", 30, tick_start)) {
-            printf("ISTAT=%02x %02x DSTAT=%02x %02x SSTAT0=%02x "
-                   "SSTAT1=%02x SSTAT2=%02x\n",
-                   a4091_save.ireg_istat, get_ncrreg8(REG_ISTAT),
-                   a4091_save.ireg_dstat, get_ncrreg8(REG_DSTAT),
+            uint8_t istat = get_ncrreg8(REG_ISTAT);
+            dstat = get_ncrreg8(REG_DSTAT);
+            dstat = get_ncrreg8(REG_DSTAT);
+            printf("ISTAT=%02x %02x DSTAT=%02x %02x ",
+                   a4091_save.ireg_istat, istat,
+                   a4091_save.ireg_dstat, dstat);
+            if (dstat & REG_DSTAT_BF)
+                printf("Bus fault ");
+            if (dstat & REG_DSTAT_ABRT)
+                printf("Abort ");
+            if (dstat & REG_DSTAT_WDT)
+                printf("Watchdog timeout ");
+            printf("SSTAT0=%02x SSTAT1=%02x SSTAT2=%02x\n",
                    get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
                    get_ncrreg8(REG_SSTAT2));
             rc = 1;
@@ -1320,6 +1415,9 @@ got_dstat:
 fail:
     /* Disable interrupts */
     set_ncrreg8(REG_DIEN, 0);
+    CachePostDMA((APTR) script, &script_len, DMA_ReadFromRAM);
+    if (rc != 0)
+        printf("\n");
     return (rc);
 }
 
@@ -1557,7 +1655,7 @@ dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
     script[0] = 0xc0000000 | len;
     script[1] = src;
     script[2] = dst;
-    CACHE_LINE_WRITE(script, 0x10);
+//  CACHE_LINE_WRITE(script, 0x10);
 
     if (runtime_flags & FLAG_DEBUG)
         printf("DMA from %08x to %08x len %08x\n", src, dst, len);
@@ -1567,7 +1665,7 @@ dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
     set_ncrreg8(REG_DMODE, get_ncrreg8(REG_DSTAT) | REG_DMODE_FAM);
 #endif
 
-    return (execute_script(script));
+    return (execute_script(script, 0x10));
 }
 
 /*
@@ -1616,14 +1714,12 @@ dma_scratch_to_temp(void)
  * purposes.
  */
 static int
-dma_mem_to_mem_quad(volatile APTR src, volatile APTR dst, uint32_t len,
+dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
                     int update_script)
 {
-    int rc;
     uint32_t *script = dma_mem_move_script_quad;
 
     if (update_script) {
-        ULONG xlen = sizeof (dma_mem_move_script_quad);
         script[0] = 0xc0000000 | len;
         script[1] = (uint32_t) src;
         script[2] = (uint32_t) dst;
@@ -1636,8 +1732,6 @@ dma_mem_to_mem_quad(volatile APTR src, volatile APTR dst, uint32_t len,
         script[9] = 0xc0000000 | len;
         script[10] = (uint32_t) src;
         script[11] = (uint32_t) dst;
-
-        CachePreDMA((APTR) script, &xlen, DMA_ReadFromRAM);
 //      CACHE_LINE_WRITE(script, 0x30);
     }
 
@@ -1645,15 +1739,8 @@ dma_mem_to_mem_quad(volatile APTR src, volatile APTR dst, uint32_t len,
         printf("DMA from %08x to %08x len %08x\n",
                (uint32_t) src, (uint32_t) dst, len);
 
-    rc = execute_script(script);
-
-    if (update_script) {
-        ULONG xlen = sizeof (dma_mem_move_script_quad);
-        CachePostDMA((APTR) script, &xlen, DMA_ReadFromRAM);
-    }
-    return (rc);
+    return (execute_script(script, 0x20));
 }
-
 /*
  * script_write_reg_setup
  * ----------------------
@@ -1679,7 +1766,7 @@ script_write_reg_setup(uint32_t *script, uint8_t reg, uint8_t value)
     script[1] = 0x98080000;
     script[2] = 0x00000000;
     script[3] = 0x00000000;
-    CACHE_LINE_WRITE(script, 0x10);
+//  CACHE_LINE_WRITE(script, 0x10);
 }
 
 #if 0
@@ -1696,7 +1783,7 @@ script_write_reg(uint32_t *script, uint8_t reg, uint8_t value)
     if (runtime_flags & FLAG_DEBUG)
         printf("Reg %02x = %02x\n", reg, value);
 
-    return (execute_script(script));
+    return (execute_script(script, 0x10));
 }
 #endif
 
@@ -1710,14 +1797,16 @@ static int
 decode_switches(void)
 {
     uint8_t switches;
+    uint32_t addr;
 
     if (runtime_flags & FLAG_IS_A4000T) {
-        switches = *ADDR32(a4091_switch_base);
+        addr = a4091_switch_base;
         printf("A4000T");
     } else {
-        switches = *ADDR8(a4091_switch_base);
+        addr = a4091_switch_base;
         printf("A4091");
     }
+    switches = *ADDR8(addr);
     printf(" Rear-access DIP switches\n");
 
     show_dip(switches, 7);
@@ -1876,16 +1965,61 @@ static void
 show_test_state(const char * const name, int state)
 {
     if (state == 0) {
-        printf("PASS\n");
+        if (flag_verbose)
+            printf("PASS\n");
         return;
     }
-    printf("  %-16s ", name);
+
+    if (flag_verbose || (state != -1))
+        printf("  %-16s ", name);
+
     if (state == -1) {
         fflush(stdout);
         return;
     }
     printf("FAIL\n");
 }
+
+static const uint8_t zorro_expected_cregs[] = {
+    0x6f, 0x54, 0x30, 0x00, 0x02, 0x02
+};
+
+static const char * const zorro_expected_cregnames[] = {
+    "Zorro Size / Autoboot",
+    "Product",
+    "Devvtype/shutup/sizeext",
+    "Mfg High",
+    "Mfg Low",
+    "Serial 0",
+    "Serial 1",
+    "Serial 2",
+    "Serial 3",
+    "ROM Hi",
+    "ROM Lo",
+};
+
+static const uint8_t rom_expected_data[] =
+{
+    0x9f, 0xaf, 0xcf, 0xff, 0xff, 0xff, 0xff, 0xfd,
+    0xff, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+
+    0x0f, 0xbf, 0xff, 0xff, 0xdf, 0xdf, 0xff, 0xd5,
+    0xff, 0xe6, 0xdf, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+
+    0x10, 0x00,
+};
 
 /*
  * test_device_access
@@ -1899,29 +2033,24 @@ show_test_state(const char * const name, int state)
 static int
 test_device_access(void)
 {
-    static const uint8_t zorro_expected_regs[] = {
-        0x6f, 0x54, 0x30, 0x00, 0x02, 0x02
-    };
-#define NUM_ZORRO_EXPECTED_REGS ARRAY_SIZE(zorro_expected_regs)
-    uint8_t  saw_correct[NUM_ZORRO_EXPECTED_REGS];
-    uint8_t  saw_incorrect[NUM_ZORRO_EXPECTED_REGS];
+    uint8_t  saw_incorrect[ARRAY_SIZE(rom_expected_data)];
     int      i;
     int      rc = 0;
     int      pass;
     uint64_t tick_start;
+    uint8_t  pins_stuck_high = 0xff;
+    uint8_t  pins_stuck_low  = 0xff;
+    uint8_t  pins_diff       = 0x00;
 
     show_test_state("Device access:", -1);
-
-    memset(saw_correct, 0, sizeof (saw_correct));
-    memset(saw_incorrect, 0, sizeof (saw_incorrect));
 
     /* Measure access speed against possible bus timeout */
     tick_start = read_system_ticks();
     (void) *ADDR32(a4091_rom_base);
-    if (access_timeout("ROM access timeout", 2, tick_start)) {
+    if (access_timeout("ROM base timeout", 2, tick_start)) {
         /* Try again */
         (void) *ADDR32(a4091_rom_base);
-        if (access_timeout("ROM access timeout", 2, tick_start)) {
+        if (access_timeout("ROM base timeout", 2, tick_start)) {
             rc = 1;
             goto fail;
         }
@@ -1936,26 +2065,85 @@ test_device_access(void)
     if (runtime_flags & FLAG_IS_A4000T)
         goto fail;  // Skip autoconfig test
 
-    /* Verify autoconfig area header contents */
-    for (pass = 0; pass < 100; pass++) {
-        for (i = 0; i < NUM_ZORRO_EXPECTED_REGS; i++) {
-            uint8_t regval;
-            tick_start = read_system_ticks();
-            regval = get_creg(i * 4);
-            if (access_timeout("\n53C710 loop access timeout", 1, tick_start)) {
-                rc = 1;
-                goto fail;
-            }
-            if (regval == zorro_expected_regs[i]) {
-                saw_correct[i] = 1;
+    /* Verify ROM area header contents (overlaps with autoconfig test below) */
+    memset(saw_incorrect, 0, sizeof (saw_incorrect));
+    for (pass = 0; pass < 50; pass++) {
+        for (i = 0; i < ARRAY_SIZE(rom_expected_data); i++) {
+            uint8_t val;
+            uint8_t diff;
+
+            if ((i & 0x7) == 0) {
+                /* Only occasionally measure access time */
+                tick_start = read_system_ticks();
+                val = get_rom(i);
+                if (access_timeout("\nROM access timeout", 2, tick_start)) {
+                    rc = 1;
+                    printf("    ROM pos %02x at pass %u\n", i, pass);
+                    goto fail;
+                }
             } else {
+                val = get_rom(i);
+            }
+            pins_stuck_high &= val;
+            pins_stuck_low  &= ~val;
+            diff = val ^ rom_expected_data[i];
+            if (diff != 0) {
+                pins_diff |= diff;
                 if (saw_incorrect[i] == 0) {
                     saw_incorrect[i] = 1;
                     if (rc == 0)
                         printf("\n");
-                    printf("    Reg %02x  %02x != expected %02x (diff %02x)\n",
-                           i * 4, regval, zorro_expected_regs[i],
-                           regval ^ zorro_expected_regs[i]);
+                    printf("    ROM pos %02x: %02x != expected %02x "
+                           "(diff %02x) at pass %u\n",
+                           i, val, rom_expected_data[i], diff, pass);
+                    rc++;
+                }
+            }
+        }
+    }
+
+    if (rc != 0) {
+        pins_diff &= ~(pins_stuck_high | pins_stuck_low);
+        if (pins_stuck_high != 0) {
+            printf("Stuck high: 0x%02x (check for short to VCC)\n",
+                   pins_stuck_high);
+        }
+        if (pins_stuck_low != 0) {
+            printf("Stuck low: 0x%02x (check for short to GND)\n",
+                   pins_stuck_low);
+        }
+        if (pins_diff != 0) {
+            printf("Floating or bridged: 0x%02x\n", pins_diff);
+        }
+        goto fail;
+    }
+
+    /* Verify autoconfig area header contents */
+    memset(saw_incorrect, 0, sizeof (saw_incorrect));
+    for (pass = 0; pass < 50; pass++) {
+        for (i = 0; i < ARRAY_SIZE(zorro_expected_cregs); i++) {
+            uint8_t regval;
+            if ((i & 0x7) == 0) {
+                /* Only occasionally measure access time */
+                tick_start = read_system_ticks();
+                regval = get_creg(i);
+                if (access_timeout("\nCReg access timeout", 1, tick_start)) {
+                    rc = 1;
+                    goto fail;
+                }
+            } else {
+                regval = get_creg(i);
+            }
+            if (regval != zorro_expected_cregs[i]) {
+                if (saw_incorrect[i] == 0) {
+                    saw_incorrect[i] = 1;
+                    if (rc == 0)
+                        printf("\n");
+                    printf("    Reg %02x: %02x != expected %02x (diff %02x) "
+                           "for %s at P%u\n",
+                           i, regval, zorro_expected_cregs[i],
+                           regval ^ zorro_expected_cregs[i],
+                           zorro_expected_cregnames[i], pass);
                     rc++;
                 }
             }
@@ -2015,11 +2203,12 @@ test_register_access(void)
     uint32_t stuck_high;
     uint32_t stuck_low;
     uint32_t pins_diff;
-    uint32_t patt = 0xf0e7c3a5;
+    uint32_t patt;
     uint32_t next;
     uint32_t value;
     uint     rot;
     uint     pos;
+    uint     mode;
 
     show_test_state("Register test:", -1);
 
@@ -2044,46 +2233,75 @@ test_register_access(void)
     rc += check_ncrreg_bits(1, REG_DSTAT, "DSTAT", 0x7f);
 
     /* Walking bits test of writable registers (TEMP and SCRATCH) */
+    patt       = 0xf0e7c3a5;
     stuck_high = 0xffffffff;
     stuck_low  = 0xffffffff;
     pins_diff  = 0x00000000;
-    for (rot = 0; rot < 256; rot++, patt = next) {
-        uint32_t got_scratch;
-        uint32_t got_temp;
-        uint32_t diff_s;
-        uint32_t diff_t;
-        next = (patt << 1) | (patt >> 31);
-        set_ncrreg32(REG_SCRATCH, patt);
-        set_ncrreg32(REG_TEMP, next);
+    for (mode = 0; mode < 4; mode++) {
+        /*
+         * mode 0: 32-bit write and 32-bit read
+         * mode 1:  8-bit write and 32-bit read
+         * mode 2: 32-bit write and  8-bit read
+         * mode 3:  8-bit write and  8-bit read
+         */
+        for (rot = 0; rot < 256; rot++, patt = next) {
+            uint32_t got_scratch;
+            uint32_t got_temp;
+            uint32_t diff_s;
+            uint32_t diff_t;
+            next = (patt << 1) | (patt >> 31);
+            if ((mode & BIT(0)) == 0) {
+                /* mode=0 and mode=2 */
+                set_ncrreg32(REG_SCRATCH, patt);
+                set_ncrreg32(REG_TEMP, next);
+            } else {
+                /* mode=1 and mode=3 */
+                set_ncrreg32b(REG_SCRATCH, patt);
+                set_ncrreg32b(REG_TEMP, next);
+            }
 
-        got_scratch = get_ncrreg32(REG_SCRATCH);
-        got_temp    = get_ncrreg32(REG_TEMP);
-        stuck_high &= (got_scratch & got_temp);
-        stuck_low  &= ~(got_scratch | got_temp);
-        diff_s = got_scratch ^ patt;
-        diff_t = got_temp    ^ next;
-        if (diff_s != 0) {
-            pins_diff |= diff_s;
-            if (rc++ == 0)
-                printf("\n");
-            if (rc < 8) {
-                printf("Reg SCRATCH %08x != %08x (diff %08x)\n",
-                       got_scratch, patt, diff_s);
+            if ((mode & BIT(1)) == 0) {
+                /* mode=0 and mode=1 */
+                got_scratch = get_ncrreg32(REG_SCRATCH);
+                got_temp    = get_ncrreg32(REG_TEMP);
+            } else {
+                /* mode=2 and mode=3 */
+                got_scratch = get_ncrreg32b(REG_SCRATCH);
+                got_temp    = get_ncrreg32b(REG_TEMP);
             }
-        }
-        if (diff_t != 0) {
-            pins_diff |= diff_t;
-            if (rc++ == 0)
-                printf("\n");
-            if (rc < 8) {
-                printf("Reg TEMP    %08x != %08x (diff %08x)\n",
-                       got_temp, next, diff_t);
+            stuck_high &= (got_scratch & got_temp);
+            stuck_low  &= ~(got_scratch | got_temp);
+            diff_s = got_scratch ^ patt;
+            diff_t = got_temp    ^ next;
+            if (diff_s != 0) {
+                pins_diff |= diff_s;
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 8) {
+                    printf("Reg SCRATCH %08x != %08x (diff %08x) W%u R%u\n",
+                           got_scratch, patt, diff_s,
+                           (mode & BIT(0)) ? 8 : 32,
+                           (mode & BIT(1)) ? 8 : 32);
+                }
             }
+            if (diff_t != 0) {
+                pins_diff |= diff_t;
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 8) {
+                    printf("Reg TEMP    %08x != %08x (diff %08x) W%u R%u\n",
+                           got_temp, next, diff_t,
+                           (mode & BIT(0)) ? 8 : 32,
+                           (mode & BIT(1)) ? 8 : 32);
+                }
+            }
+            /* Change pattern */
+            if ((rot == 127) || (rot == 255))
+                next = ~next;
         }
-        /* Change pattern */
-        if (rot == 128)
-            next = ~0xf0e7c0a5;
     }
+    if (rc >= 8)
+        printf("...\n");
     pins_diff &= ~(stuck_high | stuck_low);
     if (stuck_high != 0) {
         printf("Stuck high: %08x", stuck_high);
@@ -2123,8 +2341,12 @@ test_register_access(void)
             printf("    also SCRATCH %08x != expected %08x\n", value, patt);
     }
     patt = 0x04030201;
+#if 0
     for (pos = 0; pos < 4; pos++)
         set_ncrreg8(REG_SCRATCH + pos, patt >> (8 * (3 - pos)));
+#else
+    set_ncrreg32b(REG_SCRATCH, patt);
+#endif
     value = get_ncrreg32(REG_SCRATCH);
     if (value != patt) {
         printf("Byte writes to SCRATCH %08x != expected %08x\n", value, patt);
@@ -3007,7 +3229,7 @@ test_bus_access(void)
      *    11111111 = Mask to compare
      *    00000000 = Data to be compared
      */
-    rc = execute_script((uint32_t *) a4091_rom_base);
+    rc = execute_script((uint32_t *) a4091_rom_base, 0x10);
     if (rc != 0) {
         printf("SCRIPTS fetch from A4091 ROM %08x failed\n", a4091_rom_base);
     }
@@ -3020,6 +3242,8 @@ test_bus_access(void)
             saddr0 = alloc_power2_addr(bit, &saddr1, TRUE);
         if (saddr1 == NULL) {
             /* Could not even allocate address where address bit is high */
+            if (saddr0 != NULL)
+                FreeMem(saddr0, 0x10);
             continue;
         }
 
@@ -3030,7 +3254,7 @@ test_bus_access(void)
         if (saddr0 != NULL) {
             script_write_reg_setup(saddr0, REG_SCRATCH, 0xa5);
             set_ncrreg32(REG_SCRATCH, 0xff);
-            if ((rc2 = execute_script(saddr0)) != 0) {
+            if ((rc2 = execute_script(saddr0, 0x10)) != 0) {
                 rc++;
 #ifdef ABORT_BUS_TEST_ON_FIRST_FAILURE
                 FreeMem(saddr0, 0x10);
@@ -3057,7 +3281,7 @@ test_bus_access(void)
         }
 
         set_ncrreg32(REG_SCRATCH, 0xff);
-        if ((rc2 = execute_script(saddr1)) != 0) {
+        if ((rc2 = execute_script(saddr1, 0x10)) != 0) {
             rc++;
 #ifdef ABORT_BUS_TEST_ON_FIRST_FAILURE
             if (saddr0 != NULL)
@@ -3089,9 +3313,11 @@ test_bus_access(void)
     }
 
     if (rc == 0) {
-        printf("PASS:");
-        print_bits_dash(addr_pins, tested_high | tested_low);
-        printf(" tested\n");
+        if (flag_verbose) {
+            printf("PASS:");
+            print_bits_dash(addr_pins, tested_high | tested_low);
+            printf(" tested\n");
+        }
     } else {
         show_test_state("Bus access test:", rc);
     }
@@ -3168,17 +3394,33 @@ test_dma(void)
         uint32_t wdata = rand32();
         set_ncrreg32(REG_SCRATCH, wdata);
         set_ncrreg32(REG_TEMP, ~wdata);
+        CachePreDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                    &buf_handled, DMA_ReadFromRAM);
+        CachePreDMA((APTR) (a4091_reg_base + REG_TEMP),
+                    &buf_handled, 0);
         rc = dma_scratch_to_temp();
+        CachePostDMA((APTR) (a4091_reg_base + REG_TEMP),
+                     &buf_handled, 0);
+        CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                     &buf_handled, DMA_ReadFromRAM);
 
         if (rc != 0) {
             printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->TEMP");
             scratch = get_ncrreg32(REG_SCRATCH);
             temp    = get_ncrreg32(REG_TEMP);
-            diff    = scratch ^ temp;
+            diff    = wdata ^ temp;
             printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x\n",
                    a4091_reg_base + REG_SCRATCH,
                    a4091_reg_base + REG_TEMP,
-                   scratch, (diff != 0) ? "!" : "", temp);
+                   temp, (diff != 0) ? "!" : "", wdata);
+            if (scratch != wdata) {
+                printf("  SCRATCH %08x: %08x != written %08x\n",
+                       a4091_reg_base + REG_TEMP, scratch, wdata);
+            }
+            if ((temp != wdata) && (temp != ~wdata)) {
+                printf("  TEMP value %08x != written %08x or expected %08x\n",
+                       temp, ~wdata, wdata);
+            }
             goto fail_dma;
         }
 
@@ -3198,7 +3440,7 @@ test_dma(void)
             } else {
                 printf("  SCRATCH %08x to TEMP: %08x != expected %08x "
                        "(diff %08x)\n",
-                       a4091_reg_base + REG_SCRATCH, wdata, temp, diff);
+                       a4091_reg_base + REG_SCRATCH, temp, wdata, diff);
             }
         }
     }
@@ -3208,10 +3450,15 @@ test_dma(void)
 
     /* DMA test 2: transfer from RAM to the SCRATCH register */
     for (pos = 0; pos < dma_len; pos += 4) {
+        uint32_t wdata = rand32();
         addr = (uint32_t) src + pos;
-        *ADDR32(addr) = rand32();
+        *ADDR32(addr) = wdata;
+        set_ncrreg32(REG_SCRATCH, ~wdata);
+        buf_handled = 4;
         CachePreDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
+        CachePreDMA((APTR) (a4091_reg_base + REG_SCRATCH), &buf_handled, 0);
         rc = dma_mem_to_scratch(addr);
+        CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH), &buf_handled, 0);
         CachePostDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
 
         if (rc != 0) {
@@ -3231,13 +3478,17 @@ test_dma(void)
              * This test is not aborted on data mismatch errors, so that
              * multiple errors may be captured and reported.
              */
-            if (rc2++ < 10) {
+            if (rc2++ < 8) {
                 if (rc2 == 1)
                     printf("\n");
                 printf("  Addr %08x to SCRATCH %08x: %08x != expected %08x "
                        "(diff %08x)\n",
                        addr, a4091_reg_base + REG_SCRATCH,
                        scratch, *ADDR32(addr), diff);
+                if (wdata != *ADDR32(addr)) {
+                    printf("    Source data changed from %08x to %08x\n",
+                           wdata, *ADDR32(addr));
+                }
             }
         }
     }
@@ -3251,9 +3502,13 @@ test_dma(void)
         addr = (uint32_t) src + pos;
         *ADDR32(addr) = ~wdata;
         set_ncrreg32(REG_SCRATCH, wdata);
+        CachePreDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                    &buf_handled, DMA_ReadFromRAM);
         CachePreDMA((APTR) addr, &buf_handled, 0);
         rc = dma_scratch_to_mem(addr);
         CachePostDMA((APTR) addr, &buf_handled, 0);
+        CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                     &buf_handled, DMA_ReadFromRAM);
 
         if (rc != 0) {
             printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->RAM");
@@ -3299,7 +3554,7 @@ fail_src_alloc:
  * can't yet trust DMA as working reliably (the controller might have
  * floating address lines), the code tries to protect Amiga memory at bit
  * flip addresses. The destination address is used to determine the
- * addresses which need to be protected. Single and double bit flip addresses
+ * addresses which need to be protected. Single and double addr flip addresses
  * are either allocated or copied / restored.
  *
  * I think only 4-byte alignment is required by the 53C710 DMA controller,
@@ -3314,24 +3569,25 @@ static int
 test_dma_copy(void)
 {
 #define DMA_LEN_BIT 12 // 4K DMA
-    uint     dma_len = BIT(DMA_LEN_BIT);
-    uint     cur_dma_len = 4;
-    int      rc = 0;
-    int      pass;
-    int      pos;
-    int      bit1;
-    int      bit2;
-    int      bf_mismatches = 0;
-    int      bf_copies = 0;
-    int      bf_buffers = 0;
-    int      bf_notram = 0;
-    APTR    *src;
-    APTR    *dst;
-    APTR    *dst_buf;
-    ULONG    buf_handled;
+    int       rc = 0;
+    uint      dma_len = BIT(DMA_LEN_BIT);
+    uint      cur_dma_len = 4;
+    uint      pass;
+    uint      pos;
+    uint      bit1;
+    uint      bit2;
+    uint      bf_mismatches = 0;
+    uint      bf_copies     = 0;
+    uint      bf_buffers    = 0;
+    uint      bf_notram     = 0;
+    VAPTR    *src_backup;
+    APTR     *src;
+    APTR     *dst;
+    APTR     *dst_buf;
     uint32_t *bf_addr;
     uint32_t *bf_mem;
-    uint8_t bf_flags[32][32];
+    uint8_t   bf_flags[32][32];
+    ULONG     buf_handled;
 #define BF_FLAG_COPY    0x01
 #define BF_FLAG_CORRUPT 0x02
 #define BF_FLAG_NOTRAM  0x04
@@ -3343,6 +3599,12 @@ test_dma_copy(void)
     srand32(time(NULL));
     memset(bf_flags, 0, sizeof (bf_flags));
 
+    src_backup = AllocMem_aligned(dma_len, 16);
+    if (src_backup == NULL) {
+        printf("Failed to allocate src_backup buffer\n");
+        rc = 1;
+        goto fail_src_backup_alloc;
+    }
     src = AllocMem_aligned(dma_len, 16);
     if (src == NULL) {
         printf("Failed to allocate src buffer\n");
@@ -3368,10 +3630,6 @@ test_dma_copy(void)
         goto fail_bfaddr_alloc;
     }
 
-    if (runtime_flags & FLAG_DEBUG)
-        printf("\nDMA src=%08x dst=%08x len=%x\n",
-               (uint32_t) src, (uint32_t) dst, dma_len);
-
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
         for (bit2 = bit1; bit2 < 32; bit2++) {
             if (bit1 == bit2)
@@ -3381,10 +3639,43 @@ test_dma_copy(void)
             BF_MEM(bit1, bit2) =
                 (uint32_t) AllocAbs(dma_len, (APTR) BF_ADDR(bit1, bit2));
             if (BF_MEM(bit1, bit2) != 0) {
-                /* Got target memory -- wipe it */
-                memset((APTR) BF_MEM(bit1, bit2), 0, dma_len);
+                /* Got target memory -- pattern it */
+                uint pos;
+                uint32_t *ptr;
+got_target_mem:
+                ptr = (uint32_t *) BF_MEM(bit1, bit2);
+                for (pos = 0; pos < dma_len; pos += 4)
+                    *(ptr++) = BF_MEM(bit1, bit2) + pos;
                 bf_buffers++;
+            } else if (src == (APTR) BF_ADDR(bit1, bit2)) {
+                /* Special case -- src buffer is address we want */
+                BF_MEM(bit1, bit2) = (uint32_t) src;
+                src = AllocMem_aligned(dma_len, 16);
+                if (src == NULL) {
+                    src = (APTR) BF_MEM(bit1, bit2);
+                    goto fallback_copy_mem;
+                }
+                goto got_target_mem;
+            } else if (src_backup == (APTR) BF_ADDR(bit1, bit2)) {
+                /* Special case -- src_backup buffer is address we want */
+                BF_MEM(bit1, bit2) = (uint32_t) src_backup;
+                src_backup = AllocMem_aligned(dma_len, 16);
+                if (src_backup == NULL) {
+                    src_backup = (APTR) BF_MEM(bit1, bit2);
+                    goto fallback_copy_mem;
+                }
+                goto got_target_mem;
+            } else if (dst == (APTR) BF_ADDR(bit1, bit2)) {
+                /* Special case -- dst buffer is address we want */
+                BF_MEM(bit1, bit2) = (uint32_t) dst;
+                dst = AllocMem_aligned(dma_len, 16);
+                if (dst == NULL) {
+                    dst = (APTR) BF_MEM(bit1, bit2);
+                    goto fallback_copy_mem;
+                }
+                goto got_target_mem;
             } else if (is_valid_ram(BF_ADDR(bit1, bit2))) {
+fallback_copy_mem:
                 BF_MEM(bit1, bit2) = (uint32_t) AllocMem(dma_len, MEMF_PUBLIC);
                 bf_flags[bit1][bit2] |= BF_FLAG_COPY;
                 bf_copies++;
@@ -3394,11 +3685,24 @@ test_dma_copy(void)
             }
         }
     }
+
+    if (runtime_flags & FLAG_DEBUG)
+        printf("\nDMA src=%08x srcb=%08x dst=%08x len=%x\n",
+               (uint32_t) src, (uint32_t) src_backup, (uint32_t) dst, dma_len);
+
     if (runtime_flags & FLAG_DEBUG) {
-        printf("Bit flip addrs:\n");
+        printf("Watched addresses:\n");
         for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
-            for (bit2 = bit1; bit2 < 32; bit2++)
-                printf(" %08x", BF_ADDR(bit1, bit2));
+            for (bit2 = bit1; bit2 < 32; bit2++) {
+                char *state;
+                if (bf_flags[bit1][bit2] & BF_FLAG_COPY)
+                    state = "?";
+                else if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM)
+                    state = "?";
+                else
+                    state = "";
+                printf(" %s%08x", state, BF_ADDR(bit1, bit2));
+            }
             printf("\n");
         }
     }
@@ -3418,6 +3722,7 @@ test_dma_copy(void)
         for (pos = 0; pos < cur_dma_len; pos += 4) {
             uint32_t rvalue = rand32();
             *ADDR32((uint32_t) src + pos) = rvalue;
+            *ADDR32((uint32_t) src_backup + pos) = rvalue;
             *ADDR32((uint32_t) dst + pos) = ~rvalue;
         }
         buf_handled = cur_dma_len;
@@ -3433,7 +3738,8 @@ test_dma_copy(void)
 
         if (rc != 0) {
             /* DMA operation failed */
-            break;
+            printf("DMA src=%08x dst=%08x len=%02x failed\n",
+                   (uint32_t) src, (uint32_t) dst, cur_dma_len);
         }
 
         /* Verify data landed where it was expected */
@@ -3446,10 +3752,42 @@ test_dma_copy(void)
                            (uint32_t) src, (uint32_t) dst, cur_dma_len);
                 }
                 if ((rc < 5) || (runtime_flags & FLAG_DEBUG)) {
-                    printf(" Addr %08x value %08x != expected %08x "
+                    uint32_t sbvalue = *ADDR32((uint32_t) src_backup + pos);
+                    printf("Addr %08x value %08x != expected %08x "
                            "(diff %08x)\n",
                            (uint32_t) dst + pos, dvalue, svalue,
                            dvalue ^ svalue);
+                    /* Search power-of-two buffers for corruption */
+                    for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
+                        for (bit2 = bit1; bit2 < 32; bit2++) {
+                            if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM) {
+                                continue;
+                            } else if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
+                                uint32_t cpyaddr  = BF_MEM(bit1, bit2) + pos;
+                                uint32_t cpyvalue = *(uint32_t *) cpyaddr;
+                                uint32_t oaddr    = BF_ADDR(bit1, bit2) + pos;
+                                uint32_t ovalue   = *(uint32_t *) oaddr;
+                                if (cpyvalue != ovalue) {
+                                    printf("  Watched address %08x changed "
+                                           "from %08x to %08x\n",
+                                           oaddr, cpyvalue, ovalue);
+                                }
+                            } else {
+                                uint32_t chkaddr = BF_MEM(bit1, bit2) + pos;
+                                uint32_t chkvalue = *(uint32_t *) chkaddr;
+                                if (chkvalue != chkaddr) {
+                                    printf("  Watched address %08x corrupt "
+                                           "value %08x found\n",
+                                           chkaddr, chkvalue);
+                                }
+                            }
+                        }
+                    }
+                    if (svalue != sbvalue) {
+                        printf("    Source data at %08x changed from "
+                               "%08x to %08x\n",
+                               (uint32_t) src + pos, sbvalue, svalue);
+                    }
                 }
                 rc++;
             }
@@ -3473,18 +3811,20 @@ test_dma_copy(void)
              */
             for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
                 for (bit2 = bit1; bit2 < 32; bit2++) {
-                    if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
+                    if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM) {
+                        continue;
+                    } else if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
                         if (memcmp((APTR)BF_MEM(bit1, bit2),
                                    (APTR)BF_ADDR(bit1, bit2), dma_len) != 0) {
                             bf_flags[bit1][bit2] |= BF_FLAG_CORRUPT;
                             if (bf_mismatches++ == 0)
-                                printf("Modified RAM addresses: ");
-                            printf("<%x>", BF_ADDR(bit1, bit2));
+                                printf("Modified RAM blocks:");
+                            printf(" (%08x)", BF_ADDR(bit1, bit2));
                         }
                     } else if (mem_not_zero(BF_MEM(bit1, bit2), dma_len)) {
                         if (bf_mismatches++ == 0)
-                            printf("Modified RAM addresses: ");
-                        printf(">%x<", BF_ADDR(bit1, bit2));
+                            printf("Modified RAM blocks:");
+                        printf(" %08x", BF_ADDR(bit1, bit2));
                     }
                 }
             }
@@ -3501,9 +3841,10 @@ test_dma_copy(void)
     }
     Permit();
 
-    if (bf_mismatches != 0)
-        printf("BF buffers=%d copies=%d mismatches=%d notram=%d\n",
-               bf_buffers, bf_copies, bf_mismatches, bf_notram);
+    if (bf_mismatches != 0) {
+        printf("  Watched buffers=%u copies=%u notram=%u mismatches=%u\n",
+               bf_buffers, bf_copies, bf_notram, bf_mismatches);
+    }
 
     /* Deallocate protected memory */
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
@@ -3524,6 +3865,9 @@ fail_dst_alloc:
     FreeMem(src, dma_len);
 
 fail_src_alloc:
+    FreeMem((APTR *)src_backup, dma_len);
+
+fail_src_backup_alloc:
     show_test_state("DMA copy:", rc);
     return (rc);
 }
@@ -3542,8 +3886,8 @@ test_dma_copy_perf(void)
     int       rc = 0;
     int       pass;
     int       total_passes = 0;
-    volatile APTR     src;
-    volatile APTR     dst;
+    VAPTR     src;
+    VAPTR     dst;
     uint64_t  tick_start;
     uint64_t  tick_end;
     ULONG     buf_handled;
@@ -3579,6 +3923,8 @@ run_some_more:
     for (pass = 0; pass < 16; pass++) {
         total_passes++;
         if (dma_mem_to_mem_quad(src, dst, dma_len, pass == 0)) {
+            printf("DMA src=%08x dst=%08x len=%02x failed\n",
+                   (uint32_t) src, (uint32_t) dst, dma_len);
             rc = 1;
             break;
         }
@@ -3593,14 +3939,16 @@ run_some_more:
         if (ticks < 10)
             goto run_some_more;
 
-        printf("%s: %u KB in %u.%u ticks",
-                passfail, (uint32_t) total_kb, (uint32_t) ticks,
-                (tick_milli + 50) / 100);
-        if ((ticks + tick_milli) == 0)
-            tick_milli = 1;
-        printf(" (%u KB/sec)\n",
-               (uint32_t) (total_kb * TICKS_PER_SECOND * 1000 /
-                           (ticks * 1000 + tick_milli)));
+        if (flag_verbose) {
+            printf("%s: %u KB in %u.%02u ticks",
+                    passfail, (uint32_t) total_kb, (uint32_t) ticks,
+                    (tick_milli + 50) / 100);
+            if ((ticks + tick_milli) == 0)
+                tick_milli = 1;
+            printf(" (%u KB/sec)\n",
+                   (uint32_t) (total_kb * TICKS_PER_SECOND * 1000 /
+                               (ticks * 1000 + tick_milli)));
+        }
     }
     CachePostDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
     CachePostDMA(dst, &buf_handled, 0);
@@ -3615,6 +3963,33 @@ fail_src_alloc:
     return (rc);
 }
 
+
+static void
+show_test_numbers(void)
+{
+    printf("Numbers may be appended to the -t test command to run a specific "
+           "unit test.\n"
+           "Example:  a4091 -t56\n"
+           "          This will execute both test 5 and test 6.\n"
+           "  -0  Device access: Check ROM header and Zorro config area\n"
+           "  -1  Register access\n"
+           "          53C710 register read-only bits are verified.\n"
+           "          TEMP and SCRATCH walking bits test\n"
+           "          Byte, word, and long register access (A0 & A1)\n"
+           "          53C710 register DNAD/DBC auto increment/decrement\n"
+           "  -2  DMA FIFO: 53C710 RAM + parity\n"
+           "  -3  SCSI FIFO: 53C710 RAM + parity\n"
+           "  -4  Bus access\n"
+           "  -5  Simple DMA (4 bytes at a time)\n"
+           "          53C710 SCRATCH  -> 53C710 TEMP register\n"
+           "          RAM (Fastmem)   -> 53C710 SCRATCH register\n"
+           "          53C710 SCRATCH  -> RAM (Fastmem)\n"
+           "  -6  Copy block DMA: Main mem->main mem data verify\n"
+           "          Note KB/sec is reported but not range checked.\n"
+           "  -7  DMA copy performance (no verify)\n"
+//         "  -8  SCSI Loopback (not implemented)\n"
+           "  -9  SCSI pins: data pins and some control pins\n");
+}
 
 /*
  * test_card
@@ -3772,6 +4147,35 @@ a4091_find(uint32_t pos)
 }
 
 /*
+ * zorro_autoconfig_card
+ * ---------------------
+ * Attempt to map an A4091 in physical memory, assuming that it failed
+ * autoconfig and is still sitting at the Zorro III autoconfig address
+ * (0xff000000).
+ *
+ * 1. If the MMU is active, ask MuTools to allow access to the autoconfig
+ *    region:
+ *        SYS:MMULib/MuTools/MuSetCacheMode
+ *                  address=0xff000000 size=0x01000000 nocache io valid
+ * 2. Attempt to detect the card as present. Use DSACK* mode:
+ *        med cb de0000 80         // BERR on timeout (slow)
+ *        med cb de0000 00         // DSACK* on timeout (fast)
+ * 3. Tell the card to map itself at 0x40000000
+ *        med cb ff000044 40
+ * 4. If the MMU is active, ask MuTools to allow access to the newly
+ *    mapped region.
+ *        SYS:MMULib/MuTools/MuSetCacheMode
+ *                  address=0x40000000 size=0x01000000 nocache io valid
+ * 5. Attempt to verify 53C710 registers are present, and maybe that
+ *    the DIP switch area repeats every dword.
+ */
+static void
+zorro_autoconfig_card(void)
+{
+
+}
+
+/*
  * enforcer_check
  * --------------
  * Verifies enforcer is not running.
@@ -3838,10 +4242,12 @@ usage(void)
            "\t-k  kill (disable) all active A4091 device drivers\n"
            "\t-L  loop until failure\n"
            "\t-P  probe and list all detected A4091 cards\n"
+           "\t-q  quiet mode (only show errors)\n"
            "\t-r  display NCR53C710 registers\n"
            "\t-s  decode device external switches\n"
            "\t-S  attempt to suspend all A4091 drivers while testing\n"
-           "\t-t  test card\n",
+           "\t-t  test card\n"
+           "\t-?  show individual test steps\n",
            version + 7);
 }
 
@@ -3865,7 +4271,9 @@ main(int argc, char **argv)
     int      flag_switches  = 0;  /* Decode device external switches */
     int      flag_test      = 0;  /* Test card */
     int      flag_suspend   = 0;  /* Suspend A4091 drivers while testing */
+    int      flag_zautocfg  = 0;  /* Attempt Zorro Autoconfig */
     uint     test_flags     = 0;  /* Test flags (0-9) */
+    uint     pass           = 0;  /* Current test pass */
     uint32_t addr           = 0;  /* Card physical address or index number */
     uint32_t dma[3];              /* DMA source, destination, length */
 
@@ -3960,6 +4368,9 @@ main(int argc, char **argv)
                     case 'P':
                         flag_list = 1;
                         break;
+                    case 'q':
+                        flag_verbose = 0;
+                        break;
                     case 'r':
                         flag_regs = 1;
                         break;
@@ -3972,6 +4383,12 @@ main(int argc, char **argv)
                     case 't':
                         flag_test++;
                         break;
+                    case 'z':
+                        flag_zautocfg++;
+                        break;
+                    case '?':
+                        show_test_numbers();
+                        exit(1);
                     default:
                         printf("Unknown -%s\n", ptr);
                         usage();
@@ -3993,7 +4410,7 @@ main(int argc, char **argv)
     NewList(&a4091_save.driver_isrs);
 
     if (!(flag_config | flag_dma | flag_regs | flag_switches | flag_test |
-          flag_kill)) {
+          flag_kill | flag_zautocfg)) {
         if (flag_list)
             exit(rc);
         usage();
@@ -4002,6 +4419,11 @@ main(int argc, char **argv)
 
     if ((addr >= 0x10) && !flag_force && enforcer_check())
         exit(1);
+
+    if (flag_zautocfg) {
+        zorro_autoconfig_card();
+        exit(0);
+    }
 
     if (addr < 0x10)
         a4091_base = a4091_find(addr);
@@ -4014,8 +4436,11 @@ main(int argc, char **argv)
     }
     if (a4091_base == A4000T_SCSI_BASE)
         runtime_flags |= FLAG_IS_A4000T;
-    printf("%s at 0x%08x\n",
-           (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : "A4091", a4091_base);
+    if (flag_verbose) {
+        printf("%s at 0x%08x\n",
+               (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : "A4091",
+               a4091_base);
+    }
 
     if (runtime_flags & FLAG_IS_A4000T) {
         a4091_reg_base    = A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS;
@@ -4029,8 +4454,11 @@ main(int argc, char **argv)
 
     a4091_save.reg_addr = a4091_reg_base;  // 53C710 registers
 
-    if (flag_kill)
+    if (flag_kill) {
+        BERR_DSACK_SAVE();
         rc += kill_driver();
+        BERR_DSACK_RESTORE();
+    }
 
     if (flag_dma || flag_test) {
         /* Check if A4091 is owned by driver */
@@ -4054,10 +4482,20 @@ main(int argc, char **argv)
                    "presence (unsafe).\n");
             exit(1);
         }
+        BERR_DSACK_SAVE();
         a4091_state_takeover(flag_suspend);
+        BERR_DSACK_RESTORE();
     }
 
+    BERR_DSACK_SAVE();
     do {
+        if (flag_loop) {
+            if (flag_verbose) {
+                printf("Pass %u\n", ++pass);
+            } else {
+                putchar('.');
+            }
+        }
         if (flag_config)
             rc += decode_autoconfig();
         if (flag_regs)
@@ -4065,9 +4503,15 @@ main(int argc, char **argv)
         if (flag_switches)
             rc += decode_switches();
         if (flag_dma) {
+            uint rc2;
             a4091_reset();
             dma_clear_istat();
-            rc += dma_mem_to_mem(dma[0], dma[1], dma[2]);
+            rc2 = dma_mem_to_mem(dma[0], dma[1], dma[2]);
+            if (rc2 != 0) {
+                printf("DMA src=%08x dst=%08x len=%02x failed\n",
+                       dma[0], dma[1], dma[2]);
+            }
+            rc += rc2;
         }
         if (flag_test)
             rc += test_card(test_flags);
@@ -4075,6 +4519,7 @@ main(int argc, char **argv)
     } while ((rc == 0) && flag_loop);
 
     a4091_state_restore(rc && !(runtime_flags & FLAG_DEBUG));
+    BERR_DSACK_RESTORE();
 
     return (rc);
 }
