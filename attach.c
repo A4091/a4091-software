@@ -481,6 +481,9 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     int rc;
     int failed = 0;
 
+    if (scsi_target >= 100)
+        return (ERROR_OPEN_FAIL);
+
     if (target == chan->chan_id)
         return (ERROR_SELF_UNIT);
 
