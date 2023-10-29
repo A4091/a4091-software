@@ -115,6 +115,7 @@ extern struct ExecBase *SysBase;
 #define REG_DCNTL   0x38  // DMA control
 #define REG_ADDER   0x3c  // Sum output of internal adder
 
+#define REG_SCNTL0_TRG  BIT(0)  // Enable Target mode as default
 #define REG_SCNTL0_EPG  BIT(2)  // Generate parity on the SCSI bus
 
 #define REG_SIEN_PAR    BIT(0)  // Interrupt on parity error
@@ -167,14 +168,18 @@ extern struct ExecBase *SysBase;
 #define REG_DSTAT_BF    BIT(5)  // Bus fault
 #define REG_DSTAT_DFE   BIT(7)  // DMA FIFO empty
 
-#define REG_SCNTL1_ASEP BIT(2)  // Assert even SCSI data parity
+#define REG_SCNTL1_AESP BIT(2)  // Assert even SCSI data parity
 #define REG_SCNTL1_RST  BIT(3)  // Assert reset on SCSI bus
+#define REG_SCNTL1_ESR  BIT(5)  // Respond to selection and reselection
 #define REG_SCNTL1_ADB  BIT(6)  // Assert SCSI data bus (SODL/SOCL registers)
 
 #define REG_SSTAT1_PAR  BIT(0)  // SCSI parity state
 #define REG_SSTAT1_RST  BIT(1)  // SCSI bus reset is asserted
 
+#define REG_CTEST2_SFP  BIT(4)  // SCSI FIFO parity
+
 #define REG_CTEST4_FBL2 BIT(2)  // Send CTEST6 register to lane of the DMA FIFO
+#define REG_CTEST4_SFWR BIT(3)  // Send SODL register writes to SCSI FIFO
 #define REG_CTEST4_SLBE BIT(4)  // SCSI loopback mode enable
 #define REG_CTEST4_CDIS BIT(7)  // Cache burst disable
 
@@ -187,7 +192,8 @@ extern struct ExecBase *SysBase;
 #define REG_CTEST8_CLF  BIT(2)  // Clear DMA and SCSI FIFOs
 #define REG_CTEST8_FLF  BIT(3)  // Flush DMA FIFO
 
-#define NCR_FIFO_SIZE 16
+#define NCR_DMA_FIFO_SIZE  16   // DMA FIFO talks to CPU bus
+#define NCR_SCSI_FIFO_SIZE 8    // SCSI FIFO talks to SCSI bus
 
 #define AMIGA_BERR_DSACK 0x00de0000  // Bit7=1 for BERR on timeout, else DSACK
 #define BERR_DSACK_SAVE() \
@@ -231,14 +237,14 @@ static a4091_save_t a4091_save;
 
 extern BOOL __check_abort_enabled;
 
-static void
+static uint
 check_break(void)
 {
     if (SetSignal(0, 0) & SIGBREAKF_CTRL_C) {
         printf("^C Abort\n");
-        a4091_state_restore(!(runtime_flags & FLAG_DEBUG));
-        exit(1);
+        return (1);
     }
+    return (0);
 }
 
 static uint64_t
@@ -870,6 +876,51 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
+#if 0
+/*
+ * Once quick interrupts are enabled in the A4091, they override
+ * conventional signal interrupts until the controller has been reset.
+ */
+#include <hardware/custom.h>
+#include <hardware/intbits.h>
+
+#define STRX(x) #x
+#define STR(x) STRX(x)
+
+/* intenar is one of the Chipset custom registers */
+#define cust_intenar 0x00dff01c  /* Interrupt enable state */
+
+void
+a4091_quick_irq_handler(void)
+{
+    register a4091_save_t *save asm("a1");
+    save->qintcount++;
+}
+
+void a4091_quickint(void);
+// asm("
+_a4091_quickint:
+        movem.l  a0/d0,-(sp)            | Save a0 and d0
+        move.w  "STR(cust_intenar)",d0  | Get interrupt enable state
+        btst.l  #"STR(INTB_INTEN)",d0   | Check if pending disable
+        beq.s   a4091_quickint_exit     | Nothing to do
+
+        movem.l a1/d1,-(sp)             | Save other C ABI registers
+        lea     _a4091_save,a1          | global struct
+        bsr     _a4091_quick_irq_handler
+        movem.l (sp)+,a1/d1
+a4091_quickint_exit:
+        movem.l (sp)+,a0/d0             | Restore a0 and d0
+        rte                             | Return from int
+// ");
+
+    ULONG intnum = ObtainQuickVector(a4091_quickint);
+    *ADDR8(a4091_reg_base + A4091_OFFSET_QUICKINT) = intnum;
+
+    /* There is no way to release/free a quick interrupt vector?? */
+#endif
+
+
 static char *
 GetNodeName(struct Node *node)
 {
@@ -1166,10 +1217,11 @@ a4091_state_restore(int skip_reset)
 {
     if (a4091_save.card_owned) {
         a4091_save.card_owned = 0;
-        set_ncrreg8(REG_DIEN, 0);
-        set_ncrreg8(REG_ISTAT, 0);
-        if (skip_reset == 0)
+        if (skip_reset == 0) {
+            set_ncrreg8(REG_DIEN, 0);
+            set_ncrreg8(REG_ISTAT, 0);
             a4091_reset();
+        }
         a4091_enable_driver_irq_handler();
         a4091_remove_local_irq_handler();
         a4091_enable_driver_task();
@@ -1379,7 +1431,8 @@ got_dstat:
                         printf("Abort ");
                     if (dstat & REG_DSTAT_WDT)
                         printf("Watchdog timeout ");
-                    printf("%02x] ", dstat & ~REG_DSTAT_DFE);
+                    printf("%02x %08x %08x] ", dstat & ~REG_DSTAT_DFE,
+                           get_ncrreg32(REG_DSP), get_ncrreg32(REG_DSPS));
                     rc = 1;
                     goto fail;
                 }
@@ -1766,7 +1819,7 @@ script_write_reg_setup(uint32_t *script, uint8_t reg, uint8_t value)
     script[1] = 0x98080000;
     script[2] = 0x00000000;
     script[3] = 0x00000000;
-//  CACHE_LINE_WRITE(script, 0x10);
+    CACHE_LINE_WRITE(script, 0x10);
 }
 
 #if 0
@@ -2443,7 +2496,7 @@ test_dma_fifo(void)
     uint8_t ctest1;
     uint8_t ctest4;
     uint8_t ctest7;
-    int     cbyte;
+    uint    cbyte;
 
     /* The DMA FIFO test fails in FS-UAE due to incomplete emulation */
     if (is_running_in_uae())
@@ -2476,14 +2529,51 @@ test_dma_fifo(void)
     /* Push bytes to all byte lanes of DMA FIFO */
     srand32(19700119);
     for (lane = 0; lane < 4; lane++) {
-        /* Select byte lane */
+        /* Select DMA byte lane */
         set_ncrreg8(REG_CTEST4, (ctest4 & ~3) | REG_CTEST4_FBL2 | lane);
 
         /* Push bytes to byte lane of DMA FIFO, including parity */
-        for (cbyte = 0; cbyte < NCR_FIFO_SIZE; cbyte++) {
+        for (cbyte = 0; cbyte < NCR_DMA_FIFO_SIZE; cbyte++) {
             uint16_t rvalue = rand32() >> 8;
             uint8_t  pvalue = ctest7 | ((rvalue >> 5) & BIT(3));
-            // XXX: Verify FIFO is not full
+            uint8_t  fstat  = get_ncrreg8(REG_CTEST1);
+            uint8_t  fstate = 0;
+            uint8_t  tlane;
+
+            /* Verify FIFO empty status */
+            if ((lane != 0) || (cbyte != 0)) {
+                uint8_t estat = get_ncrreg8(REG_DSTAT) & REG_DSTAT_DFE;
+                if (estat != 0) {
+                    if (rc++ == 0)
+                        printf("\n");
+                    if (rc < 5)
+                        printf("DMA FIFO is empty (DSTAT DFE not 1) at "
+                               "lane=%u byte=%u\n", lane, cbyte);
+                }
+            }
+
+            /*
+             * Verify DMA FIFO lane full and empty status.
+             * Should be FULL for lanes already written and EMPTY
+             * for lanes not yet written. The current lane should
+             * be neither full nor empty.
+             */
+            for (tlane = 0; tlane < 4; tlane++) {
+                if (tlane < lane)
+                    fstate |= BIT(tlane);     // Full
+                if ((tlane > lane) || ((tlane == lane) && (cbyte == 0)))
+                    fstate |= BIT(tlane + 4); // Empty
+            }
+            if (fstat != fstate) {
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 5) {
+                    printf("DMA FIFO empty/full status %02x != expected %02x "
+                           "at lane=%x byte=%x\n",
+                           fstat, fstate, lane, cbyte);
+                }
+            }
+
             set_ncrreg8(REG_CTEST7, pvalue);
             set_ncrreg8(REG_CTEST6, rvalue);
             if (runtime_flags & FLAG_DEBUG)
@@ -2516,21 +2606,49 @@ test_dma_fifo(void)
         set_ncrreg8(REG_CTEST4, (ctest4 & ~3) | REG_CTEST4_FBL2 | lane);
 
         /* Pop bytes from byte lane of DMA FIFO, attaching parity as bit 8 */
-        for (cbyte = 0; cbyte < NCR_FIFO_SIZE; cbyte++) {
+        for (cbyte = 0; cbyte < NCR_DMA_FIFO_SIZE; cbyte++) {
             uint16_t rvalue = (rand32() >> 8) & (BIT(9) - 1);
             uint16_t value  = get_ncrreg8(REG_CTEST6);
             uint16_t pvalue = (get_ncrreg8(REG_CTEST2) & BIT(3)) << 5;
+            uint8_t  fstat  = get_ncrreg8(REG_CTEST1);
+            uint8_t  fstate = 0;
+            uint8_t  tlane;
+
             value |= pvalue;
             if (value != rvalue) {
                 if (((rc & BIT(lane)) == 0) || (count++ < 2)) {
                     if (rc == 0)
                         printf("\n");
-                    printf("Lane %d byte %d FIFO got %03x, expected %03x\n",
+                    printf("Lane %d byte %u FIFO got %03x, expected %03x\n",
                            lane, cbyte, value, rvalue);
                 } else if (count == 3) {
                     printf("...\n");
                 }
                 rc |= BIT(lane);
+            }
+
+            /*
+             * Verify DMA FIFO lane full and empty status.
+             * Should be EMPTY for lanes already read and FULL
+             * for lanes not yet read. The current lane should
+             * be neither full nor empty.
+             */
+            for (tlane = 0; tlane < 4; tlane++) {
+                if ((tlane < lane) ||
+                    ((tlane == lane) && (cbyte == NCR_DMA_FIFO_SIZE - 1))) {
+                    fstate |= BIT(tlane + 4); // Empty
+                }
+                if (tlane > lane)
+                    fstate |= BIT(tlane);     // Full
+            }
+            if (fstat != fstate) {
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 5) {
+                    printf("DMA FIFO Empty/Full status %02x != expected %02x "
+                           "at lane=%x byte=%x\n",
+                           fstat, fstate, lane, cbyte);
+                }
             }
         }
     }
@@ -2557,7 +2675,7 @@ fail:
  * retrieved in the same order. FIFO full/empty status is checked along
  * the way.
  *
- * 1. Reset the 53C710 and verify the DMA FIFO is empty.
+ * 1. Reset the 53C710 and verify the SCSI FIFO is empty.
  * 2. Set SCSI FIFO Write Enable bit in CTEST4.
  * 3. The data is loaded into the SCSI FIFO by writing to the SODL register.
  * 4. FIFO data parity can be written in one of two ways:
@@ -2578,11 +2696,11 @@ static int
 test_scsi_fifo(void)
 {
     int     rc = 0;
-    int     lane;
-    uint8_t ctest1;
+    uint8_t scntl1;
     uint8_t ctest4;
-    uint8_t ctest7;
-    int     cbyte;
+    uint8_t sstat2;
+    uint    cbyte;
+    uint    pass;
 
 #if 0
     /* The SCSI FIFO test fails in FS-UAE due to incomplete emulation */
@@ -2592,101 +2710,103 @@ test_scsi_fifo(void)
 
     show_test_state("SCSI FIFO test:", -1);
 
-    // XXX: The below code has not been changed yet from the DMA FIFO test
     a4091_reset();
 
-    ctest1 = get_ncrreg8(REG_CTEST1);
-    if (ctest1 != 0xf0) {
-        printf("SCSI FIFO not empty before test: "
-               "CTEST1 should be 0xf0, but is 0x%02x\n", ctest1);
-        if ((runtime_flags & FLAG_MORE_DEBUG) == 0)
-            return (0x0f);
-    }
-
     /* Verify FIFO is empty */
-    if ((get_ncrreg8(REG_DSTAT) & REG_DSTAT_DFE) == 0) {
-        if (rc++ == 0)
-            printf("\n");
-        printf("SCSI FIFO not empty: DSTAT DFE not 1\n");
+    sstat2 = get_ncrreg8(REG_SSTAT2);
+    if (sstat2 != 0x00) {
+        printf("SCSI FIFO not empty before test: "
+               "SSTAT2 should be 0x00, but is 0x%02x\n", sstat2);
         if ((runtime_flags & FLAG_MORE_DEBUG) == 0)
             return (0x0f);
     }
 
+uint8_t scntl0;
+    scntl0 = get_ncrreg8(REG_SCNTL0);
+    scntl1 = get_ncrreg8(REG_SCNTL1) & ~REG_SCNTL1_AESP;
     ctest4 = get_ncrreg8(REG_CTEST4);
-    ctest7 = get_ncrreg8(REG_CTEST7) & ~BIT(3);
+    set_ncrreg8(REG_CTEST4, ctest4 | REG_CTEST4_SFWR);  // SODL -> SCSI FIFO
+    set_ncrreg8(REG_SCNTL0, scntl0 | REG_SCNTL0_EPG);  // Enable parity gen
 
-    /* Push bytes to all byte lanes of SCSI FIFO */
-    srand32(19700119);
-    for (lane = 0; lane < 4; lane++) {
-        /* Select byte lane */
-        set_ncrreg8(REG_CTEST4, (ctest4 & ~3) | REG_CTEST4_FBL2 | lane);
-
-        /* Push bytes to byte lane of SCSI FIFO, including parity */
-        for (cbyte = 0; cbyte < NCR_FIFO_SIZE; cbyte++) {
+    for (pass = 0; pass < 16; pass++) {
+        /* Push bytes to SCSI FIFO, including parity */
+        srand32(19690117 + pass);
+        for (cbyte = 0; cbyte < NCR_SCSI_FIFO_SIZE; cbyte++) {
             uint16_t rvalue = rand32() >> 8;
-            uint8_t  pvalue = ctest7 | ((rvalue >> 5) & BIT(3));
-            // XXX: Verify FIFO is not full
-            set_ncrreg8(REG_CTEST7, pvalue);
-            set_ncrreg8(REG_CTEST6, rvalue);
-            if (runtime_flags & FLAG_DEBUG)
-                printf(" %02x", rvalue);
-        }
-    }
+            uint8_t  parity = rvalue ^ rvalue >> 4;
+            uint8_t  fstat  = get_ncrreg8(REG_SSTAT2) >> 4;
+            uint8_t  pvalue;
 
-    /* Verify FIFO is not empty */
-    if (get_ncrreg8(REG_DSTAT) & REG_DSTAT_DFE) {
-        if (rc++ == 0)
-            printf("\n");
-        printf("SCSI FIFO is empty: DSTAT DFE not 1\n");
-        if ((runtime_flags & FLAG_MORE_DEBUG) == 0)
-            return (0x0f);
-    }
+            parity ^= parity >> 2;
+            parity = (parity ^ parity >> 1) & 1;
+            if (parity == ((rvalue >> 8) & 1))
+                pvalue = scntl1 | REG_SCNTL1_AESP;
+            else
+                pvalue = scntl1;
 
-    ctest1 = get_ncrreg8(REG_CTEST1);
-    if (ctest1 != 0x0f) {
-        printf("SCSI FIFO not full: CTEST1 should be 0x0f, but is 0x%02x\n",
-               ctest1);
-        rc = 0xff;
-        if ((runtime_flags & FLAG_MORE_DEBUG) == 0)
-            goto fail;
-    }
-
-    /* Pop bytes from byte lanes of SCSI FIFO */
-    srand32(19700119);
-    for (lane = 0; lane < 4; lane++) {
-        int count = 0;
-        set_ncrreg8(REG_CTEST4, (ctest4 & ~3) | REG_CTEST4_FBL2 | lane);
-
-        /* Pop bytes from byte lane of SCSI FIFO, attaching parity as bit 8 */
-        for (cbyte = 0; cbyte < NCR_FIFO_SIZE; cbyte++) {
-            uint16_t rvalue = (rand32() >> 8) & (BIT(9) - 1);
-            uint16_t value  = get_ncrreg8(REG_CTEST6);
-            uint16_t pvalue = (get_ncrreg8(REG_CTEST2) & BIT(3)) << 5;
-            value |= pvalue;
-            if (value != rvalue) {
-                if (((rc & BIT(lane)) == 0) || (count++ < 2)) {
-                    if (rc == 0)
-                        printf("\n");
-                    printf("Lane %d byte %d FIFO got %02x, expected %02x\n",
-                           lane, cbyte, value, rvalue);
-                } else if (count == 3) {
-                    printf("...\n");
+            /* Verify SCSI FIFO count status */
+            if (fstat != cbyte) {
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 5) {
+                    printf("SCSI FIFO count %x does not match pushed %x\n",
+                           fstat, cbyte);
                 }
-                rc |= BIT(lane);
+            }
+
+            set_ncrreg8(REG_SCNTL1, pvalue);  // Parity bit
+            set_ncrreg8(REG_SODL, rvalue);    // 8x data bits
+            if (runtime_flags & FLAG_DEBUG) {
+                printf(" CP=%x W=%03x\n", parity, rvalue & 0x1ff);
             }
         }
-    }
 
-    ctest1 = get_ncrreg8(REG_CTEST1);
-    if (ctest1 != 0xf0) {
-        printf("\nSCSI FIFO not empty after test: "
-               "CTEST1 should be 0xf0, but is 0x%02x\n", ctest1);
-        rc = 0xff;
+        /* Verify FIFO has correct count */
+        sstat2 = get_ncrreg8(REG_SSTAT2);
+        if (sstat2 != 0x80) {
+            printf("SCSI FIFO not full: SSTAT2 should be 80, but is %02x\n",
+                   sstat2);
+            rc = 0xff;
+            if ((runtime_flags & FLAG_MORE_DEBUG) == 0)
+                goto fail;
+        }
+
+        /* Pop bytes from SCSI FIFO, attaching parity as bit 8 */
+        srand32(19690117 + pass);
+        for (cbyte = 0; cbyte < NCR_SCSI_FIFO_SIZE; cbyte++) {
+            uint16_t rvalue = (rand32() >> 8) & (BIT(9) - 1);
+            uint16_t value  = get_ncrreg8(REG_CTEST3);
+            uint16_t pvalue = (get_ncrreg8(REG_CTEST2) & REG_CTEST2_SFP) << 4;
+            uint8_t  fstat  = get_ncrreg8(REG_SSTAT2) >> 4;
+
+            value |= pvalue;
+            if (value != rvalue) {
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 8) {
+                    printf("SCSI FIFO byte %u FIFO got %03x, expected %03x\n",
+                           cbyte, value, rvalue);
+                }
+            }
+
+            /* Verify SCSI FIFO count status */
+            if (fstat != 7 - cbyte) {
+                if (rc++ == 0)
+                    printf("\n");
+                if (rc < 8) {
+                    printf("SCSI FIFO count %x does not match popped %x\n",
+                           fstat, 7 - cbyte);
+                }
+            }
+        }
+        if (rc != 0)
+            break;
     }
 
 fail:
     /* Restore normal operation */
-    set_ncrreg8(REG_CTEST4, ctest4 & ~7);
+    set_ncrreg8(REG_SCNTL1, scntl1);
+    set_ncrreg8(REG_CTEST4, ctest4);
 
     show_test_state("SCSI FIFO test:", rc);
     return (rc);
@@ -2798,6 +2918,7 @@ test_scsi_pins(void)
     uint8_t sstat1;
     uint8_t sbcl;
     uint8_t sbdl;
+    uint8_t parity_got;
     uint    stuck_high;
     uint    stuck_low;
     uint    pins_diff;
@@ -2815,7 +2936,7 @@ test_scsi_pins(void)
     /* Check that SCSI termination power is working */
     sbdl = get_ncrreg8(REG_SBDL);
     sbcl = get_ncrreg8(REG_SBCL);
-    sbcl |= 0x20; // Not sure why, but STRCL_BSY might still be high
+    sbcl |= 0x20; // Not sure why, but STRCL_BSY might still be asserted
     if ((sbcl == 0xff) && (sbdl == 0xff)) {
         if (rc++ == 0)
             printf("FAIL\n");
@@ -2845,14 +2966,39 @@ test_scsi_pins(void)
     set_ncrreg8(REG_SCNTL1, 0);
     Delay(1);
 
-    /* Check that bus is not stuck busy */
-    sbcl = get_ncrreg8(REG_SBCL);
-    if (sbcl & 0x20) {
+    /* Check that bus does not have stuck data signals */
+    parity_got = get_ncrreg8(REG_SSTAT1) & REG_SSTAT1_PAR;
+    sbdl = get_ncrreg8(REG_SBDL) | (parity_got << 8);
+    if (sbdl != 0) {
         if (rc++ == 0)
             printf("FAIL\n");
-        printf("\tSCSI bus is stuck busy: check for SCTRL_BSY short to GND\n");
+        printf("\tSCSI data signals %03x while idle:", sbdl);
+        print_bits(scsi_data_pins, sbdl);
+        printf("\n");
     }
 
+    /* Check that bus does not have stuck control signals */
+    sbcl = get_ncrreg8(REG_SBCL);
+    if (sbcl != 0) {
+        if (rc++ == 0)
+            printf("FAIL\n");
+        printf("\tSCSI bus not ready %02x (check for short to GND):", sbcl);
+        print_bits(scsi_control_pins, sbcl);
+        printf("\n");
+    }
+
+    /*
+     *    DCNTL  LLM     CTEST4 SLBE     SCNTL0 EPG     SCNTL1
+     * cb 50800038 9; cb 5080001b 10; cb 50800003 04; cb 50800002 40
+     *
+     *    SODL            SOCL
+     * cb 50800005 00; cb 50800004 00
+     *
+     *    SBCL     ATN
+     * cb 50800004 08
+     *    SBCL
+     * db 50800008 1
+     */
 
     /* Set registers to manually drive SCSI data and control pins */
     set_ncrreg8(REG_DCNTL,  dcntl | REG_DCNTL_LLM);
@@ -2867,21 +3013,22 @@ test_scsi_pins(void)
     pins_diff  = 0x000;
     for (pass = 0; pass < 2; pass++) {
         for (bit = -1; bit < 8; bit++) {
+            uint    cin;
             uint    din;
             uint    dout = BIT(bit);
             uint    diff;
             uint8_t parity_exp;
-            uint8_t parity_got;
 
             /*
-             * Pass 0 = Walking ones
-             * Pass 1 = Walking zeros
+             * Pass 0 = Walking ones (walking zeros on the open drain bus)
+             * Pass 1 = Walking zeros (walking ones on the open drain bus)
              */
             if (pass == 1)
                 dout = (uint8_t) ~dout;
 
             set_ncrreg8(REG_SODL, dout);
             din = get_ncrreg8(REG_SBDL);
+            cin = get_ncrreg8(REG_SBCL);
             parity_got = get_ncrreg8(REG_SSTAT1) & REG_SSTAT1_PAR;
             parity_exp = calc_parity(dout);
             dout |= (parity_exp << 8);
@@ -2900,6 +3047,16 @@ test_scsi_pins(void)
                     printf("\tSCSI data %03x != expected %03x [diff %03x]",
                            din, dout, diff);
                     print_bits(scsi_data_pins, diff);
+                    printf("\n");
+                }
+            }
+            if (cin != 0) {
+                if (rc++ == 0)
+                    printf("FAIL\n");
+                if (rc <= 8) {
+                    printf("\tSCSI control %02x unexpected when data %03x",
+                           cin, din);
+                    print_bits(scsi_control_pins, cin);
                     printf("\n");
                 }
             }
@@ -2923,7 +3080,7 @@ test_scsi_pins(void)
         printf("\n");
     }
 
-    set_ncrreg8(REG_SODL, 0xff);
+    set_ncrreg8(REG_SODL, 0x00);
 
     /* Walk a test pattern on SOCL and verify that it arrives on SBCL */
     stuck_high = 0xff;
@@ -2931,39 +3088,63 @@ test_scsi_pins(void)
     pins_diff  = 0x00;
     for (pass = 0; pass < 2; pass++) {
         for (bit = -1; bit < 8; bit++) {
+            uint    cin;
             uint8_t din;
-            uint8_t dout = BIT(bit);
+            uint8_t cout = BIT(bit);
             uint8_t diff;
 
             /*
-             * Pass 0 = Walking ones
-             * Pass 1 = Walking zeros
+             * Pass 0 = Walking ones (walking zeros on the open drain bus)
+             * Pass 1 = Walking zeros (walking ones on the open drain bus)
+             *      Pass 1 is skipped to avoid messing with target devices
+             *      which might be connected to the bus.
              */
             if (pass == 1)
-                dout = (uint8_t) ~dout;
+                break;
+            if (pass == 1)
+                cout = (uint8_t) ~cout;
 
-            /*
-             * Eliminate testing certain combinations
-             * Never assert bit 3 (SCTRL_SEL)
-             */
-            if ((dout == 0x80) || (dout == 0x40) || (dout == 0xf7) ||
-                (dout & BIT(3)))
-                continue;
+            if (cout & (BIT(3) | BIT(6))) {
+                /*
+                 * Control Bit 3 SCTRL_ACK and Bit 6 SCTRL_ACK can only
+                 * be asserted in target mode. Enable.
+                 */
+                set_ncrreg8(REG_SCNTL0, REG_SCNTL0_EPG | BIT(0));
+            } else {
+                /* Disable target mode */
+                set_ncrreg8(REG_SCNTL0, REG_SCNTL0_EPG);
+            }
 
-            set_ncrreg8(REG_SOCL, dout);
-            din = get_ncrreg8(REG_SBCL);
-            stuck_high &= din;
-            stuck_low  &= ~din;
-            diff = din ^ dout;
+            set_ncrreg8(REG_SOCL, cout);
+            din = get_ncrreg8(REG_SBDL);
+            cin = get_ncrreg8(REG_SBCL);
+            parity_got = get_ncrreg8(REG_SSTAT1) & REG_SSTAT1_PAR;
+            din  |= (parity_got << 8);
+            set_ncrreg8(REG_SOCL, 0);
+            stuck_high &= cin;
+            stuck_low  &= ~cin;
+            diff = cin ^ cout;
             if (diff != 0) {
                 pins_diff |= diff;
                 if (rc++ == 0)
                     printf("\n");
                 if (rc <= 8) {
-                    printf("SCSI control %02x != expected %02x (diff %02x",
-                           din, dout, diff);
+                    printf(" ");
+                    print_bits(scsi_control_pins, cout);
+                    printf(": SCSI control %02x != expected %02x (diff %02x",
+                           cin, cout, diff);
                     print_bits(scsi_control_pins, diff);
                     printf(")\n");
+                }
+            }
+            if (din != 0) {
+                if (rc++ == 0)
+                    printf("FAIL\n");
+                if (rc <= 8) {
+                    printf("\tSCSI data %03x unexpected when control %02x",
+                           din, cin);
+                    print_bits(scsi_data_pins, din);
+                    printf("\n");
                 }
             }
         }
@@ -3205,6 +3386,7 @@ test_bus_access(void)
         return (1);
     }
 
+
     /*
      * Execute a script at the base address of the ROM. The values here
      * on the A4091 are actually the Zorro config area, where the first
@@ -3254,6 +3436,7 @@ test_bus_access(void)
         if (saddr0 != NULL) {
             script_write_reg_setup(saddr0, REG_SCRATCH, 0xa5);
             set_ncrreg32(REG_SCRATCH, 0xff);
+
             if ((rc2 = execute_script(saddr0, 0x10)) != 0) {
                 rc++;
 #ifdef ABORT_BUS_TEST_ON_FIRST_FAILURE
@@ -3271,12 +3454,18 @@ test_bus_access(void)
                 /* Fail: address under test where bit = 0, got bit = 1 addr */
                 pins_diff |= BIT(bit);
                 tested_low |= BIT(bit);
+                if (rc++ == 0)
+                    printf("\n");
+                printf("A%u=%u bus fetch from %08x instead got data from "
+                       "%08x\n",
+                       bit, 0, (uint32_t) saddr0, (uint32_t) saddr1);
             } else {
                 /* address line */
                 if (rc++ == 0)
                     printf("\n");
-                printf("A%u=%u bus fetch from %08x failed (%02x)\n",
-                       bit, 0, (uint32_t) saddr0, got0);
+                printf("A%u=%u bus fetch from %08x failed (%02x != "
+                       "expected %02x)\n",
+                       bit, 0, (uint32_t) saddr0, got0, 0xa5);
             }
         }
 
@@ -3300,11 +3489,29 @@ test_bus_access(void)
             /* Fail: address under test where bit = 1, got bit = 0 addr */
             pins_diff |= BIT(bit);
             tested_high |= BIT(bit);
+            if (rc++ == 0)
+                printf("\n");
+            printf("A%u=%u bus fetch from %08x instead got data from %08x\n",
+                   bit, 1, (uint32_t) saddr1, (uint32_t) saddr0);
         } else {
             if (rc++ == 0)
                 printf("\n");
-            printf("A%u=%u bus fetch from %08x failed (%02x)\n",
-                   bit, 1, (uint32_t) saddr1, got1);
+            printf("A%u=%u bus fetch from %08x failed (%02x != "
+                   "expected %02x)\n",
+                   bit, 1, (uint32_t) saddr1, got1, 0x5a);
+            if (runtime_flags & FLAG_DEBUG) {
+                uint32_t *ptr = (uint32_t *)saddr1;
+                printf("    %08x %08x %08x %08x\n",
+                       ptr[0], ptr[1], ptr[2], ptr[3]);
+                printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
+                Delay(1);
+                if ((rc2 = execute_script(saddr1, 0x10)) != 0) {
+                    printf("    Failed: %d\n", rc2);
+                } else {
+                    printf("    Succeeded with %02x expected %02x\n",
+                           get_ncrreg32(REG_SCRATCH), 0x5a);
+                }
+            }
         }
 
         if (saddr0 != NULL)
@@ -4008,42 +4215,51 @@ test_card(uint test_flags)
     if ((rc == 0) && (test_flags & BIT(0)))
         rc = test_device_access();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(1)))
         rc = test_register_access();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(2)))
         rc = test_dma_fifo();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(3)))
         rc = test_scsi_fifo();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(4)))
         rc = test_bus_access();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(5)))
         rc = test_dma();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(6)))
         rc = test_dma_copy();
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(7)))
         rc = test_dma_copy_perf();
 
 #if 0
     /* Loopback test not implemented yet */
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(8)))
         rc = test_loopback();
 #endif
 
-    check_break();
+    if (check_break())
+        return (1);
     if ((rc == 0) && (test_flags & BIT(8)))
         rc = test_scsi_pins();
 
@@ -4515,7 +4731,8 @@ main(int argc, char **argv)
         }
         if (flag_test)
             rc += test_card(test_flags);
-        check_break();
+        if ((rc == 8) && check_break())
+            break;
     } while ((rc == 0) && flag_loop);
 
     a4091_state_restore(rc && !(runtime_flags & FLAG_DEBUG));
