@@ -77,9 +77,11 @@ irq_poll(uint got_int, struct siop_softc *sc)
         uint8_t       istat = rp->siop_istat;
 
         if (istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) {
-            sc->sc_istat = istat;
-            sc->sc_sstat0 = rp->siop_sstat0;
-            sc->sc_dstat  = rp->siop_dstat;
+            uint32_t reg;
+            sc->sc_istat |= istat;
+            reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
+            sc->sc_sstat0 = reg >> 8;
+            sc->sc_dstat  = reg;
             siopintr(sc);
         }
     }

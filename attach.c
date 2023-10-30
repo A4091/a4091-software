@@ -55,9 +55,6 @@ void NewMinList(struct MinList * list)
 
 void scsipi_free_all_xs(struct scsipi_channel *chan);
 
-#define ADDR8(x)      (volatile uint8_t *)(x)
-#define ADDR32(x)     (volatile uint32_t *)(x)
-
 extern struct ExecBase *SysBase;
 extern int romboot;
 struct ExpansionBase *ExpansionBase;
@@ -77,6 +74,7 @@ irq_handler_core(a4091_save_t *save)
     struct siop_softc *sc = save->as_device_private;
     siop_regmap_p      rp;
     uint8_t            istat;
+    uint32_t           reg;
 
     if (sc->sc_flags & SIOP_INTSOFF)
         return (0); /* interrupts are not active */
@@ -88,11 +86,17 @@ irq_handler_core(a4091_save_t *save)
     save->as_irq_count++;
 
     /*
-     * save Interrupt Status, SCSI Status 0, and DMA Status.
+     * Save Interrupt Status, SCSI Status 0, and DMA Status.
+     *
+     * SCSI Status 0 and DMA Status are read in the same transaction
+     * to ensure that interrupts clear properly and that SCSI interrupts
+     * captured in ISTAT are not missed. See DMA Status (DSTAT) register
+     * documentation.
      */
     sc->sc_istat |= istat;
-    sc->sc_sstat0 = rp->siop_sstat0;
-    sc->sc_dstat  = rp->siop_dstat;
+    reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
+    sc->sc_sstat0 = reg >> 8;
+    sc->sc_dstat  = reg;
 
     if (save->as_svc_task != NULL)
         Signal(save->as_svc_task, BIT(save->as_irq_signal));
