@@ -2383,15 +2383,17 @@ test_register_access(void)
         uint8_t data = get_ncrreg8(REG_SCRATCH + pos);
         uint8_t expected = patt >> (8 * (3 - pos));
         if (data != expected) {
-            printf("Byte read SCRATCH %08x value %02x != expected %02x\n",
-                   patt, data, expected);
+            printf("Byte read SCRATCH %08x value %02x != expected %02x "
+                   "(diff %02x)\n",
+                   patt, data, expected, data ^ expected);
             rc++;
         }
     }
     if (rc != 0) {
         value = get_ncrreg32(REG_SCRATCH);
         if (value != patt)
-            printf("    also SCRATCH %08x != expected %08x\n", value, patt);
+            printf("    also SCRATCH %08x != expected %08x (diff %02x)\n",
+                   value, patt, value ^ patt);
     }
     patt = 0x04030201;
 #if 0
@@ -2402,7 +2404,8 @@ test_register_access(void)
 #endif
     value = get_ncrreg32(REG_SCRATCH);
     if (value != patt) {
-        printf("Byte writes to SCRATCH %08x != expected %08x\n", value, patt);
+        printf("Byte writes to SCRATCH %08x != expected %08x (diff %08x)\n",
+               value, patt, value ^ patt);
         rc++;
     }
     if (rc != 0)
@@ -2784,7 +2787,7 @@ uint8_t scntl0;
                 if (rc++ == 0)
                     printf("\n");
                 if (rc < 8) {
-                    printf("SCSI FIFO byte %u FIFO got %03x, expected %03x\n",
+                    printf("SCSI FIFO byte %u FIFO %03x != expected %03x\n",
                            cbyte, value, rvalue);
                 }
             }
@@ -3463,9 +3466,9 @@ test_bus_access(void)
                 /* address line */
                 if (rc++ == 0)
                     printf("\n");
-                printf("A%u=%u bus fetch from %08x failed (%02x != "
-                       "expected %02x)\n",
-                       bit, 0, (uint32_t) saddr0, got0, 0xa5);
+                printf("A%u=%u bus fetch from %08x failed, %02x != "
+                       "expected %02x (diff %02x)\n",
+                       bit, 0, (uint32_t) saddr0, got0, 0xa5, got0 ^ 0xa5);
             }
         }
 
@@ -3496,9 +3499,9 @@ test_bus_access(void)
         } else {
             if (rc++ == 0)
                 printf("\n");
-            printf("A%u=%u bus fetch from %08x failed (%02x != "
-                   "expected %02x)\n",
-                   bit, 1, (uint32_t) saddr1, got1, 0x5a);
+            printf("A%u=%u bus fetch from %08x failed, %02x != "
+                   "expected %02x (diff %02x)\n",
+                   bit, 1, (uint32_t) saddr1, got1, 0x5a, got1 ^ 0x5a);
             if (runtime_flags & FLAG_DEBUG) {
                 uint32_t *ptr = (uint32_t *)saddr1;
                 printf("    %08x %08x %08x %08x\n",
@@ -3616,17 +3619,20 @@ test_dma(void)
             scratch = get_ncrreg32(REG_SCRATCH);
             temp    = get_ncrreg32(REG_TEMP);
             diff    = wdata ^ temp;
-            printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x\n",
+            printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x "
+                   "(diff %08x)\n",
                    a4091_reg_base + REG_SCRATCH,
                    a4091_reg_base + REG_TEMP,
-                   temp, (diff != 0) ? "!" : "", wdata);
+                   temp, (diff != 0) ? "!" : "", wdata, temp ^ wdata);
             if (scratch != wdata) {
-                printf("  SCRATCH %08x: %08x != written %08x\n",
-                       a4091_reg_base + REG_TEMP, scratch, wdata);
+                printf("  SCRATCH %08x: %08x != written %08x (diff %08x)\n",
+                       a4091_reg_base + REG_TEMP, scratch, wdata,
+                       scratch ^ wdata);
             }
             if ((temp != wdata) && (temp != ~wdata)) {
-                printf("  TEMP value %08x != written %08x or expected %08x\n",
-                       temp, ~wdata, wdata);
+                printf("  TEMP value %08x != written %08x or expected %08x\n"
+                       "     (diff written %08x, diff expected %08x)\n",
+                       temp, ~wdata, wdata, temp ^ ~wdata, temp ^ wdata);
             }
             goto fail_dma;
         }
@@ -3642,8 +3648,9 @@ test_dma(void)
             if (rc2 == 1)
                 printf("\n");
             if (scratch != wdata) {
-                printf("  SCRATCH %08x: %08x != written %08x\n",
-                       a4091_reg_base + REG_TEMP, scratch, wdata);
+                printf("  SCRATCH %08x: %08x != written %08x (diff %08x)\n",
+                       a4091_reg_base + REG_TEMP, scratch, wdata,
+                       scratch ^ wdata);
             } else {
                 printf("  SCRATCH %08x to TEMP: %08x != expected %08x "
                        "(diff %08x)\n",
@@ -3672,9 +3679,10 @@ test_dma(void)
             printf("DMA failed at pos %x for %s\n", pos, "RAM->SCRATCH");
             scratch = get_ncrreg32(REG_SCRATCH);
             diff    = *ADDR32(addr) ^ scratch;
-            printf("  Addr %08x to SCRATCH %08x: %08x %s= expected %08x\n",
+            printf("  Addr %08x to SCRATCH %08x: %08x %s= expected %08x "
+                   "(diff %08x)\n",
                    addr, a4091_reg_base + REG_SCRATCH,
-                   scratch, (diff != 0) ? "!" : "", *ADDR32(addr));
+                   scratch, (diff != 0) ? "!" : "", *ADDR32(addr), diff);
             goto fail_dma;
         }
 
@@ -3693,8 +3701,9 @@ test_dma(void)
                        addr, a4091_reg_base + REG_SCRATCH,
                        scratch, *ADDR32(addr), diff);
                 if (wdata != *ADDR32(addr)) {
-                    printf("    Source data changed from %08x to %08x\n",
-                           wdata, *ADDR32(addr));
+                    printf("    Source data changed from %08x to %08x "
+                           "(diff %08x)\n",
+                           wdata, *ADDR32(addr), wdata ^ *ADDR32(addr));
                 }
             }
         }
@@ -3721,9 +3730,10 @@ test_dma(void)
             printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->RAM");
             scratch = get_ncrreg32(REG_SCRATCH);
             diff    = *ADDR32(addr) ^ scratch;
-            printf("  SCRATCH %08x to Addr %08x: %08x %s= expected %08x\n",
+            printf("  SCRATCH %08x to Addr %08x: %08x %s= expected %08x "
+                   "(diff %08x)\n",
                    a4091_reg_base + REG_SCRATCH, addr,
-                   *ADDR32(addr), (diff != 0) ? "!" : "", scratch);
+                   *ADDR32(addr), (diff != 0) ? "!" : "", scratch, diff);
             goto fail_dma;
         }
 
@@ -3992,8 +4002,9 @@ fallback_copy_mem:
                     }
                     if (svalue != sbvalue) {
                         printf("    Source data at %08x changed from "
-                               "%08x to %08x\n",
-                               (uint32_t) src + pos, sbvalue, svalue);
+                               "%08x to %08x (diff %08x)\n",
+                               (uint32_t) src + pos, sbvalue, svalue,
+                               sbvalue ^ svalue);
                     }
                 }
                 rc++;
