@@ -329,7 +329,6 @@ static void about_page(void)
     page_footer();
 }
 
-#ifdef DEBUG_BOOTMENU
 static char *
 trim_spaces(char *str, size_t len)
 {
@@ -345,7 +344,7 @@ trim_spaces(char *str, size_t len)
         *str = '\0';
         return (str);
     } else {
-        memmove(str, ptr, len);
+        CopyMem(ptr, str, len);
 
         while ((len > 0) && (str[len - 1] == ' '))
             len--;
@@ -356,7 +355,7 @@ trim_spaces(char *str, size_t len)
     }
     return (str);
 }
-#endif
+
 static const char *
 devtype_str(uint dtype)
 {
@@ -408,6 +407,11 @@ next_lun:
             //:ret = -1;
 
             err = dev_scsi_inquiry(request, unitNum, &inq_res);
+
+            trim_spaces(inq_res.vendor, sizeof (inq_res.vendor));
+            trim_spaces(inq_res.product, sizeof (inq_res.product));
+            trim_spaces(inq_res.revision, sizeof (inq_res.revision));
+
             if (err == 0) {
                 char unit_str[]="0.0";
                 unit_str[0]='0'+(unitNum % 10);
@@ -428,15 +432,12 @@ next_lun:
                 const char *dtype=devtype_str(inq_res.device & SID_TYPE);
                 Text(rp,dtype,strlen(dtype));
                 printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
-                       sizeof (inq_res.vendor),
-                       sizeof (inq_res.vendor),
-                       trim_spaces(inq_res.vendor, sizeof (inq_res.vendor)),
-                       sizeof (inq_res.product),
-                       sizeof (inq_res.product),
-                       trim_spaces(inq_res.product, sizeof (inq_res.product)),
-                       sizeof (inq_res.revision),
-                       sizeof (inq_res.revision),
-                       trim_spaces(inq_res.revision, sizeof (inq_res.revision)),
+                       sizeof (inq_res.vendor), sizeof (inq_res.vendor),
+                       inq_res.vendor,
+                       sizeof (inq_res.product), sizeof (inq_res.product),
+                       inq_res.product,
+                       sizeof (inq_res.revision), sizeof (inq_res.revision),
+                       inq_res.revision,
                        devtype_str(inq_res.device & SID_TYPE));
             }
 
