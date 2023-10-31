@@ -344,7 +344,7 @@ trim_spaces(char *str, size_t len)
         *str = '\0';
         return (str);
     } else {
-        memmove(str, ptr, len);
+        CopyMem(ptr, str, len);
 
         while ((len > 0) && (str[len - 1] == ' '))
             len--;
