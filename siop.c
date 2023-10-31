@@ -814,6 +814,15 @@ siopreset(struct siop_softc *sc)
     rp->siop_dwt = 0x00;
     rp->siop_ctest0 |= SIOP_CTEST0_BTD | SIOP_CTEST0_EAN;
     rp->siop_ctest7 |= sc->sc_ctest7;
+#ifdef PORT_AMIGA
+    /*
+     * Set SC0 to an output to allow possible board work-around for 53C710
+     * errata where a SCSI interrupt occurs while the 53C710 is requesting
+     * the bus. It will release the request after it being granted, causing
+     * reduced bus utilization due to 7M clock arbitration.
+     */
+    rp->siop_ctest8 |= SIOP_CTEST8_SM;
+#endif
     // rp->siop_ctest0 |= SIOP_CTEST0_ERF;  // Set only for <= 5M transfer rate
 
     /* will need to re-negotiate sync xfers */
@@ -1260,11 +1269,16 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
         }
     }
+    /*
+     * CTEST8 bit 2 (SIOP_CTEST8_CLF) automatically resets after the
+     * 53C710 has successfully cleared the FIFO pointers and registers.
+     */
+    rp->siop_ctest8 &= ~SIOP_CTEST8_CLF;
 #else
     while ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT)
         ;
-#endif
     rp->siop_ctest8 &= ~SIOP_CTEST8_CLF;
+#endif
 #ifdef DEBUG
     ++siopints;
 #endif
