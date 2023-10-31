@@ -380,8 +380,21 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
             }
             delay(1000);  // 1 ms
         }
+#ifdef PORT_AMIGA
+        /*
+         * Work around the caution specified in 53C710 documentation for
+         * Register 0C (0F) DMA Status (DSTAT), where when performing
+         * consecutive 8-bit reads of the DSTAT and SSTAT0 registers,
+         * a delay equivalent to 12 BCLK periods must be inserted to
+         * ensure the interrupts clear properly.
+         */
+        uint32_t reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
+        sstat0 = reg >> 8;
+        dstat  = reg;
+#else
         sstat0 = rp->siop_sstat0;
         dstat = rp->siop_dstat;
+#endif
         if (siop_checkintr(sc, istat, dstat, sstat0, &status)) {
             if (acb != sc->sc_nexus)
                 printf("%s: siop_poll disconnected device completed\n",
@@ -829,10 +842,15 @@ siopreset(struct siop_softc *sc)
     memset(&sc->sc_sync, 0, sizeof (sc->sc_sync));
 
     i = rp->siop_istat;
+#ifdef PORT_AMIGA
+    if (i & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP))
+        dummy = *ADDR32((uintptr_t) &rp->siop_sstat2);
+#else
     if (i & SIOP_ISTAT_SIP)
         dummy = rp->siop_sstat0;
     if (i & SIOP_ISTAT_DIP)
         dummy = rp->siop_dstat;
+#endif
 
     __USE(dummy);
     sc->sc_flags &= ~(SIOP_INTDEFER|SIOP_INTSOFF);

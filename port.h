@@ -10,6 +10,8 @@
 
 #define BIT(x)        (1 << (x))
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
+#define ADDR8(x)      (volatile uint8_t *)(x)
+#define ADDR32(x)     (volatile uint32_t *)(x)
 
 #include <sys/param.h>
 
