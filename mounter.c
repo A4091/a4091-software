@@ -926,36 +926,91 @@ static struct FileSysEntry *scan_filesystems(void)
 	return cdfs;
 }
 
+// CheckPVD
+// Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
+BOOL CheckPVD(struct IOStdReq *ior) {
+	const char sys_id_1[] = "CDTV";
+	const char sys_id_2[] = "AMIGA BOOT";
+	const char iso_id[]   = "CD001";
+
+	BYTE err = 0;
+	BOOL ret = FALSE;
+	char *buf = NULL;
+
+	if (!(buf = AllocMem(2048,MEMF_ANY|MEMF_CLEAR))) goto done;
+
+	ior->io_Command = TD_CHANGESTATE; // Check if there's a disc in the drive
+
+	if (err = DoIO((struct IORequest *)ior) || ior->io_Actual != 0) goto done;
+
+	char *id_string = buf + 1;
+	char *system_id = buf + 8;
+
+	ior->io_Command = CMD_READ;
+	ior->io_Data    = buf;
+	ior->io_Length  = 2048;
+
+	for (int i=0; i < 32; i++) {
+
+		ior->io_Offset = (i + 16) << 11;
+
+		for (int retry = 0; retry < 3; retry++) {
+			if ((err = DoIO((struct IORequest*)ior)) == 0) break;
+		}
+
+		if (ior->io_Actual < 2048) break;
+
+		// Check ISO ID String & for PVD Version & Type code
+		if ((strncmp(iso_id,id_string,5) == 0) && buf[0] == 1 && buf[6] == 1) { 
+			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2) == 0)) {
+				ret = TRUE; // CDTV or AMIGA BOOT
+			} else {
+				ret = FALSE;
+			}
+			break;
+		} else {
+			continue;
+		}
+
+	}
+done:
+	if (buf)  FreeMem(buf,2048);
+	return ret;
+}
+
 // Search for Bootable CDROM
 static LONG ScanCDROM(struct MountData *md)
 {
 	struct FileSysEntry *fse=NULL;
 	char dosName[] = "CD0";
 	static unsigned int cnt = 0;
+	LONG bootPri;
 
-	ULONG parmPkt[] = {
-		(ULONG) dosName,
-		(ULONG) md->devicename,
-		md->unitnum,	  /* unit number */
-		0,			 /* OpenDevice flags */
-		17,			// de_TableSize
-		2048>>2,	   // de_SizeBlock
-		0,			 // de_SecOrg
-		1,			 // de_Surfaces
-		1,			 // de_SectorPerBlock
-		1,			 // de_BlocksPerTrack
-		0,			 // de_Reserved
-		0,			 // de_PreAlloc
-		0,			 // de_Interleave
-		0,			 // de_LowCyl
-		0,			 // de_HighCyl
-		5,			 // de_NumBuffers
-		1,			 // de_BufMemType
-		0x100000,	  // de_MaxTransfer
-		0x7FFFFFFE,	// de_Mask
-		2,			 // de_BootPri
-		0x43443031,	// de_DosType = "CD01"
-	};
+	// "CDTV" or "AMIGA BOOT"?
+	if (CheckPVD((struct IOStdReq *)md->request)) {
+		bootPri = 2;  // Yes, give priority
+	} else {
+		bootPri = -1; // May not be a boot disk, lower priority than HDD
+	}
+
+	struct ParameterPacket pp;
+
+	memset(&pp,0,sizeof(struct ParameterPacket));
+
+	pp.dosname              = dosName;
+	pp.execname             = md->devicename;
+	pp.unitnum              = md->unitnum;
+	pp.de.de_TableSize      = sizeof(struct DosEnvec);
+	pp.de.de_SizeBlock      = 2048 >> 2;
+	pp.de.de_Surfaces       = 1;
+	pp.de.de_SectorPerBlock = 1;
+	pp.de.de_BlocksPerTrack = 1;
+	pp.de.de_NumBuffers     = 5;
+	pp.de.de_BufMemType     = MEMF_ANY|MEMF_CLEAR;
+	pp.de.de_MaxTransfer    = 0x100000;
+	pp.de.de_Mask           = 0x7FFFFFFE;
+	pp.de.de_DosType        = 0x43443031; // CD01
+	pp.de.de_BootPri        = bootPri;
 
 	fse=scan_filesystems();
 	if (!fse) {
@@ -964,16 +1019,11 @@ static LONG ScanCDROM(struct MountData *md)
 	}
 
 	dosName[2]='0' + cnt;
-	struct DeviceNode *node = MakeDosNode(parmPkt);
+	struct DeviceNode *node = MakeDosNode(&pp);
 	if (!node) {
 		printf("Could not create DosNode\n");
 		return -1;
 	}
-
-	// TODO some consistency check that this is actually
-	// a bootable Amiga CDROM
-	// - iso toc
-	// - CDTV or CD32 disk
 
 	// Process PatchFlags.
 	ULONG *dstPatch = &node->dn_Type;
@@ -988,7 +1038,7 @@ static LONG ScanCDROM(struct MountData *md)
 		dstPatch++;
 	}
 
-	AddBootNode(2, ADNF_STARTPROC, node, md->configDev);
+	AddBootNode(bootPri, ADNF_STARTPROC, node, md->configDev);
 	cnt++;
 
 	return 1;
