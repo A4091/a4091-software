@@ -6,20 +6,14 @@
 @INDEX Index
 @NODE MAIN "A4091 Guide"
 @{CODE}
-                       ,--,                 ,---.-,
-   ,---,             ,--.'|    ,----..     '   ,'  '.      ,---,
-  '  .' \\         ,--,  | :   /   /   \\   /   /      \\  ,`--.' |
- /  ;    '.    ,---.'|  : '  /   .     : .   ;  ,/.  : /    /  :
-:  :       \\   ;   : |  | ; .   /   ;.  \\'   |  | :  ;:    |.' '
-:  |   /\\   \\  |   | : _' |.   ;   /  ` ;'   |  ./   :`----':  |
-|  :  ' ;.   : :   : |.'  |;   |  ; \\ ; ||   :       ,   '   ' ;
-|  |  ;/  \\   \\|   ' '  ; :|   :  | ; | ' \\   \\      |   |   | |
-'  :  | \\  \\ ,'\\   \\  .'. |.   |  ' ' ' :  `---`---  ;   '   : ;
-|  |  '  '--'   `---`:  | ''   ;  \\; /  |     |   |  |   |   | '
-|  :  :              '  ; | \\   \\  ',  /      '   :  ;   '   : |
-|  | ,'              |  : ;  ;   :    /       |   |  '   ;   |.'
-`--''                '  ,/    \\   \\ .'        ;   |.'    '---'
-                     '--'      `---`          '---'
+                ________  ___   ___  ________  ________    _____     
+               |\   __  \|\  \ |\  \|\   __  \|\  ___  \  / __  \    
+               \ \  \|\  \ \  \\_\  \ \  \|\  \ \____   \|\/_|\  \   
+                \ \   __  \ \______  \ \  \\\  \|____|\  \|/ \ \  \  
+                 \ \  \ \  \|_____|\  \ \  \\\  \  __\_\  \   \ \  \ 
+                  \ \__\ \__\     \ \__\ \_______\|\_______\   \ \__\
+                   \|__|\|__|      \|__|\|_______|\|_______|    \|__|
+
                            © 2022 Stefan Reinauer & Chris Hooper
 
 ____________________________________________________________________________
@@ -369,9 +363,33 @@ Super Buster    :       The custom chip that handles translation between
 
 @{B}Version History@{UB}
 
+Full history available at https://github.com/A4091/a4091-software/commits/main
+
+Release v42.26:
+
+  o) mounter: Fix creation of filesystem.resource on Kick 1.3 (LIV2)
+  o) mounter: Use dip switch to determine LUN probing
+  o) mounter: Read Short/Long Spinup DIP Switch
+  o) build: Include debug images in builds
+  o) refactor build system
+  o) improve error handling
+  o) automatically produce disk image from source code
+  o) Add menu option to ignore RDBFF_LAST
+  o) Make timer initialization more solid
+  o) Fix timer handling
+  o) Improve AmigaGuide documentation consistency
+  o) Update devtest to 1.4
+  o) Add RDBFlags to tools
+  o) Improved A4091 test utility
+  o) Make floppy disk bootable (tkurbad)
+  o) CD Boot: Check PVD for correct system id (LIV2)
+  o) Don't probe for SCSI targets on other cards (Fixes HDInstTool)
+  o) Fix compilation with gcc 13.1
+  o) Misc. smaller bug fixes
+
 Release v42.25:
 
-a4091.devie
+a4091.device
 
   o) Fix cache handling (LIV2)
       * Unbalanced CachePre/PostDMA calls caused issues for mmulibs

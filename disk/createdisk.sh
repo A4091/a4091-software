@@ -24,6 +24,8 @@ xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK write A4091.guide
 xdftool $DISK write A4091.guide.info
 xdftool $DISK write Disk.info
+xdftool $DISK makedir S
+xdftool $DISK write startup-sequence S/Startup-Sequence
 xdftool $DISK boot install
 
 echo "Cleaning up..."
