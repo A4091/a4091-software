@@ -3,24 +3,24 @@
 
 PATH Tools ADD
 
-echo
-echo "                ________  ___   ___  ________  ________    _____"
-echo "               |\   __  \|\  \ |\  \|\   __  \|\  ___  \  / __  \"
-echo "               \ \  \|\  \ \  \\_\  \ \  \|\  \ \____   \|\/_|\  \"
-echo "                \ \   __  \ \______  \ \  \\\  \|____|\  \|/ \ \  \"
-echo "                 \ \  \ \  \|_____|\  \ \  \\\  \  __\_\  \   \ \  \"
-echo "                  \ \__\ \__\     \ \__\ \_______\|\_______\   \ \__\"
-echo "                   \|__|\|__|      \|__|\|_______|\|_______|    \|__|"
-echo
-echo "                           © 2022 Stefan Reinauer & Chris Hooper"
-echo
-echo "         Welcome to the A4091 Test and Factory Tools Disk. This disk contains"
-echo "         the following tools:"
-echo
-echo "         a4091    - a4091 test utility"
-echo "         a4091d   - a4091 debugger"
-echo "         devtest  - storage device benchmark tool"
-echo "         rdb      - modify your Rigid Disk Block settings"
-echo "         RDBFlags - Easily toggle LastDisk flag in RDB"
-echo
+echo ""
+echo "     ________  ___   ___  ________  ________    _____"
+echo "    |\   __  \|\  \ |\  \|\   __  \|\  ___  \  / __  \"
+echo "    \ \  \|\  \ \  \\_\  \ \  \|\  \ \____   \|\/_|\  \"
+echo "     \ \   __  \ \______  \ \  \\\  \|____|\  \|/ \ \  \"
+echo "      \ \  \ \  \|_____|\  \ \  \\\  \  __\_\  \   \ \  \"
+echo "       \ \__\ \__\     \ \__\ \_______\|\_______\   \ \__\"
+echo "        \|__|\|__|      \|__|\|_______|\|_______|    \|__|"
+echo ""
+echo "              © 2023 Stefan Reinauer & Chris Hooper"
+echo ""
+echo "     Welcome to the A4091 Test and Factory Tools Disk."
+echo "     This disk contains the following tools:"
+echo ""
+echo "       a4091    - a4091 test utility"
+echo "       a4091d   - a4091 debugger"
+echo "       devtest  - storage device benchmark tool"
+echo "       rdb      - modify your Rigid Disk Block settings"
+echo "       RDBFlags - Easily toggle LastDisk flag in RDB"
+echo ""
 
