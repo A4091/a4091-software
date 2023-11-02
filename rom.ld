@@ -17,12 +17,14 @@ SECTIONS {
     .device ALIGN(16): {
         device = .;
 	*(DEVICE)
+        device_end = .;
     }
 
     /* Add CDFileSystem for CDROM boot. Requires 64K ROM */
     .filesystem ALIGN(16): {
         filesystem = .;
 	*(FILESYSTEM)
+        filesystem_end = .;
     }
 
     /* Fill the unused space in the ROM with 0xFF. We use this
@@ -33,9 +35,11 @@ SECTIONS {
      * in the ROM.
      */
     .fill : {
-	. = ALIGN(0x8000) - 16;
+	. = ALIGN(0x8000) - 24;
 	LONG(filesystem - rom);
+	LONG(filesystem_end - filesystem);
 	LONG(device - rom);
+	LONG(device_end - device);
 	LONG(0xFFFF5352);
 	LONG(0x2F434448);
     } =0xffff
