@@ -101,7 +101,7 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
+all: $(PROG) $(PROG).rnc $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
 
 ifneq (,$(wildcard BootCDFileSystem))
 all: $(ROM_CD)
@@ -163,9 +163,13 @@ $(SC_ASM): ncr53cxxx.c
 $(OBJDIR)/version.i: version.h
 	$(QUIET)awk '/#define DEVICE_/{print $$2" EQU "$$3}' $< > $@
 
-$(OBJDIR)/reloc.o: reloc.S
+$(OBJDIR)/%.o: %.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
+
+%.rnc: % $(OBJDIR)/rnc
+	@echo Compressing $<
+	$(QUIET)$(OBJDIR)/rnc p $< $@ -m 1
 
 $(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
 	@echo Building $@
@@ -186,6 +190,10 @@ reloctest: $(OBJDIR)/reloctest.o $(OBJDIR)/reloc.o $(OBJDIR)/assets.o
 test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
+
+$(OBJDIR)/rnc: 3rdparty/propack/main.c
+	@echo Building $@
+	$(QUIET)$(HOSTCC) -O3 -flto -Wno-unused-result $^ -o $@
 
 $(ROM):     $(OBJSROM) rom.ld
 $(ROM_ND):  $(OBJSROM_ND) rom.ld
