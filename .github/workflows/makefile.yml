@@ -33,7 +33,7 @@ jobs:
       run: make lha
 
     - name: Build ADF disk image
-      run: cd disk && ./createdisk.sh
+      run: cd disk && make
 
     - name: Archive CI artifacts (ROM)
       uses: actions/upload-artifact@v3
