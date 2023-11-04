@@ -6,4 +6,7 @@
 	url = ../../cdhooper/amiga_devtest
 [submodule "3rdparty/RDBFlags"]
 	path = 3rdparty/RDBFlags
-	url = https://github.com/reinauer/RDBFlags
+	url = ../../reinauer/RDBFlags
+[submodule "3rdparty/propack"]
+	path = 3rdparty/propack
+	url = ../../reinauer/propack
