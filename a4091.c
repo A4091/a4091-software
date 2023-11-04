@@ -2125,6 +2125,9 @@ test_device_access(void)
             uint8_t val;
             uint8_t diff;
 
+            if ((i >= 0x46) && (i <= 0x49))  // Skip VERSION.REVISION
+                continue;
+
             if ((i & 0x7) == 0) {
                 /* Only occasionally measure access time */
                 tick_start = read_system_ticks();
