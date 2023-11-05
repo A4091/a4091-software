@@ -224,11 +224,7 @@ Romtag
         dc.w    RTC_MATCHWORD      ; UWORD RT_MATCHWORD
         dc.l    0                  ; APTR  RT_MATCHTAG
         dc.l    0                  ; APTR  RT_ENDSKIP
-        IFD COMMODORE_DEVICE
-        dc.b    RTW_COLDSTART      ; UBYTE RT_FLAGS
-        ELSE
         dc.b    RTF_COLDSTART      ; UBYTE RT_FLAGS
-        ENDIF
         dc.b    VERSION            ; UBYTE RT_VERSION
         dc.b    NT_DEVICE          ; UBYTE RT_TYPE
         dc.b    10                 ; BYTE  RT_PRI
