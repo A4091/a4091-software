@@ -1794,6 +1794,7 @@ dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
 
     return (execute_script(script, 0x20));
 }
+
 /*
  * script_write_reg_setup
  * ----------------------
@@ -3444,6 +3445,8 @@ test_bus_access(void)
             set_ncrreg32(REG_SCRATCH, 0xff);
 
             if ((rc2 = execute_script(saddr0, 0x10)) != 0) {
+                printf("A%u bus fetch failure from %08x\n",
+                       bit, (uint32_t) saddr0);
                 rc++;
 #ifdef ABORT_BUS_TEST_ON_FIRST_FAILURE
                 FreeMem(saddr0, 0x10);
@@ -3477,6 +3480,8 @@ test_bus_access(void)
 
         set_ncrreg32(REG_SCRATCH, 0xff);
         if ((rc2 = execute_script(saddr1, 0x10)) != 0) {
+            printf("A%u bus fetch failure from %08x\n",
+                   bit, (uint32_t) saddr1);
             rc++;
 #ifdef ABORT_BUS_TEST_ON_FIRST_FAILURE
             if (saddr0 != NULL)
@@ -3617,11 +3622,15 @@ test_dma(void)
         CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
                      &buf_handled, DMA_ReadFromRAM);
 
-        if (rc != 0) {
+        temp = get_ncrreg32(REG_TEMP);
+        diff = wdata ^ temp;
+
+        if (rc != 0)
             printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->TEMP");
+        if (((rc != 0) || (diff != 0)) && (rc2++ < 10)) {
             scratch = get_ncrreg32(REG_SCRATCH);
-            temp    = get_ncrreg32(REG_TEMP);
-            diff    = wdata ^ temp;
+            if (rc2 == 1)
+                printf("\n");
             printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x "
                    "(diff %08x)\n",
                    a4091_reg_base + REG_SCRATCH,
@@ -3637,29 +3646,14 @@ test_dma(void)
                        "     (diff written %08x, diff expected %08x)\n",
                        temp, ~wdata, wdata, temp ^ ~wdata, temp ^ wdata);
             }
-            goto fail_dma;
         }
 
-        temp = get_ncrreg32(REG_TEMP);
-        diff = wdata ^ temp;
-        if ((diff != 0) && (rc2++ < 10)) {
-            /*
-             * This test is not aborted on data mismatch errors, so that
-             * multiple errors may be captured and reported.
-             */
-            scratch = get_ncrreg32(REG_SCRATCH);
-            if (rc2 == 1)
-                printf("\n");
-            if (scratch != wdata) {
-                printf("  SCRATCH %08x: %08x != written %08x (diff %08x)\n",
-                       a4091_reg_base + REG_TEMP, scratch, wdata,
-                       scratch ^ wdata);
-            } else {
-                printf("  SCRATCH %08x to TEMP: %08x != expected %08x "
-                       "(diff %08x)\n",
-                       a4091_reg_base + REG_SCRATCH, temp, wdata, diff);
-            }
-        }
+        /*
+         * This test is not aborted on data mismatch errors, so that
+         * multiple errors may be captured and reported.
+         */
+        if (rc != 0)
+            goto fail_dma;
     }
     rc += rc2;
     if (rc != 0)
@@ -3678,38 +3672,32 @@ test_dma(void)
         CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH), &buf_handled, 0);
         CachePostDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
 
-        if (rc != 0) {
+        scratch = get_ncrreg32(REG_SCRATCH);
+        diff = wdata ^ scratch;
+
+        if (rc != 0)
             printf("DMA failed at pos %x for %s\n", pos, "RAM->SCRATCH");
-            scratch = get_ncrreg32(REG_SCRATCH);
-            diff    = *ADDR32(addr) ^ scratch;
+        if (((rc != 0) || (diff != 0)) && (rc2++ < 10)) {
+            if (rc2 == 1)
+                printf("\n");
             printf("  Addr %08x to SCRATCH %08x: %08x %s= expected %08x "
                    "(diff %08x)\n",
                    addr, a4091_reg_base + REG_SCRATCH,
-                   scratch, (diff != 0) ? "!" : "", *ADDR32(addr), diff);
-            goto fail_dma;
-        }
-
-        scratch = get_ncrreg32(REG_SCRATCH);
-        diff = *ADDR32(addr) ^ scratch;
-        if (diff != 0) {
-            /*
-             * This test is not aborted on data mismatch errors, so that
-             * multiple errors may be captured and reported.
-             */
-            if (rc2++ < 8) {
-                if (rc2 == 1)
-                    printf("\n");
-                printf("  Addr %08x to SCRATCH %08x: %08x != expected %08x "
+                   scratch, (diff != 0) ? "!" : "", wdata, diff);
+            temp = *ADDR32(addr);
+            if (wdata != temp) {
+                printf("    Source data changed from %08x to %08x "
                        "(diff %08x)\n",
-                       addr, a4091_reg_base + REG_SCRATCH,
-                       scratch, *ADDR32(addr), diff);
-                if (wdata != *ADDR32(addr)) {
-                    printf("    Source data changed from %08x to %08x "
-                           "(diff %08x)\n",
-                           wdata, *ADDR32(addr), wdata ^ *ADDR32(addr));
-                }
+                       wdata, temp, wdata ^ temp);
             }
         }
+
+        /*
+         * This test is not aborted on data mismatch errors, so that
+         * multiple errors may be captured and reported.
+         */
+        if (rc != 0)
+            goto fail_dma;
     }
     rc += rc2;
     if (rc != 0)
@@ -3729,33 +3717,32 @@ test_dma(void)
         CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
                      &buf_handled, DMA_ReadFromRAM);
 
-        if (rc != 0) {
+        scratch = get_ncrreg32(REG_SCRATCH);
+        temp = *ADDR32(addr);
+        diff = temp ^ wdata;
+
+        if (rc != 0)
             printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->RAM");
-            scratch = get_ncrreg32(REG_SCRATCH);
-            diff    = *ADDR32(addr) ^ scratch;
+        if (((rc != 0) || (diff != 0)) && (rc2++ < 10)) {
+            if (rc2 == 1)
+                printf("\n");
             printf("  SCRATCH %08x to Addr %08x: %08x %s= expected %08x "
                    "(diff %08x)\n",
                    a4091_reg_base + REG_SCRATCH, addr,
-                   *ADDR32(addr), (diff != 0) ? "!" : "", scratch, diff);
-            goto fail_dma;
-        }
-
-        temp = *ADDR32(addr);
-        diff = temp ^ wdata;
-        if (diff != 0) {
-            /*
-             * This test is not aborted on data mismatch errors, so that
-             * multiple errors may be captured and reported.
-             */
-            if (rc2++ < 10) {
-                if (rc2 == 1)
-                    printf("\n");
-                printf("  SCRATCH %08x to addr %08x: %08x != expected %08x "
+                   temp, (diff != 0) ? "!" : "", wdata, diff);
+            if (scratch != wdata) {
+                printf("    Source SCRATCH changed from %08x to %08x "
                        "(diff %08x)\n",
-                       a4091_reg_base + REG_SCRATCH,
-                       addr, temp, wdata, diff);
+                       wdata, scratch, wdata ^ scratch);
             }
         }
+
+        /*
+         * This test is not aborted on data mismatch errors, so that
+         * multiple errors may be captured and reported.
+         */
+        if (rc != 0)
+            goto fail_dma;
     }
     rc += rc2;
 
@@ -3907,7 +3894,7 @@ fallback_copy_mem:
     }
 
     if (runtime_flags & FLAG_DEBUG)
-        printf("\nDMA src=%08x srcb=%08x dst=%08x len=%x\n",
+        printf("\nDMA src=%08x backup=%08x dst=%08x len=%x\n",
                (uint32_t) src, (uint32_t) src_backup, (uint32_t) dst, dma_len);
 
     if (runtime_flags & FLAG_DEBUG) {
@@ -4738,6 +4725,7 @@ main(int argc, char **argv)
             dma_clear_istat();
             rc2 = dma_mem_to_mem(dma[0], dma[1], dma[2]);
             if (rc2 != 0) {
+                /* DMA operation failed */
                 printf("DMA src=%08x dst=%08x len=%02x failed\n",
                        dma[0], dma[1], dma[2]);
             }
