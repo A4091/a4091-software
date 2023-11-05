@@ -16,7 +16,6 @@ NUM_ENTRIES EQU 5
         ;   d0: 0
         public  _relocate
 _relocate
-        movem.l d1-d7/a0-a6,-(sp)
 
         bsr     InitHandle
 
@@ -25,9 +24,11 @@ _relocate
         cmp.l   #$524e4301,d0 ; Are we compressed?
         beq.b   .decompress
 
-        bra     real_relocate
+        bra     .real_relocate
 
 .decompress
+        movem.l d1-d7/a0-a6,-(sp)
+
         bsr RomFetch32
         ; d0 = original length
         move.l  d0,d3
@@ -70,7 +71,7 @@ _relocate
 
         move.l  d4,a0
         move.l  d2,a1
-        jsr     _Unpack
+        bsr     _Unpack
 
         move.l  d4,a1
         move.l  d5,d0
@@ -82,7 +83,7 @@ _relocate
 
         bsr     RomFetch32
 
-        bsr     real_relocate
+        bsr     .real_relocate
         ; save return value
         move.l  d0,d4
 
@@ -94,11 +95,18 @@ _relocate
         movem.l (sp)+,d1-d7/a0-a6
         rts
 
-real_relocate
+.real_relocate
         movem.l d1-d7/a0-a6,-(sp)
 
         cmp.l   #$3f3,d0 ; We only know hunk_hdr
         bne     .RelocateFail
+
+        ; Allocate pHunks array
+        moveq.l #(8*NUM_ENTRIES),d0
+        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
+        jsr     _LVOAllocMem(a6)
+        lea     pHunks(pc),a1
+        move.l  d0,(a1)
 
         ; consume the header and remember number of hunks
         bsr     RomFetch32
@@ -332,6 +340,19 @@ CreateSegList:
 
 ; ---------------------
 
+; data = RomFetch32At(offset)
+; d0                  d0
+RomFetch32At:
+        movem.l a0-a1,-(sp)
+
+        lea     ReadHandle(pc),a1
+        move.l  8(a1),a0 ; base address
+        lsl.l #2,d0
+        add.l d0,a0
+        move.l  a0,(a1) ; base address
+        movem.l (sp)+,a0-a1
+        bra RomFetch32
+
 ; data = RomFetch32(void)
 ; d0
 RomFetch16
@@ -387,22 +408,19 @@ InitHandle
 
         lsl.l   #2,d0
 
-        add.l   d0,a0
         lea     ReadHandle(pc),a1
+        move.l  a0,8(a1) ; base address
+        add.l   d0,a0
         move.l  a0,(a1)  ; memory location passed in a0
         move.l  d0,4(a1) ; Set access type: 0 = memory, Z3 otherwise
 
-        moveq.l #(8*NUM_ENTRIES),d0
-        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
-        jsr     _LVOAllocMem(a6)
-        lea     pHunks(pc),a1
-        move.l  d0,(a1)
         movem.l (sp)+,a0-a1
         rts
 
 ReadHandle
         dc.l    0 ; Current address
         dc.l    0 ; 0=memory, otherwise z3
+        dc.l    0 ; base
 
 pHunks
         dc.l    0

@@ -134,7 +134,6 @@ DiagStart
 *
 
 DiagEntry
-        IFND NO_DEVICE
         movem.l d2-d7/a2-a6,-(sp)
 
         ; Patch up Romtag Resident Structure in memory
@@ -147,6 +146,49 @@ DiagEntry
         lea.l   IdString(pc),a1
         move.l  a1,RT_IDSTRING(a4)
 
+        ;----------------------------------------------------------
+        ; Check ROM for a4091.device. If it is not there, this
+        ; is a nodevice rom
+        ;----------------------------------------------------------
+        move.l  #(_device-RomStart),d0
+        bsr InitHandle
+
+        move.l #(65536-4),d0
+        bsr RomFetch32At
+        cmp.l #$2f434448,d0
+        bne .try32
+
+        ; 64k rom
+        move.l #(65536-12),d0 ; devicelen
+        bsr RomFetch32At
+        tst.l d0 ; No device len?
+        bne .gorelocate
+
+        bra .no_resident
+
+.try32
+        move.l #(32768-4),d0
+        bsr RomFetch32At
+        cmp.l #$2f434448,d0
+        bne .gorelocate ; not 32 or 64k, you're on your own.
+
+	; 32k rom
+        move.l #(32768-12),d0 ; devicelen
+        bsr RomFetch32At
+        tst.l d0 ; No device len?
+        bne .gorelocate
+
+.no_resident
+        ; destroy memory romtag
+        lea.l   Romtag(pc),a4
+        move.l  #0,(a4)
+
+        bra .done
+
+.gorelocate
+	;----------------------------------------------------------
+
+	; a0 - base of your board = RomStart?
         move.l  #(_device-RomStart),d0
         bsr     _relocate
         tst.l   d0
@@ -184,7 +226,7 @@ DiagEntry
 
 .done
         movem.l (sp)+,d2-d7/a2-a6
-        ENDIF
+
         moveq.l #1,d0           ; indicate "success"
 
         IFD DRIVER_BOOT_CRASH_DEBUG
@@ -250,13 +292,17 @@ DosName
 
 *******  Relocation Code  ***********************************************
 *************************************************************************
-        IFND NO_DEVICE
 ROM             EQU    1
         INCLUDE "reloc.S"
-        ENDIF
 *
 * End of the Diag copy area which is copied to RAM
 *
 EndCopy
+
+        ; keep out of the Diag area copied to RAM automatically
+        section DEVICE
+        public  _device
+_device
+
 *************************************************************************
         END

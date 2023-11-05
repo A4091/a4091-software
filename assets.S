@@ -1,4 +1,4 @@
-        ; keep out of the Diag area copied to RAM automatically
+        ; Only used for relocation test.
         section DEVICE
         public  _device
 _device
