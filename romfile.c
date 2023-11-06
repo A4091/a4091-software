@@ -48,9 +48,11 @@ void parse_romfiles(void)
 	    if(asave->romfile_len[1]) {
                 printf("  CDFS   @ 0x%05x (%d bytes)\n", asave->romfile[1],
 				asave->romfile_len[1]);
-		if (RomFetch32(asave->romfile[1]) == 0x524e4301)
+		if (RomFetch32(asave->romfile[1]) == 0x524e4301) {
+		    asave->romfile_len[1] = RomFetch32(asave->romfile[1] + 4);
 		    printf("            compressed (%d bytes)\n",
-				    RomFetch32(asave->romfile[1] + 4));
+				    asave->romfile_len[1]);
+		}
 	    } else
                 printf("  CDFS not found.\n");
 
