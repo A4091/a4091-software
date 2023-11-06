@@ -1,8 +1,8 @@
 # A4091 Firmware & Factory Software
 
-Source code to build an Open Source version of the AmigaOS driver, ROM image,
-test utility, and driver debug utility for the A4091 Zorro III Advanced SCSI
-disk controller.
+This package contains source code to build an Open Source version of the AmigaOS
+driver, ROM image, test utility, and driver debug utility for the A4091 Zorro III
+Advanced SCSI disk controller.
 
 ## A4091 AutoConfig(tm) ROM
 
@@ -11,8 +11,8 @@ device, and the device driver (`a4091.device` or `2nd.scsi.device`). On the
 original A4091, the ROM is a 32KB 8 bit ROM. On A4091 REV B boards it is
 possible to use either a 32K or 64K ROM using `J100` to switch.
 
-On the ReA4091 we have mostly used Winbond W27C512 EEPROM parts because dealing
-with the erasing of EPROMs is somewhat cumbersome. Also, the additional 32KB
+On the ReA4091 it is recommended to use Winbond W27C512 EEPROMs because
+UV erasing EPROMs is somewhat cumbersome. Also, the additional 32KB
 ROM can be used to store a CDFileSystem to boot from CD-ROM.
 
 ## How to build
@@ -20,6 +20,14 @@ ROM can be used to store a CDFileSystem to boot from CD-ROM.
 ### Prerequisites
 
 You should install the latest version of [Bebbo's amiga-gcc](https://github.com/bebbo/amiga-gcc) to compile this code. We have previously used this setup on a Linux (Ubuntu) machine as well as a MacBook. On the latter you will need XCode and [HomeBrew](https://brew.sh) installed.
+
+After checking out the source code, you will have to update all the git
+submodules used by this package. To do so, please run
+
+```
+$ cd a4091-software
+$ git submodule update --init
+```
 
 ### Compile Time Configuration
 
@@ -75,19 +83,36 @@ Building objs/battmem.o
 Building objs/reloc.o
 Building objs/version.o
 Building a4091.device
-a4091.device is 34468 bytes
+a4091.device is 46384 bytes
+Building objs/rnc
+Compressing a4091.device ... 46384 -> 29321 bytes
 Building objs/a4091.o
 Building a4091
 Building objs/a4091d.o
 Building a4091d
 Building objs/rom.o
-Building objs/assets.o
-Building a4091.rom
-ROM a4091.rom fits in 64k
-Building objs/rom_nd.o
-Building objs/assets_nd.o
 Building a4091_nodriver.rom
-ROM a4091_nodriver.rom fits in 32k
+ROM a4091_nodriver.rom fits in 64k
+Building objs/romtool
+Building a4091.rom
+a4091.rom: 64kB A4091 ROM image. Signature: OK
+
+ ROM header:   offset = 0x000000 length = 0x0006b0
+ a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
+ CDFileSystem: offset = 0x000000 length = 0x000000
+
+ 34472 bytes free (52.60%)
+
+Compressing BootCDFileSystem ... 19248 -> 12274 bytes
+Building a4091_cdfs.rom
+a4091_cdfs.rom: 64kB A4091 ROM image. Signature: OK
+
+ ROM header:   offset = 0x000000 length = 0x0006b0
+ a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
+ CDFileSystem: offset = 0x007940 length = 0x003000 compressed (4b30 uncompressed)
+
+ 22184 bytes free (33.85%)
+
 $
 ```
 
@@ -116,10 +141,42 @@ in your build directory named `a3090.ld_strip`. The Makefile will detect
 this file and automatically build a `a4091_commodore.rom` in addition to
 the standard open source ROM.
 
-Last but not least, this A4091 driver supports booting from CDROM (beta alert).
-In order to achieve that, you will need `BootCDFileSystem` from your Amiga
+
+## CDROM Boot Support
+
+This A4091 driver supports booting from CDROM. In order to achieve that,
+you will need a supported CDFileSystem in your ROM.
+
+The smallest working CDFileSystem is `BootCDFileSystem` from your Amiga
 Forever CD or the AmigaOS 4.x Boot Floppy. Place that file in your source
-directory, and the Makefile will then also build a `a4091_cdfs.rom` ROM image.
+directory, and the Makefile will then also build a `a4091_cdfs.rom` ROM
+image.
+
+| Origin           | Version                        | Works
+|------------------+--------------------------------+----------
+| BootCDFileSystem | CDFileSystem 50.21 (30.8.2003) | YES
+| AmigaOS 3.2.2    | CDFileSystem 47.28             | YES
+
+You can add another CDFileSystem to a ROM using romtool:
+
+```
+$ objs/rnc p CDFileSystem CDFileSystem.rnc -m 1
+-= RNC ProPackED v1.8 [by Lab 313] (01/26/2021) =-
+-----------------------------
+File successfully packed!
+Original/new size: 33016/21396 bytes
+$ objs/romtool a4091_cdfs.rom -F CDFileSystem.rnc
+a4091_cdfs.rom: 64kB A4091 ROM image. Signature: OK
+
+ ROM header:   offset = 0x000000 length = 0x0006b0
+ a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
+ CDFileSystem: offset = 0x007940 length = 0x0053a0 compressed (80f8 uncompressed)
+
+ 13064 bytes free (19.93%)
+
+$
+```
+
 
 ## Flashing / Programming the ROM
 
@@ -139,28 +196,37 @@ you can write to a floppy, please use
 
 ```
 $ cd disk
-$ ./createdisk.sh
-Downloading...
-Building...
+$ make disk
+./createdisk.sh
+Looking for submodules...
+Building devtest...
 Building objs/devtest.o
 Building devtest
+Extracting rdb...
 Creating disk...
 Cleaning up...
-Done:
-Amiga4091                                        VOLUME  --------  12.11.2022 11:20:45.00  DOS0:ofs #512
-  A4091.guide                                     13916  ----rwed  12.11.2022 11:20:45.00
-  A4091.guide.info                                  523  ----rwed  12.11.2022 11:20:45.00
-  Disk.info                                         364  ----rwed  12.11.2022 11:20:45.00
-  Tools                                             DIR  ----rwed  12.11.2022 11:20:45.00
-    a4091                                         53356  ----rwed  12.11.2022 11:20:44.00
-    a4091d                                        47672  ----rwed  12.11.2022 11:20:45.00
-    devtest                                       65212  ----rwed  12.11.2022 11:20:45.00
-    rdb                                           26816  ----rwed  12.11.2022 11:20:44.00
-sum:           441  220Ki        225792
-data:          429  214Ki        219648  97.28%
-fs:             12  6.0Ki          6144   2.72%
+Done. Please verify disk contents of A4091_4227.adf below:
+------------------------------------------------------------------------------------------
+Amiga4091                                        VOLUME  --------  05.11.2023 15:38:16.00  DOS0:ofs #512
+  A4091.guide                                     15328  ----rwed  05.11.2023 15:38:16.00
+  A4091.guide.info                                  523  ----rwed  05.11.2023 15:38:16.00
+  Disk.info                                         364  ----rwed  05.11.2023 15:38:16.00
+  Libs                                              DIR  ----rwed  05.11.2023 15:38:16.00
+    a4091.device                                  46384  ----rwed  05.11.2023 15:38:16.00
+  S                                                 DIR  ----rwed  05.11.2023 15:38:16.00
+    Startup-Sequence                               1009  ----rwed  05.11.2023 15:38:16.00
+  Tools                                             DIR  ----rwed  05.11.2023 15:38:15.00
+    a4091                                         66524  ----rwed  05.11.2023 15:38:15.00
+    a4091d                                        47824  ----rwed  05.11.2023 15:38:15.00
+    devtest                                       65412  ----rwed  05.11.2023 15:38:15.00
+    rdb                                           26816  ----rwed  05.11.2023 15:38:15.00
+    RDBFlags                                       2208  ----rwed  05.11.2023 15:38:15.00
+sum:           582  291Ki        297984
+data:          564  282Ki        288768  96.91%
+fs:             18  9.0Ki          9216   3.09%
+------------------------------------------------------------------------------------------
+Created A4091_4227.adf
 $
-Created A4091_4225.adf
 ```
 
 ## Internals
@@ -218,3 +284,12 @@ Files will be documented here in an order to help understand code flow.
 `ncr53cxxx.c` is the source to the NetBSD SCRIPTS compiler, with minor fixes.
 
 `rom.ld` is the linker directive file which tells how to assemble the ROM image.
+
+`rnc.S` is a small RNC ProPack decompressor that is used to maximize rom space.
+
+`romfile.c` handles "files" in the ROM and is used to find the CDFileSystem at
+boot.
+
+`romtool.c` is a utility to manipulate A4091 rom images. It lets you remove/add
+device drivers and filesystems.
+
