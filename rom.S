@@ -62,8 +62,8 @@ RomStart
 
         * er_Type is NOT inverted
         dc.b    ER_TYPE|$0f, ~(PRODUCT_ID)|$0f, ~(ER_FLAGS), $ff
-        dc.b    (~(MANUF_ID)|$0f)&$ff, (~(MANUF_ID>>8)|$0f)&$ff, ~(VERSION>>12), ~(VERSION>>4)
-        dc.b    ~(REVISION>>12), ~(REVISION>>4), ~(ROM_VECTOR>>8)|$0f, ~(ROM_VECTOR)&$ff
+        dc.b    (~(MANUF_ID)|$0f)&$ff, (~(MANUF_ID>>8)|$0f)&$ff, ~(VERSION>>8), ~(VERSION)
+        dc.b    ~(REVISION>>8), ~(REVISION), ~(ROM_VECTOR>>8)|$0f, ~(ROM_VECTOR)&$ff
         dc.b    $ff, $ff, $ff, $ff
         dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
         dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
@@ -77,8 +77,8 @@ RomStart
         ENDC
 
         dc.b    ((ER_TYPE<<4)|$0f)&$ff, ~(PRODUCT_ID<<4)&$ff, ~(ER_FLAGS<<4)&$ff, $ff
-        dc.b    ~(MANUF_ID>>4), ~(MANUF_ID<<4)&$ff, ~(VERSION>>8), ~(VERSION>>0)
-        dc.b    ~(REVISION>>8), ~(REVISION>>0), ~(ROM_VECTOR>>4), ~(ROM_VECTOR<<4)&$ff
+        dc.b    ~(MANUF_ID>>4), ~(MANUF_ID<<4)&$ff, ~(VERSION>>4), ~(VERSION<<4)&$ff
+        dc.b    ~(REVISION>>4), ~(REVISION<<4)&$ff, ~(ROM_VECTOR>>4), ~(ROM_VECTOR<<4)&$ff
         dc.b    $ff, $ff, $ff, $ff
         dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
         dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
