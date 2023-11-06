@@ -21,10 +21,7 @@ OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
-OBJSROM := $(OBJDIR)/rom.o $(OBJDIR)/assets.o
-OBJSROM_ND  := $(OBJSROM:%.o=%_nd.o)
-OBJSROM_CD  := $(OBJSROM:%assets.o=%assets_cdfs.o)
-OBJSROM_COM := $(OBJSROM:%.o=%_com.o)
+OBJSROM := $(OBJDIR)/rom.o
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -101,10 +98,11 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
+all: $(PROG) $(PROG).rnc $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
 
 ifneq (,$(wildcard BootCDFileSystem))
 all: $(ROM_CD)
+CDFS=BootCDFileSystem
 endif
 ifneq (,$(wildcard a3090.ld_strip))
 all: $(ROM_COM)
@@ -123,9 +121,6 @@ $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS) $(ASMOB
 $(OBJDIR)/siop.o: $(SIOP_SCRIPT)
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA
-$(OBJDIR)/rom_nd.o $(OBJDIR)/assets_nd.o:: ROMDRIVER += -DNO_DEVICE=1
-$(OBJDIR)/assets_cdfs.o:: ROMDRIVER += -DCDFS=1
-$(OBJDIR)/rom_com.o $(OBJDIR)/assets_com.o:: ROMDRIVER += -DCOMMODORE_DEVICE=1
 
 # XXX: Need to generate real dependency files
 $(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h port_bsd.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
@@ -163,15 +158,20 @@ $(SC_ASM): ncr53cxxx.c
 $(OBJDIR)/version.i: version.h
 	$(QUIET)awk '/#define DEVICE_/{print $$2" EQU "$$3}' $< > $@
 
-$(OBJDIR)/reloc.o: reloc.S
+$(OBJDIR)/%.o: %.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
+
+%.rnc: % $(OBJDIR)/rnc
+	@printf "Compressing $< ... "
+	$(QUIET)$(OBJDIR)/rnc p $< $@ -m 1 >/dev/null
+	@printf "`wc -c < $<` -> `wc -c < $@` bytes\n"
 
 $(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(ROMDRIVER)
 
-$(OBJDIR)/assets.o $(OBJDIR)/assets_nd.o $(OBJDIR)/assets_cdfs.o $(OBJDIR)/assets_com.o: assets.S $(PROG) Makefile
+$(OBJDIR)/assets.o: assets.S $(PROG) Makefile
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
 
@@ -187,15 +187,30 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-$(ROM):     $(OBJSROM) rom.ld
-$(ROM_ND):  $(OBJSROM_ND) rom.ld
-$(ROM_CD):  $(OBJSROM_CD) rom.ld
-$(ROM_COM): $(OBJSROM_COM) rom.ld
+$(OBJDIR)/rnc: 3rdparty/propack/main.c
+	@echo Building $@
+	$(QUIET)$(HOSTCC) -O3 -flto -Wno-unused-result $^ -o $@
 
-$(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM):
+$(OBJDIR)/romtool: romtool.c
+	@echo Building $@
+	$(QUIET)$(HOSTCC) -O2 -Wall $^ -o $@
+
+$(ROM_ND): $(OBJSROM) rom.ld
 	@echo Building $@
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $(filter %.o, $^)
 	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM $@ fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM $@ FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM $@ fits in 64k${end}\n" )
+
+$(ROM): $(ROM_ND) $(PROG).rnc $(OBJDIR)/romtool
+	@echo Building $@
+	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM) -D $(PROG).rnc
+
+$(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
+	@echo Building $@
+	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc
+
+$(ROM_COM): $(ROM_ND) a3090.ld_strip $(OBJDIR)/romtool
+	@echo Building $@
+	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM_COM) -D a3090.ld_strip
 
 $(OBJDIR):
 	mkdir -p $@
@@ -203,6 +218,7 @@ $(OBJDIR):
 clean:
 	@echo Cleaning
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJSROM_COM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 
 distclean: clean

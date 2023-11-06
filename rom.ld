@@ -11,35 +11,26 @@ SECTIONS {
         *(BSS)
     }
 
-    /* Placing the a4091.device in the ROM file right after
-     * the AutoConfig ROM.
+    /* Placing the a4091.device and CDFileSystem in the ROM
+     * file right after the AutoConfig ROM.
      */
     .device ALIGN(16): {
         device = .;
 	*(DEVICE)
-        device_end = .;
-    }
-
-    /* Add CDFileSystem for CDROM boot. Requires 64K ROM */
-    .filesystem ALIGN(16): {
-        filesystem = .;
-	*(FILESYSTEM)
-        filesystem_end = .;
     }
 
     /* Fill the unused space in the ROM with 0xFF. We use this
-     * mechanism also to align the size of our ROM to a multiple
-     * of 32KB.
+     * mechanism also to align the size of our ROM to 64kB.
      * The end of the ROM contains an eight byte magic number
      * and a TOC with offsets to all relocatable binaries stored
      * in the ROM.
      */
     .fill : {
-	. = ALIGN(0x8000) - 24;
-	LONG(filesystem - rom);
-	LONG(filesystem_end - filesystem);
-	LONG(device - rom);
-	LONG(device_end - device);
+	. = ALIGN(0x10000) - 24;
+	LONG(0x00000000);   /* Filesystem offset */
+	LONG(0x00000000);   /* Filesystem length */
+	LONG(device - rom); /* Device driver offset */
+	LONG(0x00000000);   /* Device driver length */
 	LONG(0xFFFF5352);
 	LONG(0x2F434448);
     } =0xffff

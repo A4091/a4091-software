@@ -16,14 +16,97 @@ NUM_ENTRIES EQU 5
         ;   d0: 0
         public  _relocate
 _relocate
-        movem.l d1-d7/a0-a6,-(sp)
 
         bsr     InitHandle
 
         ; fetch file header
         bsr     RomFetch32
+        cmp.l   #$524e4301,d0 ; Are we compressed?
+        beq.b   .decompress
+
+        bra     .real_relocate
+
+.decompress
+        movem.l d1-d7/a0-a6,-(sp)
+
+        bsr RomFetch32
+        ; d0 = original length
+        move.l  d0,d3
+        moveq.l #MEMF_PUBLIC,d1
+        move.l  4,a6 ; execbase
+        jsr     _LVOAllocMem(a6)
+        move.l  d0,d2
+        ; d2 / d3 = Original Ptr/Size
+
+        bsr RomFetch32
+        add.l #18,d0 ; magic 18 bytes at the beginning
+        move.l  d0,d5
+        moveq.l #MEMF_PUBLIC,d1
+        jsr     _LVOAllocMem(a6)
+        move.l  d0,d4
+        ; d4 / d5 = Compressed Ptr/Size
+
+        ; Reset ReadHandle
+        lea     ReadHandle(pc),a1
+        move.l  (a1),d0
+        tst.l   4(a1)
+        beq     .direct
+        sub.l   #48,d0 ; 12 bytes
+        bra .storeHandle
+.direct
+        sub.l   #12,d0 ; 12 bytes
+.storeHandle
+        move.l  d0,(a1)
+
+        ; Copy compressed file to ram.
+        move.l  d4,a0
+        move.l  d5,d1
+        addq.l #3,d1 ; round up
+        lsr.l   #2,d1
+.Copy
+        bsr     RomFetch32
+        move.l  d0,(a0)
+        addq.l #4,a0
+        dbra    d1,.Copy
+
+        move.l  d4,a0
+        move.l  d2,a1
+        bsr     _Unpack
+
+        move.l  d4,a1
+        move.l  d5,d0
+        jsr     _LVOFreeMem(a6)
+
+        lea     ReadHandle(pc),a1
+        move.l  d2,(a1)  ; memory location passed in a0
+        move.l  #0,4(a1) ; Set access type: 0 = memory, Z3 otherwise
+
+        bsr     RomFetch32
+
+        bsr     .real_relocate
+        ; save return value
+        move.l  d0,d4
+
+        move.l  d2,a1
+        move.l  d3,d0
+        jsr     _LVOFreeMem(a6)
+
+        move.l  d4,d0
+        movem.l (sp)+,d1-d7/a0-a6
+        rts
+
+.real_relocate
+        movem.l d1-d7/a0-a6,-(sp)
+
         cmp.l   #$3f3,d0 ; We only know hunk_hdr
         bne     .RelocateFail
+
+        ; Allocate pHunks array
+        moveq.l #(8*NUM_ENTRIES),d0
+        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
+        jsr     _LVOAllocMem(a6)
+        lea     pHunks(pc),a1
+        move.l  d0,(a1)
 
         ; consume the header and remember number of hunks
         bsr     RomFetch32
@@ -257,6 +340,19 @@ CreateSegList:
 
 ; ---------------------
 
+; data = RomFetch32At(offset)
+; d0                  d0
+RomFetch32At:
+        movem.l a0-a1,-(sp)
+
+        lea     ReadHandle(pc),a1
+        move.l  8(a1),a0 ; base address
+        lsl.l #2,d0
+        add.l d0,a0
+        move.l  a0,(a1) ; base address
+        movem.l (sp)+,a0-a1
+        bra RomFetch32
+
 ; data = RomFetch32(void)
 ; d0
 RomFetch16
@@ -308,24 +404,23 @@ InitHandle
         ; nibble mapped nature of the AutoConfig ROM.
         ; ROM_ADDRESS is passed in a0
         ; ROM_OFFSET is passed in d0
+        movem.l a0-a1,-(sp)
 
         lsl.l   #2,d0
 
-        add.l   d0,a0
         lea     ReadHandle(pc),a1
+        move.l  a0,8(a1) ; base address
+        add.l   d0,a0
         move.l  a0,(a1)  ; memory location passed in a0
         move.l  d0,4(a1) ; Set access type: 0 = memory, Z3 otherwise
 
-        moveq.l #(8*NUM_ENTRIES),d0
-        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
-        jsr     _LVOAllocMem(a6)
-        lea     pHunks(pc),a1
-        move.l  d0,(a1)
+        movem.l (sp)+,a0-a1
         rts
 
 ReadHandle
         dc.l    0 ; Current address
         dc.l    0 ; 0=memory, otherwise z3
+        dc.l    0 ; base
 
 pHunks
         dc.l    0
@@ -335,4 +430,5 @@ pHunks
 _rErrno
         dc.l    0
         ENDIF
+        INCLUDE "rnc.S"
         CODE

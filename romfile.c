@@ -39,16 +39,19 @@ void parse_romfiles(void)
                 asave->romfile[1]=RomFetch32((i*32*1024) - 24);
 
             printf("Detected %dkB ROM.\n", i*32);
-	    if(asave->romfile_len[0])
+	    if(asave->romfile_len[0]) {
                 printf("  Driver @ 0x%05x (%d bytes)\n", asave->romfile[0],
 				asave->romfile_len[0]);
-	    else
+	    } else
                 printf("  Driver not found. Huh?\n");
 
-	    if(asave->romfile_len[1])
+	    if(asave->romfile_len[1]) {
                 printf("  CDFS   @ 0x%05x (%d bytes)\n", asave->romfile[1],
 				asave->romfile_len[1]);
-	    else
+		if (RomFetch32(asave->romfile[1]) == 0x524e4301)
+		    printf("            compressed (%d bytes)\n",
+				    RomFetch32(asave->romfile[1] + 4));
+	    } else
                 printf("  CDFS not found.\n");
 
             break;
