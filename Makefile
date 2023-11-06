@@ -100,6 +100,12 @@ endif
 
 all: $(PROG) $(PROG).rnc $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
 
+GIT:=$(shell git -C "$(CURDIR)" rev-parse --git-dir 1>/dev/null 2>&1 \
+        && command -v git)
+ifneq ($(GIT),)
+freshsubs:=$(shell git submodule update --init $(quiet_errors))
+endif
+
 ifneq (,$(wildcard BootCDFileSystem))
 all: $(ROM_CD)
 CDFS=BootCDFileSystem
