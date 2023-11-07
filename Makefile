@@ -100,16 +100,25 @@ endif
 
 all: $(PROG) $(PROG).rnc $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
 
+# Handle git submodules
 GIT:=$(shell git -C "$(CURDIR)" rev-parse --git-dir 1>/dev/null 2>&1 \
         && command -v git)
 ifneq ($(GIT),)
 freshsubs:=$(shell git submodule update --init $(quiet_errors))
 endif
 
+# Autodetect which CDFileSystem is available if any
 ifneq (,$(wildcard BootCDFileSystem))
-all: $(ROM_CD)
 CDFS=BootCDFileSystem
+else
+ifneq (,$(wildcard CDFileSystem))
+CDFS=CDFileSystem
 endif
+endif
+ifneq (,$(CDFS))
+all: $(ROM_CD)
+endif
+
 ifneq (,$(wildcard a3090.ld_strip))
 all: $(ROM_COM)
 endif
