@@ -876,9 +876,6 @@ static LONG ScanRDSK(struct MountData *md)
 			}
 		}
 	}
-	md->request->iotd_Req.io_Command = TD_MOTOR;
-	md->request->iotd_Req.io_Length  = 0;
-	DoIO((struct IORequest*)md->request);
 	return ret;
 }
 
@@ -1143,6 +1140,11 @@ next_lun:
 									break;
 								}
 							}
+
+							// Disable motor after probing
+							md->request->iotd_Req.io_Command = TD_MOTOR;
+							md->request->iotd_Req.io_Length  = 0;
+							DoIO((struct IORequest*)md->request);
 
 							CloseDevice((struct IORequest*)request);
 							if (ms->luns && (lun++ < 8) &&
