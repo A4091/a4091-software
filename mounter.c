@@ -802,7 +802,7 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 	if (!(part->pb_Flags & PBFF_NOMOUNT)) {
 		struct ParameterPacket *pp = AllocMem(sizeof(struct ParameterPacket), MEMF_PUBLIC | MEMF_CLEAR);
 		if (pp) {
-			copymem(&pp->de, &part->pb_Environment, 17 * sizeof(ULONG));
+			copymem(&pp->de, &part->pb_Environment, (part->pb_Environment[0] + 1) * sizeof(ULONG));
 			struct FileSysEntry *fse = ParseFSHD(buf + md->blocksize, filesysblock, pp->de.de_DosType, md);
 			pp->execname = md->devicename;
 			pp->unitnum = md->unitnum;
@@ -961,7 +961,7 @@ BOOL CheckPVD(struct IOStdReq *ior) {
 		if (ior->io_Actual < 2048) break;
 
 		// Check ISO ID String & for PVD Version & Type code
-		if ((strncmp(iso_id,id_string,5) == 0) && buf[0] == 1 && buf[6] == 1) { 
+		if ((strncmp(iso_id,id_string,5) == 0) && buf[0] == 1 && buf[6] == 1) {
 			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2) == 0)) {
 				ret = TRUE; // CDTV or AMIGA BOOT
 			} else {
@@ -1089,7 +1089,7 @@ LONG MountDrive(struct MountStruct *ms)
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
 	struct ExecBase *SysBase = ms->SysBase;
-	scsi_inquiry_data_t inq_res;
+	struct DriveGeometry geom;
 
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
@@ -1121,26 +1121,25 @@ next_lun:
 							md->unitnum = unitNum;
 							ret = -1;
 
-							err = dev_scsi_inquiry(request, unitNum, &inq_res);
+							err = dev_scsi_get_drivegeometry(request, &geom);
 							if (err == 0) {
-								switch (inq_res.device & SID_TYPE) {
+								md->blocksize = geom.dg_SectorSize;
+								switch (geom.dg_DeviceType & SID_TYPE) {
 								case 5: // CDROM
 									if (!asave->cdrom_boot) {
 										printf("CDROM boot disabled.\n");
 										break;
 									}
-									md->blocksize=2048;
 									ret = ScanRDSK(md);
 									if (ret==-1)
 										ret = ScanCDROM(md);
 									break;
 								case 0: // DISK
-									md->blocksize=512;
 									ret = ScanRDSK(md);
 									break;
 								default:
 									printf("Don't know how to boot from device type %d.\n",
-										inq_res.device & 0x1f);
+										geom.dg_DeviceType & SID_TYPE);
 									break;
 								}
 							}
