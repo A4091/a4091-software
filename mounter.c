@@ -891,10 +891,10 @@ static struct FileSysEntry *scan_filesystems(void)
 	 * Permit, then print the info.
 	 */
 	if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
-		printf("Cannot open %s\n",FSRNAME);
+		printf("Cannot open %s\n", FSRNAME);
 	} else {
 		printf("DosType   Version   Creator\n");
-		printf("------------------------------------------------\n");
+		printf("---------------------------------------------------\n");
 		for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 			  fse->fse_Node.ln_Succ;
 			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
@@ -909,7 +909,10 @@ static struct FileSysEntry *scan_filesystems(void)
 #endif
 			printf("	  %s%d",(fse->fse_Version >> 16)<10 ? " " : "", (fse->fse_Version >> 16));
 			printf(".%d%s",(fse->fse_Version & 0xFFFF), (fse->fse_Version & 0xFFFF)<10 ? " " : "");
-			printf("	 %s",fse->fse_Node.ln_Name);
+			if(fse->fse_Node.ln_Name[0])
+				printf("	    %s",fse->fse_Node.ln_Name);
+			else
+				printf("	    N/A\n");
 
 			if (fse->fse_DosType==0x43443031) {
 				cdfs=fse;
