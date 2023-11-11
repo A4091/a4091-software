@@ -63,7 +63,7 @@ void parse_romfiles(void)
     }
 }
 
-const char cdfs_id_string[] = "CDFileSystem (A4091)";
+extern const char cdfs_id_string[];
 
 int add_cdromfilesystem(void)
 {
