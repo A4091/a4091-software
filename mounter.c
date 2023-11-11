@@ -879,9 +879,30 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
-static struct FileSysEntry *scan_filesystems(void)
+static struct FileSysEntry *find_cdfs(void)
 {
 	struct FileSysEntry *fse, *cdfs=NULL;
+	Forbid();
+	if ((FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+		for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+			  fse->fse_Node.ln_Succ;
+			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+
+			if (fse->fse_DosType==0x43443031) {
+				cdfs=fse;
+				break;
+			}
+		}
+
+	}
+	Permit();
+	return cdfs;
+}
+
+static void list_filesystems(void)
+{
+#ifdef DEBUG_MOUNTER
+	struct FileSysEntry *fse;
 
 	/* NOTE - you should actually be in a Forbid while accessing any
 	 * system list for which no other method of arbitration is available.
@@ -898,7 +919,6 @@ static struct FileSysEntry *scan_filesystems(void)
 		for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 			  fse->fse_Node.ln_Succ;
 			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
-#ifdef DEBUG_MOUNTER
 			int x;
 			for (x=24; x>=8; x-=8)
 				putchar((fse->fse_DosType >> x) & 0xFF);
@@ -906,7 +926,7 @@ static struct FileSysEntry *scan_filesystems(void)
 			putchar((fse->fse_DosType & 0xFF) < 0x30
 							? (fse->fse_DosType & 0xFF) + 0x30
 							: (fse->fse_DosType & 0xFF));
-#endif
+
 			printf("	  %s%d",(fse->fse_Version >> 16)<10 ? " " : "", (fse->fse_Version >> 16));
 			printf(".%d%s",(fse->fse_Version & 0xFFFF), (fse->fse_Version & 0xFFFF)<10 ? " " : "");
 			if(fse->fse_Node.ln_Name[0])
@@ -914,16 +934,10 @@ static struct FileSysEntry *scan_filesystems(void)
 			else
 				printf("	    N/A\n");
 
-			if (fse->fse_DosType==0x43443031) {
-				cdfs=fse;
-#ifndef ALL_FILESYSTEMS
-				break;
-#endif
-			}
 		}
 
 	}
-	return cdfs;
+#endif
 }
 
 // CheckPVD
@@ -1012,7 +1026,7 @@ static LONG ScanCDROM(struct MountData *md)
 	pp.de.de_DosType        = 0x43443031; // CD01
 	pp.de.de_BootPri        = bootPri;
 
-	fse=scan_filesystems();
+	fse=find_cdfs();
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
