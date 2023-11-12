@@ -902,39 +902,31 @@ static void list_filesystems(void)
 #ifdef DEBUG_MOUNTER
 	struct FileSysEntry *fse;
 
-	/* NOTE - you should actually be in a Forbid while accessing any
-	 * system list for which no other method of arbitration is available.
-	 * However, for this example we will be printing the information
-	 * (which would break a Forbid anyway) so we won't Forbid.
-	 * In real life, you should Forbid, copy the information you need,
-	 * Permit, then print the info.
-	 */
 	if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
 		printf("Cannot open %s\n", FSRNAME);
-	} else {
-		printf("DosType   Version   Creator\n");
-		printf("---------------------------------------------------\n");
-		for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
-			  fse->fse_Node.ln_Succ;
-			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
-			int x;
-			for (x=24; x>=8; x-=8)
-				putchar((fse->fse_DosType >> x) & 0xFF);
+		return;
+	}
 
-			putchar((fse->fse_DosType & 0xFF) < 0x30
-							? (fse->fse_DosType & 0xFF) + 0x30
-							: (fse->fse_DosType & 0xFF));
-			printf("	  %s%d", (fse->fse_Version >> 16)<10 ? " " : "",
-					(fse->fse_Version >> 16));
-			printf(".%d%s", (fse->fse_Version & 0xFFFF),
-					(fse->fse_Version & 0xFFFF)<10 ? " " : "");
-			if(fse->fse_Node.ln_Name[0])
-				printf("	    %s",fse->fse_Node.ln_Name);
-			else
-				printf("	    N/A\n");
+	printf("DosType   Version   Creator\n");
+	printf("---------------------------------------------------\n");
+	for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+		  fse->fse_Node.ln_Succ;
+		  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+		int x;
+		for (x=24; x>=8; x-=8)
+			putchar((fse->fse_DosType >> x) & 0xFF);
 
-		}
-
+		putchar((fse->fse_DosType & 0xFF) < 0x30
+						? (fse->fse_DosType & 0xFF) + 0x30
+						: (fse->fse_DosType & 0xFF));
+		printf("	  %s%d", (fse->fse_Version >> 16)<10 ? " " : "",
+				(fse->fse_Version >> 16));
+		printf(".%d%s", (fse->fse_Version & 0xFFFF),
+				(fse->fse_Version & 0xFFFF)<10 ? " " : "");
+		if(fse->fse_Node.ln_Name[0])
+			printf("	    %s",fse->fse_Node.ln_Name);
+		else
+			printf("	    N/A\n");
 	}
 #endif
 }
