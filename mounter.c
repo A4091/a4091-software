@@ -55,6 +55,7 @@
 #include "device.h"
 #include "a4091.h"
 #include "attach.h"
+#include "legacy.h"
 
 #define TRACE 1
 #undef TRACE_LSEG
@@ -1050,6 +1051,231 @@ static LONG ScanCDROM(struct MountData *md)
 	return 1;
 }
 
+#ifdef DISKLABELS
+
+static void
+lba2chs(ULONG start, ULONG end, ULONG max_lba, ULONG *cs_p, ULONG *ce_p, ULONG *h_p, ULONG *s_p)
+{
+    ULONG cs = start >> 1;
+    ULONG ce = end >> 1;
+    ULONG cm = max_lba >> 1;
+    ULONG h = 2;
+    ULONG s = 1;
+    while ((cm >= 10000) && (s < 32)) {
+        cm >>= 2;
+        cs >>= 2;
+        ce >>= 2;
+        h <<= 1;
+        s <<= 1;
+    }
+    *cs_p = cs;
+    *ce_p = ce;
+    *h_p = h;
+    *s_p = s;
+}
+
+static LONG register_legacy(struct MountData *md, UBYTE bootable, UBYTE type, ULONG pstart, ULONG plen, ULONG max_lba)
+{
+	struct FileSysEntry *fse=NULL;
+	char dosName[] = "MS0";
+	static unsigned int cnt = 0;
+	LONG bootPri = -1;
+	ULONG pend = pstart + plen - 1;
+	ULONG cs,ce,h,s;
+
+	lba2chs(pstart,pend, max_lba, &cs, &ce, & h, &s);
+
+	printf("register_legacy: %d - %d  (%d/%d/%d - %d/%d/%d)\n",
+			pstart, pend, cs,h,s,ce,h,s);
+
+	fse=find_filesystem(0x46415401, 0);
+	if (!fse) {
+		printf("Could not load filesystem\n");
+		return -1;
+	}
+
+	struct ParameterPacket pp;
+
+	memset(&pp,0,sizeof(struct ParameterPacket));
+
+	pp.dosname              = dosName;
+	pp.execname             = md->devicename;
+	pp.unitnum              = md->unitnum;
+	pp.de.de_TableSize      = sizeof(struct DosEnvec);
+	pp.de.de_SizeBlock      = 512 >> 2;
+	pp.de.de_Surfaces       = h;
+	pp.de.de_SectorPerBlock = 1;
+	pp.de.de_BlocksPerTrack = s;
+	pp.de.de_LowCyl         = cs;
+	pp.de.de_HighCyl        = ce;
+	pp.de.de_NumBuffers     = 5;
+	pp.de.de_BufMemType     = MEMF_ANY|MEMF_CLEAR;
+	pp.de.de_MaxTransfer    = 0x100000;
+	pp.de.de_Mask           = 0x7FFFFFFE;
+	pp.de.de_DosType        = 0x46415401; // FAT95 for now
+	pp.de.de_BootPri        = bootPri;
+
+	dosName[2]='0' + cnt;
+	struct DeviceNode *node = MakeDosNode(&pp);
+	if (!node) {
+		printf("Could not create DosNode\n");
+		return -1;
+	}
+
+	// Process PatchFlags.
+	ULONG *dstPatch = &node->dn_Type;
+	ULONG *srcPatch = &fse->fse_Type;
+	ULONG patchFlags = fse->fse_PatchFlags;
+	while (patchFlags) {
+		if (patchFlags & 1) {
+			*dstPatch = *srcPatch;
+		}
+		patchFlags >>= 1;
+		srcPatch++;
+		dstPatch++;
+	}
+
+	AddBootNode(bootPri, ADNF_STARTPROC, node, md->configDev);
+	cnt++;
+
+	return 1;
+}
+
+unsigned long parse_extended(struct MountData *md, int extended, unsigned long start, unsigned long max_lba)
+{
+	struct mbr *mbr = (struct mbr *)md->buf;
+	unsigned long new_start;
+
+	printf("   %2d   ", extended++);
+	printf("%c   %02x %8lx %8lx\n", mbr->part[0].status & 0x80 ? '*':' ',
+			mbr->part[0].type,
+			start + __bswap32(mbr->part[0].f_lba),
+			(unsigned long)__bswap32(mbr->part[0].num_sect));
+
+	register_legacy(md, mbr->part[0].status & 0x80, mbr->part[0].type,
+			start + __bswap32(mbr->part[0].f_lba),
+			__bswap32(mbr->part[0].num_sect), max_lba);
+
+	new_start = __bswap32(mbr->part[1].f_lba);
+
+	if (mbr->part[1].type == 5) {
+		readblock(md->buf, start + new_start, 0xffffffff, md);
+		parse_extended(md, extended, start +new_start, max_lba);
+	}
+
+	return 0;
+}
+
+static LONG ParseMBR(UBYTE *buf, struct MountData *md)
+{
+	int extended = 5;
+	ULONG max_lba = 0;
+
+	struct mbr *mbr = (struct mbr *)buf;
+	struct mbr_partition part[4];
+	int i;
+	// copy because we might overwrite our buffer
+	// with an extended partition
+	for (i=0;i<4;i++) {
+		part[i] = mbr->part[i];
+		if ((__bswap32(mbr->part[i].f_lba) + __bswap32(mbr->part[i].num_sect)) > max_lba)
+			max_lba = __bswap32(mbr->part[i].f_lba) + __bswap32(mbr->part[i].num_sect);
+	}
+
+	printf(" Part Boot Type   Start   Length\n");
+	for (i=0;i<4;i++) {
+		if (!part[i].f_lba) {
+			continue;
+		}
+		printf("   %2d   ", i+1);
+		printf("%c   %02x %8x %8x\n", part[i].status & 0x80 ? '*':' ',
+			part[i].type,
+			__bswap32(part[i].f_lba),
+			__bswap32(part[i].num_sect));
+
+		if (part[i].type == 5) {
+			readblock(md->buf, __bswap32(part[i].f_lba), 0xffffffff, md);
+			parse_extended(md, extended, __bswap32(part[i].f_lba), max_lba);
+		} else {
+			register_legacy(md, part[i].status & 0x80, part[i].type,
+					__bswap32(part[i].f_lba),
+					__bswap32(part[i].num_sect), max_lba);
+		}
+	}
+
+	return md->ret;
+}
+
+static void print_guid(GUID *x)
+{
+	// Somebody has got to be proud of this mixed endian prank.
+
+	printf("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+			__bswap32(x->u.UUID.time_low), __bswap16(x->u.UUID.time_mid),
+			__bswap16(x->u.UUID.time_high_and_version),
+			x->u.UUID.clock_seq_high_and_reserved, x->u.UUID.clock_seq_low,
+			x->u.UUID.node[0], x->u.UUID.node[1], x->u.UUID.node[2],
+			x->u.UUID.node[3], x->u.UUID.node[4], x->u.UUID.node[5]);
+}
+
+static LONG ParseGPT(UBYTE *buf, struct MountData *md)
+{
+	struct gpt *gpt=(struct gpt *)buf;
+
+	printf(" part start at: %lld\n", __bswap64(gpt->entries_lba));
+	printf(" Number of partitions: %d\n", __bswap32(gpt->number_of_entries));
+	printf(" size of entry: %d\n", __bswap32(gpt->size_of_entry));
+
+	int pstart = __bswap64(gpt->entries_lba);
+	int numparts = __bswap32(gpt->number_of_entries);
+	int psize = __bswap32(gpt->size_of_entry);
+
+	int i, pos = 0;
+
+	for (i=0; i<numparts; i++) {
+		if (i%4 == 0) {
+			pos=0;
+			readblock(md->buf, pstart++, 0xffffffff, md);
+		}
+		struct gpt_partition *gpt_par = (struct gpt_partition *)(md->buf + (pos * psize));
+		pos++;
+
+		/* skip empty partitions */
+		if (gpt_par->first_lba == 0 &&
+				gpt_par->last_lba == 0)
+			continue;
+
+		printf("%d. %8llx - %8llx ", i, __bswap64(gpt_par->first_lba),
+				__bswap64(gpt_par->last_lba));
+		print_guid(&gpt_par->partition_type);
+		printf("\n");
+	}
+
+	return 0L;
+}
+
+static LONG ScanMBR(struct MountData *md)
+{
+	LONG ret = -1;
+	if (readblock(md->buf, 1, 0xffffffff, md)) {
+		struct gpt *gpt = (struct gpt *)md->buf;
+		if (!memcmp(gpt->signature, "EFI PART", 8)) {
+			dbg("GPT found\n");
+			ret = ParseGPT(md->buf, md);
+		}
+	}
+	if (ret == -1 && readblock(md->buf, 0, 0xffffffff, md)) {
+		struct mbr *mbr = (struct mbr *)md->buf;
+		if (mbr->sig[0]==0x55 && mbr->sig[1]==0xaa) {
+			dbg("MBR found\n");
+			ret = ParseMBR(md->buf, md);
+		}
+	}
+
+	return ret;
+}
+#endif
+
 struct MountStruct
 {
 	// Device name. ("myhddriver.device")
@@ -1142,6 +1368,10 @@ next_lun:
 									break;
 								case 0: // DISK
 									ret = ScanRDSK(md);
+#ifdef DISKLABELS
+									if (ret==-1)
+										ret = ScanMBR(md);
+#endif
 									break;
 								default:
 									printf("Don't know how to boot from device type %d.\n",

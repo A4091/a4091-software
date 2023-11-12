@@ -60,6 +60,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #DEBUG  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 CFLAGS  += $(DEBUG)
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
+#CFLAGS  += -DDISKLABELS  # Enable support for MBR / GPT disklabels
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
 CFLAGS  += -msmall-code
