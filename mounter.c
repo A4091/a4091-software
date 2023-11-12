@@ -878,23 +878,22 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
-static struct FileSysEntry *find_cdfs(void)
+static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2)
 {
-	struct FileSysEntry *fse, *cdfs=NULL;
+	struct FileSysEntry *fse, *fs=NULL;
 	if ((FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
 		Forbid();
 		for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 			  fse->fse_Node.ln_Succ;
 			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
-			if (fse->fse_DosType==0x43443031 ||
-			      fse->fse_DosType==0x43445644) {
-				cdfs=fse;
+			if ((id1 && fse->fse_DosType==id1) || (id2 && fse->fse_DosType==id2)) {
+				fs=fse;
 				break;
 			}
 		}
 		Permit();
 	}
-	return cdfs;
+	return fs;
 }
 
 static void list_filesystems(void)
@@ -992,7 +991,7 @@ static LONG ScanCDROM(struct MountData *md)
 	static unsigned int cnt = 0;
 	LONG bootPri;
 
-	fse=find_cdfs();
+	fse=find_filesystem(0x43443031, 0x43445644);
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
