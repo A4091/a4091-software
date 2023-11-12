@@ -1,6 +1,7 @@
 NOW     := $(shell date '+%Y-%m-%d %H:%M:%S')
 DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
+ADATE   := $(shell date '+%-d.%-m.%Y')
 
 OBJDIR  := objs
 ROM	:= a4091.rom
@@ -36,7 +37,7 @@ NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 
 # CFLAGS for a4091.device
 #
-CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\"
+CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\" -DAMIGA_DATE=\"$(ADATE)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #DEBUG  += -DDEBUG             # Show basic debug
 #DEBUG  += -DDEBUG_SYNC        # Show Synchronous SCSI debug

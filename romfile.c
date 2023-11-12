@@ -8,6 +8,8 @@
 #include "device.h"
 #include "attach.h"
 #include "reloc.h"
+#include <resources/filesysres.h>
+#include "version.h"
 
 static uint32_t RomFetch32(uint32_t offset)
 {
@@ -61,40 +63,69 @@ void parse_romfiles(void)
     }
 }
 
+extern const char cdfs_id_string[];
+
 int add_cdromfilesystem(void)
 {
     uint32_t cdfs_seglist = 0;
-    struct Resident *r;
+    struct Resident *r = NULL;
+    struct FileSysResource *FileSysResBase;
+    struct FileSysEntry *fse;
 
     printf("CDFS in Kickstart... ");
     r=FindResident("cdfs");
     if (r == NULL) {
         int i;
-        printf("Not found\nCDFS in A4091 ROM... ");
+        printf("not found.\nCDFS in A4091 ROM... ");
 
-	if (asave->romfile_len[1])
+        if (asave->romfile_len[1])
             cdfs_seglist = relocate(asave->romfile[1], (uint32_t)asave->as_addr);
 
-        if (cdfs_seglist == 0) {
-            // baserel does not like rErrno
-            printf("Not found\nToo bad.\n");
-            return 0;
+        printf("%sfound.\n", cdfs_seglist?"":"not ");
+        // baserel does not like rErrno
+        if (cdfs_seglist == 0)
+		return 0;
+
+        printf("Resident struct... ");
+        for (i=cdfs_seglist; i<cdfs_seglist + asave->romfile_len[1]; i+=2) {
+            if(*(uint16_t *)i == 0x4afc) {
+                r = (struct Resident *)i;
+                break;
+            }
         }
-        printf("Found\nResident struct... ");
-        for (i=cdfs_seglist; i<cdfs_seglist + asave->romfile_len[1]; i+=2)
-            if(*(uint16_t *)i == 0x4afc)
-                       break;
-
-        if (*(uint16_t *)i == 0x4afc)
-            r = (struct Resident *)i;
     }
 
-    if (r) {
-        printf("Found\nInitializing CDFS @%p... ", r);
-        InitResident(r, cdfs_seglist);
-        printf("Done\n");
-    } else {
-        printf("Not found\nToo bad.\n");
+    printf("%sfound.\n", r?"":"not ");
+    if (r != NULL) {
+        if (r && r->rt_Init) {
+            printf("Initializing CDFS @%p... ", r);
+            InitResident(r, cdfs_seglist);
+            printf("done.\n");
+	    return 1;
+        } else
+            printf("No rt_Init.\n");
     }
-    return (r!=NULL);
+
+    FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME);
+    if (!FileSysResBase)
+	return 0;
+
+    fse = AllocMem(sizeof(struct FileSysEntry), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!fse)
+	return 0;
+
+    fse->fse_Node.ln_Name = (UBYTE*)cdfs_id_string;
+    fse->fse_DosType = 0x43443031;
+    fse->fse_Version = ((LONG)DEVICE_VERSION) << 16 | DEVICE_REVISION;
+    fse->fse_PatchFlags = 0x190; // SegList and GlobalVec
+    fse->fse_SegList = cdfs_seglist >> 2;
+    fse->fse_GlobalVec = -1;
+    fse->fse_StackSize = 5120;
+    fse->fse_Priority = 10;
+
+    Forbid();
+    AddHead(&FileSysResBase->fsr_FileSysEntries,&fse->fse_Node);
+    Permit();
+
+    return (1);
 }

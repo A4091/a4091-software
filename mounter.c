@@ -237,9 +237,9 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		if (v != id) {
 			return FALSE;
 		}
-	}
-	if (!checksum(buf, md)) {
-		return FALSE;
+		if (!checksum(buf, md)) {
+			return FALSE;
+		}
 	}
 	return TRUE;
 }
@@ -864,7 +864,6 @@ static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 // Search for RDB
 static LONG ScanRDSK(struct MountData *md)
 {
-	struct ExecBase *SysBase = md->SysBase;
 	LONG ret = -1;
 	for (UWORD i = 0; i < RDB_LOCATION_LIMIT; i++) {
 		if (readblock(md->buf, i, 0xffffffff, md)) {
@@ -879,9 +878,29 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
-static struct FileSysEntry *scan_filesystems(void)
+static struct FileSysEntry *find_cdfs(void)
 {
 	struct FileSysEntry *fse, *cdfs=NULL;
+	Forbid();
+	if ((FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+		for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+			  fse->fse_Node.ln_Succ;
+			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+			if (fse->fse_DosType==0x43443031 ||
+			      fse->fse_DosType==0x43445644) {
+				cdfs=fse;
+				break;
+			}
+		}
+	}
+	Permit();
+	return cdfs;
+}
+
+static void list_filesystems(void)
+{
+#ifdef DEBUG_MOUNTER
+	struct FileSysEntry *fse;
 
 	/* NOTE - you should actually be in a Forbid while accessing any
 	 * system list for which no other method of arbitration is available.
@@ -898,7 +917,6 @@ static struct FileSysEntry *scan_filesystems(void)
 		for ( fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 			  fse->fse_Node.ln_Succ;
 			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
-#ifdef DEBUG_MOUNTER
 			int x;
 			for (x=24; x>=8; x-=8)
 				putchar((fse->fse_DosType >> x) & 0xFF);
@@ -906,29 +924,25 @@ static struct FileSysEntry *scan_filesystems(void)
 			putchar((fse->fse_DosType & 0xFF) < 0x30
 							? (fse->fse_DosType & 0xFF) + 0x30
 							: (fse->fse_DosType & 0xFF));
-#endif
-			printf("	  %s%d",(fse->fse_Version >> 16)<10 ? " " : "", (fse->fse_Version >> 16));
-			printf(".%d%s",(fse->fse_Version & 0xFFFF), (fse->fse_Version & 0xFFFF)<10 ? " " : "");
+			printf("	  %s%d", (fse->fse_Version >> 16)<10 ? " " : "",
+					(fse->fse_Version >> 16));
+			printf(".%d%s", (fse->fse_Version & 0xFFFF),
+					(fse->fse_Version & 0xFFFF)<10 ? " " : "");
 			if(fse->fse_Node.ln_Name[0])
 				printf("	    %s",fse->fse_Node.ln_Name);
 			else
 				printf("	    N/A\n");
 
-			if (fse->fse_DosType==0x43443031) {
-				cdfs=fse;
-#ifndef ALL_FILESYSTEMS
-				break;
-#endif
-			}
 		}
 
 	}
-	return cdfs;
+#endif
 }
 
 // CheckPVD
 // Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
-BOOL CheckPVD(struct IOStdReq *ior) {
+BOOL CheckPVD(struct IOStdReq *ior)
+{
 	const char sys_id_1[] = "CDTV";
 	const char sys_id_2[] = "AMIGA BOOT";
 	const char iso_id[]   = "CD001";
@@ -986,6 +1000,12 @@ static LONG ScanCDROM(struct MountData *md)
 	static unsigned int cnt = 0;
 	LONG bootPri;
 
+	fse=find_cdfs();
+	if (!fse) {
+		printf("Could not load filesystem\n");
+		return -1;
+	}
+
 	// "CDTV" or "AMIGA BOOT"?
 	if (CheckPVD((struct IOStdReq *)md->request)) {
 		bootPri = 2;  // Yes, give priority
@@ -1009,14 +1029,8 @@ static LONG ScanCDROM(struct MountData *md)
 	pp.de.de_BufMemType     = MEMF_ANY|MEMF_CLEAR;
 	pp.de.de_MaxTransfer    = 0x100000;
 	pp.de.de_Mask           = 0x7FFFFFFE;
-	pp.de.de_DosType        = 0x43443031; // CD01
+	pp.de.de_DosType        = fse->fse_DosType; // CD01 / CDVD
 	pp.de.de_BootPri        = bootPri;
-
-	fse=scan_filesystems();
-	if (!fse) {
-		printf("Could not load filesystem\n");
-		return -1;
-	}
 
 	dosName[2]='0' + cnt;
 	struct DeviceNode *node = MakeDosNode(&pp);
