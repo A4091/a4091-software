@@ -587,14 +587,14 @@ static void FSHDAdd(struct FileSysEntry *fse, struct MountData *md)
 {
 	struct ExecBase *SysBase = md->SysBase;
 	if (fse->fse_SegList) {
-		Forbid();
 		struct FileSysResource *fsr = OpenResource(FSRNAME);
 		if (fsr) {
+			Forbid();
 			AddHead(&fsr->fsr_FileSysEntries, &fse->fse_Node);
 			dbg("FileSysEntry %p added to FileSystem.resource, dostype %08"PRIx32"\n", fse, fse->fse_DosType);
 			fse = NULL;
+			Permit();
 		}
-		Permit();
 	}
 	if (fse) {
 		dbg("FileSysEntry %p freed, dostype %08"PRIx32"\n", fse, fse->fse_DosType);
@@ -881,8 +881,8 @@ static LONG ScanRDSK(struct MountData *md)
 static struct FileSysEntry *find_cdfs(void)
 {
 	struct FileSysEntry *fse, *cdfs=NULL;
-	Forbid();
 	if ((FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+		Forbid();
 		for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 			  fse->fse_Node.ln_Succ;
 			  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
@@ -892,8 +892,8 @@ static struct FileSysEntry *find_cdfs(void)
 				break;
 			}
 		}
+		Permit();
 	}
-	Permit();
 	return cdfs;
 }
 
