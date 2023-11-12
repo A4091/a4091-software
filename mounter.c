@@ -237,9 +237,9 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		if (v != id) {
 			return FALSE;
 		}
-	}
-	if (!checksum(buf, md)) {
-		return FALSE;
+		if (!checksum(buf, md)) {
+			return FALSE;
+		}
 	}
 	return TRUE;
 }
