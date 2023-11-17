@@ -391,6 +391,7 @@ int scan_disks(void)
     if(!request) {
         printf("failed.\n");
         W_DeleteMsgPort(port, SysBase);
+        return 0;
     }
 
     for (i=0; i<7; i++) { // FIXME LUNs?
