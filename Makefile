@@ -49,6 +49,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #DEBUG  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
 #DEBUG  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
 #DEBUG  += -DDEBUG_PORT        # Debug port.c
+#DEBUG  += -DDEBUG_SCSIPI      # Debug with SCSIPI_DEBUG_FLAGS
 #DEBUG  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
 #DEBUG  += -DDEBUG_SCSICONF    # Debug scsiconf.c
 #DEBUG  += -DDEBUG_SCSIMSG     # Debug scsimsg.c

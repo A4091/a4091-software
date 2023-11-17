@@ -498,8 +498,11 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     periph->periph_openings  = 4;  // Max # of outstanding commands
     periph->periph_target    = target;              // SCSI target ID
     periph->periph_lun       = lun;                 // SCSI LUN
+#ifdef DEBUG_SCSIPI
     periph->periph_dbflags   = SCSIPI_DEBUG_FLAGS;  // Full debugging
+#else
     periph->periph_dbflags   = 0;
+#endif
     periph->periph_changenum = 1;
     periph->periph_channel   = chan;
     periph->periph_changeint = NULL;
