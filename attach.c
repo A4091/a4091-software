@@ -114,9 +114,8 @@ irq_handler_core(a4091_save_t *save)
  * other than 0.
  */
 static LONG __saveds
-irq_handler(void)
+irq_handler(register a4091_save_t *save asm("a1"))
 {
-    register a4091_save_t *save asm("a1");
     return (irq_handler_core(save));
 }
 
