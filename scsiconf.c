@@ -61,7 +61,6 @@
 #include "scsipiconf.h"
 
 #else /* !PORT_AMIGA */
-
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp $");
 
@@ -1102,10 +1101,13 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 				periph->periph_cap |= PERIPH_CAP_QAS;
 		}
 	}
+
+#ifndef PORT_AMIGA
 	if (quirks & PQUIRK_CAP_SYNC)
 		periph->periph_cap |= PERIPH_CAP_SYNC;
 	if (quirks & PQUIRK_CAP_WIDE16)
 		periph->periph_cap |= PERIPH_CAP_WIDE16;
+#endif
 
 	/*
 	 * Now apply any quirks from the table.
