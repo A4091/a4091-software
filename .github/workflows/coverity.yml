@@ -16,7 +16,7 @@ jobs:
         submodules: true
     - uses: reinauer/coverity-scan-action@v1
       with:
-        configure: --gcc /opt/amiga/m68k-amigaos-gcc
+        configure: --gcc /opt/amiga/bin/m68k-amigaos-gcc
         email: ${{ secrets.COVERITY_SCAN_EMAIL }}
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
