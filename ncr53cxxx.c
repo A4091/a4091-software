@@ -1335,7 +1335,7 @@ void	register_write ()
 	 * MOVE reg <op> data8 TO reg			register write
 	 * MOVE reg + data8 TO reg WITH CARRY		register write
 	 */
-	int	op;
+	int	op = -1;
 	int	reg;
 	int	data;
 
