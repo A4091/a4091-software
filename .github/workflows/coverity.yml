@@ -1,4 +1,3 @@
-# Your .github/workflows/coverity.yml file.
 name: Coverity Scan
 
 # We only want to test official release code, not every pull request.
@@ -16,7 +15,7 @@ jobs:
         submodules: true
     - uses: reinauer/coverity-scan-action@v1
       with:
-        configure: --compiler m68k-amigaos-gcc --comptype gcc
+        configure: --compiler m68k-amigaos-gcc --comptype gcc --template
         email: ${{ secrets.COVERITY_SCAN_EMAIL }}
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
