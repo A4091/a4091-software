@@ -357,6 +357,7 @@ CMD_WRITE_continue:
 
         case NSCMD_TD_READ64:
             printf("NSCMD_");
+            // fallthrough
         case TD_READ64:
             printf("TD64_READ %d %"PRIx32":%"PRIx32" %"PRIx32"\n",
                    ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
@@ -373,6 +374,7 @@ CMD_WRITE_continue:
         case NSCMD_TD_FORMAT64:
         case NSCMD_TD_WRITE64:
             printf("NSCMD_");
+            // fallthrough
         case TD_FORMAT64:
         case TD_WRITE64:
             printf("TD64_WRITE %d %"PRIx32":%"PRIx32" %"PRIx32"\n",
