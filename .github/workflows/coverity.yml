@@ -12,8 +12,11 @@ jobs:
     container: stefanreinauer/amiga-gcc
     steps:
     - uses: actions/checkout@v3
-    - uses: vapier/coverity-scan-action@v1
       with:
+        submodules: true
+    - uses: reinauer/coverity-scan-action@v1
+      with:
+        configure: --gcc /opt/amiga/m68k-amigaos-gcc
         email: ${{ secrets.COVERITY_SCAN_EMAIL }}
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
