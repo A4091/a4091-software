@@ -1222,5 +1222,6 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	for (i=0; i<8; i++)
 		printf("%x%s", unitNum[i], i<7?", ":" }\n");
 
+	list_filesystems();
 	return ret;
 }
