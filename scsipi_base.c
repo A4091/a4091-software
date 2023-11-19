@@ -2854,7 +2854,7 @@ void scsipi_completion_poll(struct scsipi_channel *chan);
 void
 scsipi_completion_poll(struct scsipi_channel *chan)
 {
-    struct scsipi_xfer *xs;
+    struct scsipi_xfer *xs = NULL;
 
     chan->chan_flags |= SCSIPI_CHAN_TACTIVE;
     do {
