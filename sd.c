@@ -922,8 +922,11 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     printf("]\n");
 #endif
 
+#if 0
     scmd->scsi_Status = HFERR_BadStatus;  // XXX might need to be set later
+#else
     scmd->scsi_Status = 0;
+#endif
     scmd->scsi_Actual = 0;          /* Actual data used */
     scmd->scsi_CmdActual = 0;       /* Actual command used */
     scmd->scsi_SenseActual = 0;     /* Actual sense data returned */
