@@ -244,12 +244,21 @@ cumbersome.
 The device driver is based off the NetBSD NCR53c710 driver and has been adapted
 to AmigaOS.
 
-### Boot Menu
+### Boot menu
 
 The ROM contains a diagnostic menu that you can reach by holding down the right
 mouse button during boot. The menu can show you dip switch settings and also
 attached SCSI devices. There is also an option in the menu to enable or
 disable CD-ROM boot.
+
+### a4091 tool
+
+The `a4091` tool can be used to probe the board and detect possible hardware
+issues.
+
+`a4091 -t` runs all tests once. If the A4091 is functioning properly, every test will pass.
+
+`a4091 -t -L` will run all tests in a continuous loop while counting passes. If you built a board yourself, doing at least 500 passes is recommended. You can skip to individual test(s) by appending one or more numbers between `0` and `8` to `-t`, e.g., `a4091 -t56` will only run tests number 5 and 6. **Note:** If you skip **failing** tests, consecutive tests may produce unexpected results.
 
 ### Source files
 
