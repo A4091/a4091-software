@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.0 ("__DATE__") © Chris Hooper";
+const char *version = "\0$VER: A4091 1.1 ("__DATE__") © Chris Hooper";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -421,7 +421,7 @@ decode_autoconfig(void)
     }
     if (value & BIT(5))
         printf(" Memory");
-    if (is_z3 && (get_creg(0x08) & BIT(5)))
+    if (is_z3 && ((~get_creg(0x08)) & BIT(5)))
         sizes = z3_config_sizes;
     printf(" Size=%s", sizes[value & 0x7]);
     if (value & BIT(4)) {
@@ -1363,10 +1363,11 @@ uint32_t script_write_to_reg[] = {
     0x98080000, 0x00000000,  // Transfer Control Opcode=011 (Interrupt and stop)
 };
 
-static void
+static int
 dma_clear_istat(void)
 {
     uint8_t istat;
+    uint    timeout = 30;
 
     /* Clear pending interrupts */
     while (((istat = get_ncrreg8(REG_ISTAT)) & 0x03) != 0) {
@@ -1381,7 +1382,17 @@ dma_clear_istat(void)
 
         if (istat & (REG_ISTAT_DIP | REG_ISTAT_SIP))
             Delay(1);
+
+        if (timeout-- == 5) {
+            /* Attempt to get out of this state with a 53C710 reset */
+            a4091_reset();
+        }
+        if (timeout == 0) {
+            printf("Timeout clearing 53C710 ISTAT %02x\n", istat);
+            return (1);
+        }
     }
+    return (0);
 }
 
 static int
@@ -2126,7 +2137,8 @@ test_device_access(void)
             uint8_t val;
             uint8_t diff;
 
-            if ((i >= 0x46) && (i <= 0x49))  // Skip VERSION.REVISION
+            if (((i >= 0x07) && (i <= 0x09)) ||  // Skip VERSION.REVISION
+                ((i >= 0x46) && (i <= 0x49)))
                 continue;
 
             if ((i & 0x7) == 0) {
@@ -2283,7 +2295,7 @@ test_register_access(void)
     }
 
     a4091_reset();
-    dma_clear_istat();
+    rc += dma_clear_istat();
 
     /* Verify status registers have been cleared */
     rc += check_ncrreg_bits(1, REG_ISTAT, "ISTAT", 0xff);
@@ -3367,7 +3379,7 @@ test_bus_access(void)
     show_test_state("Bus access test:", -1);
 
     a4091_reset();
-    dma_clear_istat();
+    rc += dma_clear_istat();
 
     /* Verify interrupts can be triggered by the 53C710 */
     start_intcount = a4091_save.intcount;
@@ -3437,7 +3449,10 @@ test_bus_access(void)
         }
 
         a4091_reset();
-        dma_clear_istat();
+        if (dma_clear_istat() != 0) {
+            rc++;
+            break;
+        }
         script_write_reg_setup(saddr1, REG_SCRATCH, 0x5a);
 
         if (saddr0 != NULL) {
@@ -3915,7 +3930,7 @@ fallback_copy_mem:
     }
 
     a4091_reset();
-    dma_clear_istat();
+    rc += dma_clear_istat();
     Forbid();
     for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
         for (bit2 = bit1; bit2 < 32; bit2++) {
@@ -4125,7 +4140,7 @@ test_dma_copy_perf(void)
                (uint32_t) src, (uint32_t) dst, dma_len);
 
     a4091_reset();
-    dma_clear_istat();
+    rc += dma_clear_istat();
     tick_start = read_system_ticks_sync();
 run_some_more:
     for (pass = 0; pass < 16; pass++) {
@@ -4457,6 +4472,7 @@ usage(void)
            "\t-f  ignore fact enforcer is present or driver is loaded\n"
            "\t-h  display this help text\n"
            "\t-k  kill (disable) all active A4091 device drivers\n"
+           "\t-l  specify the <number> of test iterations to run\n"
            "\t-L  loop until failure\n"
            "\t-P  probe and list all detected A4091 cards\n"
            "\t-q  quiet mode (only show errors)\n"
@@ -4491,6 +4507,7 @@ main(int argc, char **argv)
     int      flag_zautocfg  = 0;  /* Attempt Zorro Autoconfig */
     uint     test_flags     = 0;  /* Test flags (0-9) */
     uint     pass           = 0;  /* Current test pass */
+    uint     loop_count     = 0;  /* Number of loop iterations */
     uint32_t addr           = 0;  /* Card physical address or index number */
     uint32_t dma[3];              /* DMA source, destination, length */
 
@@ -4548,7 +4565,7 @@ main(int argc, char **argv)
                     case 'D': {  /* DMA */
                         char *s[3];
                         int  i;
-                        int  pos;
+                        int  pos = 0;
                         static const char * const which[] = {
                             "src", "dst", "len"
                         };
@@ -4578,7 +4595,21 @@ main(int argc, char **argv)
                     case 'k':
                         flag_kill = 1;
                         break;
-                    // case 'l':  // Reserved for loop count
+                    case 'l':  {
+                        int pos = 0;
+                        if (++arg >= argc) {
+                            printf("You must specify a loop count\n");
+                            exit(1);
+                        }
+                        if ((sscanf(argv[arg], "%x%n",
+                                    &loop_count, &pos) != 1) ||
+                            (pos == 0) || (loop_count == 0)) {
+                            printf("Invalid loop count %s specified\n", ptr);
+                            exit(1);
+                        }
+                        flag_loop = 1;
+                        break;
+                    }
                     case 'L':
                         flag_loop = 1;
                         break;
@@ -4707,6 +4738,8 @@ main(int argc, char **argv)
     BERR_DSACK_SAVE();
     do {
         if (flag_loop) {
+            if ((loop_count > 0) && (pass >= loop_count))
+                break;
             if (flag_verbose) {
                 printf("Pass %u\n", ++pass);
             } else {
@@ -4722,7 +4755,7 @@ main(int argc, char **argv)
         if (flag_dma) {
             uint rc2;
             a4091_reset();
-            dma_clear_istat();
+            rc += dma_clear_istat();
             rc2 = dma_mem_to_mem(dma[0], dma[1], dma[2]);
             if (rc2 != 0) {
                 /* DMA operation failed */
