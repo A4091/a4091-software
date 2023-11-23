@@ -224,7 +224,7 @@ $(ROM): $(ROM_ND) $(PROG).rnc $(OBJDIR)/romtool
 
 $(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc
+	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
 
 $(ROM_COM): $(ROM_ND) a3090.ld_strip $(OBJDIR)/romtool
 	@echo Building $@

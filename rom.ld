@@ -26,9 +26,13 @@ SECTIONS {
      * in the ROM.
      */
     .fill : {
-	. = ALIGN(0x10000) - 24;
-	LONG(0x00000000);   /* Filesystem offset */
-	LONG(0x00000000);   /* Filesystem length */
+	. = ALIGN(0x10000) - 40;
+	LONG(0xFFFFFFFF);   /* Filesystem 2 DosType */
+	LONG(0x00000000);   /* Filesystem 2 offset */
+	LONG(0x00000000);   /* Filesystem 2 length */
+	LONG(0xFFFFFFFF);   /* Filesystem 1 DosType */
+	LONG(0x00000000);   /* Filesystem 1 offset */
+	LONG(0x00000000);   /* Filesystem 1 length */
 	LONG(device - rom); /* Device driver offset */
 	LONG(0x00000000);   /* Device driver length */
 	LONG(0xFFFF5352);

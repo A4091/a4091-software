@@ -36,7 +36,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 
-#define ROMTOOL_VERSION "v0.1 (2023-11-04)"
+#define ROMTOOL_VERSION "v0.2 (2023-11-22)"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -44,7 +44,8 @@
 
 enum {
 	DEVICE,
-	FILESYSTEM
+	FILESYSTEM1,
+	FILESYSTEM2
 };
 
 struct file {
@@ -53,7 +54,8 @@ struct file {
 };
 
 struct rom_inventory {
-	uint32_t filesystem_offset, filesystem_len;
+	uint32_t filesystem2_dostype, filesystem2_offset, filesystem2_len;
+	uint32_t filesystem1_dostype, filesystem1_offset, filesystem1_len;
 	uint32_t device_offset, device_len;
 	uint32_t signature[2];
 };
@@ -87,14 +89,28 @@ void inventory(char *filename, struct file *rom)
 			ntohl(inv->device_offset), ntohl(inv->device_len));
 	is_compressed(rom->addr + ntohl(inv->device_offset));
 
-	printf("\n CDFileSystem: offset = 0x%06x length = 0x%06x ",
-			ntohl(inv->filesystem_offset), ntohl(inv->filesystem_len));
-	is_compressed(rom->addr + ntohl(inv->filesystem_offset));
+	if (ntohl(inv->filesystem1_len)) {
+		printf("\n FileSystem 1: offset = 0x%06x length = 0x%06x ",
+				ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
+		is_compressed(rom->addr + ntohl(inv->filesystem1_offset));
+		printf("\n               DosType = 0x%08x", ntohl(inv->filesystem1_dostype));
+	} else
+		printf("\n FileSystem 1: <empty>");
+
+	if (ntohl(inv->filesystem2_len)) {
+		printf("\n FileSystem 2: offset = 0x%06x length = 0x%06x ",
+			ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
+		is_compressed(rom->addr + ntohl(inv->filesystem2_offset));
+		printf("\n               DosType = 0x%08x", ntohl(inv->filesystem2_dostype));
+	} else
+		printf("\n FileSystem 2: <empty>");
 	printf("\n\n");
 
 	int freebytes = rom->len - sizeof(struct rom_inventory) - ntohl(inv->device_offset);
-	if (inv->filesystem_len)
-		freebytes -= ntohl(inv->filesystem_len);
+	if (inv->filesystem1_len)
+		freebytes -= ntohl(inv->filesystem1_len);
+	if (inv->filesystem2_len)
+		freebytes -= ntohl(inv->filesystem2_len);
 	if (inv->device_len)
 		freebytes -= ntohl(inv->device_len);
 
@@ -127,8 +143,10 @@ int resize(struct file *rom, int newsize)
 	struct rom_inventory backup = *inv;
 
 	int freebytes = rom->len - sizeof(struct rom_inventory) - ntohl(inv->device_offset);
-	if (inv->filesystem_len)
-		freebytes -= ntohl(inv->filesystem_len);
+	if (inv->filesystem1_len)
+		freebytes -= ntohl(inv->filesystem1_len);
+	if (inv->filesystem2_len)
+		freebytes -= ntohl(inv->filesystem2_len);
 	if (inv->device_len)
 		freebytes -= ntohl(inv->device_len);
 
@@ -217,26 +235,58 @@ int write_file(char *filename, struct file rom)
 	return 0;
 }
 
-int replace_file(struct file *rom, int num, struct file *file)
+int replace_file(struct file *rom, int num, struct file *file, int dostype)
 {
 	struct rom_inventory *inv = (struct rom_inventory *)(rom->addr + rom->len -
 			sizeof(struct rom_inventory));
 
 	int new_space = 0;
-	struct file filesystem = {NULL,0},
+	struct file filesystem1 = {NULL,0},
+		    filesystem2 = {NULL,0},
 		    device = {NULL,0};
 
-	if (num == DEVICE) {
-		new_space = ntohl(inv->device_offset) + file->len + ntohl(inv->filesystem_len) + sizeof(struct rom_inventory);
+	switch (num) {
+	case DEVICE:
+		new_space = ntohl(inv->device_offset) + file->len + ntohl(inv->filesystem1_len) + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
+
 		device = *file;
-		filesystem.addr = file_backup(rom->addr+ntohl(inv->filesystem_offset), ntohl(inv->filesystem_len));
-		filesystem.len = ntohl(inv->filesystem_len);
-	} else {
-		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + file->len + sizeof(struct rom_inventory);
+
+		filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
+		filesystem1.len = ntohl(inv->filesystem1_len);
+
+		filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
+		filesystem2.len = ntohl(inv->filesystem2_len);
+		break;
+	case FILESYSTEM1:
+		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + file->len + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
+
 		device.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
 		device.len = ntohl(inv->device_len);
-		filesystem = *file;
+
+		filesystem1 = *file;
+
+		filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
+		filesystem2.len = ntohl(inv->filesystem2_len);
+
+		inv->filesystem1_dostype = htonl(dostype);
+
+		break;
+	case FILESYSTEM2:
+		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + ntohl(inv->filesystem1_len) + file->len + sizeof(struct rom_inventory);
+
+		device.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
+		device.len = ntohl(inv->device_len);
+
+		filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
+		filesystem1.len = ntohl(inv->filesystem1_len);
+
+		filesystem2 = *file;
+
+		inv->filesystem2_dostype = htonl(dostype);
+
+		break;
 	}
+
 	if (new_space > rom->len) {
 		printf("File can not fit into image (%zd bytes too big)\n",
 				new_space - rom->len);
@@ -244,16 +294,28 @@ int replace_file(struct file *rom, int num, struct file *file)
 	}
 
 	inv->device_len = 0;
-	inv->filesystem_offset = 0;
-	inv->filesystem_len = 0;
+	inv->filesystem1_offset = 0;
+	inv->filesystem1_len = 0;
+	inv->filesystem2_offset = 0;
+	inv->filesystem2_len = 0;
+
+	/* Write device driver back */
 	memset(rom->addr + ntohl(inv->device_offset), 0xff, rom->len - ntohl(inv->device_offset) - sizeof(struct rom_inventory));
 	memcpy(rom->addr + ntohl(inv->device_offset), device.addr, device.len);
 	inv->device_len = htonl(device.len);
-	if (filesystem.len) {
-		inv->filesystem_offset = htonl(ntohl(inv->device_offset)+ntohl(inv->device_len));
-		inv->filesystem_len =htonl(filesystem.len);
-		memcpy(rom->addr+ntohl(inv->filesystem_offset), filesystem.addr, filesystem.len);
+
+	if (filesystem1.len) {
+		inv->filesystem1_offset = htonl(ntohl(inv->device_offset)+ntohl(inv->device_len));
+		inv->filesystem1_len =htonl(filesystem1.len);
+		memcpy(rom->addr+ntohl(inv->filesystem1_offset), filesystem1.addr, filesystem1.len);
 	}
+
+	if (filesystem2.len) {
+		inv->filesystem2_offset = htonl(ntohl(inv->device_offset)+ntohl(inv->device_len)+ntohl(inv->filesystem1_len));
+		inv->filesystem2_len = htonl(filesystem2.len);
+		memcpy(rom->addr+ntohl(inv->filesystem2_offset), filesystem2.addr, filesystem2.len);
+	}
+
 	return 0;
 }
 
@@ -270,6 +332,8 @@ static void print_usage(const char *name)
 	       "   -o | --output <filename>              output filename\n"
 	       "   -D | --device <filename>              path to a4091.device\n"
 	       "   -F | --filesystem <filename>          path to CDFileSystem\n"
+	       "   -T | --dostype <val>                  DosType (eg. 0x43443031)\n"
+	       "   -s | --skip                           skip first filesystem slot\n"
 	       "   -r | --resize [32|64}                 resize rom image to 32kB or 64kB\n"
 	       "   -v | --version:                       print the version\n"
 	       "   -h | --help:                          print this help\n\n");
@@ -279,26 +343,30 @@ int main(int argc, char *argv[])
 {
 	char *output_filename = NULL,
 	     *device_filename = NULL,
-	     *filesystem_filename = NULL;
+	     *filesystem1_filename = NULL,
+	     *filesystem2_filename = NULL;
 
-	int changed = 0;
-	uint32_t newsize=0;
+	int fs_slot = 0, changed = 0;
+	uint32_t newsize=0, filesystem1_dostype=0, filesystem2_dostype=0;
 	struct file rom = {NULL,0},
 		    device = {NULL,0},
-		    filesystem = {NULL,0};
+		    filesystem1 = {NULL,0},
+		    filesystem2 = {NULL,0};
 
 	int opt, option_index = 0;
 	static const struct option long_options[] = {
 		{"output", 1, NULL, 'o'},
 		{"device", 1, NULL, 'D'},
 		{"filesystem", 1, NULL, 'F'},
+		{"dostype", 1, NULL, 'T'},
+		{"skip", 0, NULL, 's'},
 		{"resize", 1, NULL, 'r'},
 		{"version", 0, NULL, 'v'},
 		{"help", 0, NULL, 'h'},
 		{0, 0, 0, 0}
 	};
 
-	while ((opt = getopt_long(argc, argv, "o:D:F:r:vh?",
+	while ((opt = getopt_long(argc, argv, "o:D:F:T:sr:vh?",
 					long_options, &option_index)) != EOF) {
 		switch (opt) {
 		case 'o':
@@ -308,7 +376,32 @@ int main(int argc, char *argv[])
 			device_filename = strdup(optarg);
 			break;
 		case 'F':
-			filesystem_filename = strdup(optarg);
+			if (fs_slot == 0)
+				filesystem1_filename = strdup(optarg);
+			else if (fs_slot ==1)
+				filesystem2_filename = strdup(optarg);
+			else {
+				printf("Only two filesystems supported\n");
+				exit(1);
+			}
+			fs_slot++;
+			break;
+		case 'T':
+			if (fs_slot == 0) {
+				printf("Specify filesystem before DosType.\n");
+				exit(1);
+			} else if (fs_slot == 1) {
+				filesystem1_dostype = strtol(optarg, NULL, 16);
+			} else if (fs_slot == 2) {
+				filesystem2_dostype = strtol(optarg, NULL, 16);
+			}
+			break;
+		case 's':
+			fs_slot++;
+			if (fs_slot > 1) {
+				printf("Only two filesystems supported\n");
+				exit(1);
+			}
 			break;
 		case 'r':
 			newsize = strtoul(optarg, NULL, 0);
@@ -362,13 +455,21 @@ int main(int argc, char *argv[])
 
 	if (device_filename) {
 		device = memorize_file(device_filename);
-		replace_file(&rom, DEVICE, &device);
+		replace_file(&rom, DEVICE, &device, 0L);
 		changed = 1;
 	}
 
-	if (filesystem_filename) {
-		filesystem = memorize_file(filesystem_filename);
-		replace_file(&rom, FILESYSTEM, &filesystem);
+	if (filesystem1_filename) {
+		filesystem1 = memorize_file(filesystem1_filename);
+		replace_file(&rom, FILESYSTEM1, &filesystem1,
+				filesystem1_dostype);
+		changed = 1;
+	}
+
+	if (filesystem2_filename) {
+		filesystem2 = memorize_file(filesystem2_filename);
+		replace_file(&rom, FILESYSTEM2, &filesystem2,
+				filesystem2_dostype);
 		changed = 1;
 	}
 
@@ -377,8 +478,10 @@ int main(int argc, char *argv[])
 	if (changed)
 		write_file(output_filename, rom);
 
-	if (filesystem.addr)
-		free(filesystem.addr);
+	if (filesystem1.addr)
+		free(filesystem1.addr);
+	if (filesystem2.addr)
+		free(filesystem2.addr);
 	if (device.addr)
 		free(device.addr);
 	free(rom.addr);
