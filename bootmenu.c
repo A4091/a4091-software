@@ -405,7 +405,6 @@ next_lun:
         UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
         if (err == 0) {
             scsi_inquiry_data_t inq_res;
-            //:ret = -1;
 
             err = dev_scsi_inquiry(request, unitNum, &inq_res);
 
