@@ -1,3 +1,16 @@
+//
+// Copyright 2022-2023 Stefan Reinauer & Chris Hooper
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+
 #ifdef DEBUG_BOOTMENU
 #define USE_SERIAL_OUTPUT
 #endif
@@ -785,19 +798,15 @@ static void event_loop(void)
 void boot_menu(void)
 {
     printf("Bootmenu:\n");
-    // Hack!?
-    InitResident(FindResident("gadtools.library"), 0);
-
-    IntuitionBase = OpenLibrary("intuition.library", 0);
-    GfxBase       = (struct GfxBase *)OpenLibrary("graphics.library",0);
-    GadToolsBase  = OpenLibrary("gadtools.library",36);
 
     /* Check left mouse button */
     if (!(REG_CIAAPRA_PA6 & *((volatile char *)REG_CIAAPRA))) {
         printf("LMB pressed.\n");
-        close_libraries();
         return;
     }
+
+    /* Open graphics.library for WaitTOF */
+    GfxBase = (struct GfxBase *)OpenLibrary("graphics.library",0);
 
     /*
      * Configure Paula POTGO LX + LY pins (Port 0 Button 2 + 3) as
@@ -813,9 +822,14 @@ void boot_menu(void)
     /* Check right mouse button */
     if (REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) {
         printf("RMB mouse not pressed.\n");
-        close_libraries();
+        CloseLibrary((struct Library *)GfxBase);
         return;
     }
+
+    IntuitionBase = OpenLibrary("intuition.library", 0);
+    // Hack!?
+    InitResident(FindResident("gadtools.library"), 0);
+    GadToolsBase  = OpenLibrary("gadtools.library",36);
 
     printf("Bootmenu: enter\n");
     init_bootmenu();
