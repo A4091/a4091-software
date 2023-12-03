@@ -405,7 +405,6 @@ next_lun:
         UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
         if (err == 0) {
             scsi_inquiry_data_t inq_res;
-            //:ret = -1;
 
             err = dev_scsi_inquiry(request, unitNum, &inq_res);
 
@@ -421,13 +420,13 @@ next_lun:
                 Text(rp, (char *)unit_str, 3);
                 x+=48;
                 Move(rp,x,y);
-                Text(rp, inq_res.vendor, 8);
+                Text(rp, inq_res.vendor, strlen(inq_res.vendor));
                 x+=96;
                 Move(rp,x,y);
-                Text(rp, inq_res.product, 16);
+                Text(rp, inq_res.product, strlen(inq_res.product));
                 x+=176;
                 Move(rp,x,y);
-                Text(rp, inq_res.revision, 4);
+                Text(rp, inq_res.revision, strlen(inq_res.revision));
                 x+=48;
                 Move(rp,x,y);
                 const char *dtype=devtype_str(inq_res.device & SID_TYPE);
