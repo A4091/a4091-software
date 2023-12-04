@@ -28,8 +28,6 @@ typedef struct {
     struct timerequest   *as_timerio;
     struct callout      **as_callout_head;
     struct ConfigDev     *as_cd;
-    uint32_t             romfile[2];
-    uint32_t             romfile_len[2];
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;

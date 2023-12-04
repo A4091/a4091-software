@@ -60,6 +60,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA
 #DEBUG  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 CFLAGS  += $(DEBUG)
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
+#CFLAGS  += -DDISKLABELS  # Enable support for MBR / GPT disklabels
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
 CFLAGS  += -msmall-code
@@ -223,7 +224,7 @@ $(ROM): $(ROM_ND) $(PROG).rnc $(OBJDIR)/romtool
 
 $(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc
+	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
 
 $(ROM_COM): $(ROM_ND) a3090.ld_strip $(OBJDIR)/romtool
 	@echo Building $@

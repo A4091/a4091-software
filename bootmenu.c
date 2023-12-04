@@ -433,13 +433,13 @@ next_lun:
                 Text(rp, (char *)unit_str, 3);
                 x+=48;
                 Move(rp,x,y);
-                Text(rp, inq_res.vendor, 8);
+                Text(rp, inq_res.vendor, strlen(inq_res.vendor));
                 x+=96;
                 Move(rp,x,y);
-                Text(rp, inq_res.product, 16);
+                Text(rp, inq_res.product, strlen(inq_res.product));
                 x+=176;
                 Move(rp,x,y);
-                Text(rp, inq_res.revision, 4);
+                Text(rp, inq_res.revision, strlen(inq_res.revision));
                 x+=48;
                 Move(rp,x,y);
                 const char *dtype=devtype_str(inq_res.device & SID_TYPE);
