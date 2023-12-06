@@ -153,10 +153,13 @@ static struct Gadget *create_gadget(UWORD kind)
 static void Print(STRPTR text, UWORD x, UWORD y, int center)
 {
     struct RastPort *rp = &screen->RastPort;
+    int len=strlen(text);
+    while(len && (text[len-1] == 10 || text[len-1] == 13))
+        len--;
     if (center)
-        x += (WIDTH-TextLength(rp,text,strlen(text)))/2;
+        x += (WIDTH-TextLength(rp,text,len))/2;
     Move(rp,x,y);
-    Text(rp,text,strlen(text));
+    Text(rp,text,len);
 }
 
 static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)

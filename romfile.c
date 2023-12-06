@@ -143,7 +143,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
 
         fse = AllocMem(sizeof(struct FileSysEntry), MEMF_PUBLIC | MEMF_CLEAR);
         if (fse) {
-            fse->fse_Node.ln_Name = (UBYTE*)cdfs_id_string;
+            fse->fse_Node.ln_Name = (UBYTE*)device_id_string;
             fse->fse_DosType = rom->romfile_dostype[1];
             fse->fse_Version = ((LONG)DEVICE_VERSION) << 16 | DEVICE_REVISION;
             fse->fse_PatchFlags = 0x190; // SegList and GlobalVec

@@ -9,12 +9,6 @@ const char * const version_str =
 #endif
 
 #define DEVICE_ID_STRING "a4091 " XSTR(DEVICE_VERSION) "." \
-        XSTR(DEVICE_REVISION) " (" BUILD_DATE ")"
-        /* format: "name version.revision (yyyy-mm-dd)" */
-const char device_id_string[] = DEVICE_ID_STRING;
-
-#define CDFS_ID_STRING "CDFileSystem " XSTR(DEVICE_VERSION) "." \
         XSTR(DEVICE_REVISION) " (" AMIGA_DATE ")\r\n"
         /* format: "name version.revision (dd.mm.yyyy)" */
-const char cdfs_id_string[] = CDFS_ID_STRING;
-
+const char device_id_string[] = DEVICE_ID_STRING;
