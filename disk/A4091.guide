@@ -1,20 +1,20 @@
 @DATABASE "A4091"
-@$VER: A4091.guide 1.0 (9.10.2022)
+@$VER: A4091.guide 1.1 (20.12.2023)
 @(C) Stefan Reinauer & Chris Hooper
 @WORDWRAP
 @AUTHOR Stefan Reinauer & Chris Hooper
 @INDEX Index
 @NODE MAIN "A4091 Guide"
 @{CODE}
-                ________  ___   ___  ________  ________    _____     
-               |\   __  \|\  \ |\  \|\   __  \|\  ___  \  / __  \    
-               \ \  \|\  \ \  \\_\  \ \  \|\  \ \____   \|\/_|\  \   
-                \ \   __  \ \______  \ \  \\\  \|____|\  \|/ \ \  \  
-                 \ \  \ \  \|_____|\  \ \  \\\  \  __\_\  \   \ \  \ 
-                  \ \__\ \__\     \ \__\ \_______\|\_______\   \ \__\
-                   \|__|\|__|      \|__|\|_______|\|_______|    \|__|
+            ________  ___   ___  ________  ________    _____
+           |\\   __  \\|\\  \\ |\\  \\|\\   __  \\|\\  ___  \\  / __  \\
+           \\ \\  \\|\\  \\ \\  \\\\_\\  \\ \\  \\|\\  \\ \\____   \\|\\/_|\\  \\
+            \\ \\   __  \\ \\______  \\ \\  \\\\\\  \\|____|\\  \\|/ \\ \\  \\
+             \\ \\  \\ \\  \\|_____|\\  \\ \\  \\\\\\  \\  __\\_\\  \\   \\ \\  \\
+              \\ \\__\\ \\__\\     \\ \\__\\ \\_______\\|\\_______\\   \\ \\__\\
+               \\|__|\\|__|      \\|__|\\|_______|\\|_______|    \\|__|
 
-                           © 2022 Stefan Reinauer & Chris Hooper
+                       © 2022 Stefan Reinauer & Chris Hooper
 
 ____________________________________________________________________________
 
@@ -23,7 +23,7 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.0                               a4091.device Version 42.23
+Guide Version 1.1                               a4091.device Version 42.27
 
 
      @{"License      : Legal restrictions                                  " link License}
@@ -115,10 +115,10 @@ There are several ROM versions out there:
  o) v40.20 is a version of the ROM that has been floating around the
     internet that has a few bugs fixed
 
- o) v42.23 is the Open Source driver for the A4091. It has been written
-    from scratch based on the BSD driver for the NCR53c710. It supports
-    driver larger than 4G and booting from CDROM (with a little extra
-    work)
+ o) v42.23 and newer is the Open Source driver for the A4091. It has
+    been written from scratch based on the BSD driver for the NCR53c710.
+    It supports driver larger than 4G and booting from CDROM (with a
+    little extra work)
 
 @ENDNODE
 
@@ -173,7 +173,7 @@ You can find the source code at https://github.com/A4091/
 @NODE A4091Tool "a4091 tool"
 
 1> a4091
-A4091 0.4 (Oct  9 2022) © Chris Hooper
+A4091 1.1 (Dec  8 2023) © Chris Hooper
 
 This tool will test an installed A4091 SCSI controller for correct operation.
 Options:
@@ -184,11 +184,15 @@ Options:
 	-f  ignore fact enforcer is present
 	-h  display this help text
 	-k  kill (disable) active C= A4091 device driver
+	-l  specify the <number> of test iterations to run
 	-L  loop until failure
 	-P  probe and list all detected A4091 cards
+	-q  quiet mode (only show errors)
 	-r  display NCR53C710 registers
 	-s  decode device external switches
+	-S  attempt to suspend all A4091 drivers while testing
 	-t  test card
+	-?  show individual test steps
 1>
 
 @ENDNODE
@@ -199,6 +203,7 @@ Options:
 This tool is used to show a4091.device driver internal state.
 It does not work on any other driver.
 Usage:  a4091d [<unit>]
+        a4091d -c   -- show 68040 special registers
         a4091d -p <periph address>
         a4091d -x <xs address>
 1>
@@ -209,7 +214,7 @@ Usage:  a4091d [<unit>]
 
 1> devtest
 You must specify an operation to perform
-devtest 1.3 (Oct 31 2022) © Chris Hooper
+devtest 1.4 (Dec 20 2023) © Chris Hooper
 
 usage: devtest <options> <x.device> <unit>
    -b           benchmark device performance [-bb tests latency]
@@ -219,6 +224,7 @@ usage: devtest <options> <x.device> <unit>
    -h           display help
    -l <loops>   run multiple times
    -m <addr>    use specific memory (<addr> Chip Fast 24Bit Zorro -=list)
+   -mm <addr>   use specific address without allocation by OS
    -o           test open/close
    -p           probe SCSI bus for devices
    -t           test all packet types (basic, TD64, NSD) [-tt = more]
@@ -284,20 +290,21 @@ Q:      Does the A4091 work with Kickstart 1.3
 
 A:      Honestly, we have never tried. The old Commodore driver expects
         to run at least on v39 (Kickstart 3.0). The Open Source driver might
-        be fixed to run on 1.3, but is it really worth it? (Patches welcome)
+        be fixed to run on 1.3. Patches welcome!
 ____________________________________________________________________________
 
 Q:      CDROM Booting doesn't work for me, what do I do?
 
 A:      Make sure you use BootCDFileSystem from the AmigaOS 4.1 installation
-        disk.
+        disk or CDFileSystem from 3.2(.x)
 ___________________________________________________________________________
 
 Q:      All of a sudden, I can't boot from CD anymore but it worked before.
 
 A:      Please check whether you have the RDBFF_LAST flag is set in the
 RDB of your disk. If it is, the driver might just be ignoring all CDROM
-drives coming after this disk.
+drives coming after this disk. There is an option in the A4091 boot menu
+to ignore the RDBFF_LAST flag.
 ____________________________________________________________________________
 
 
@@ -326,6 +333,8 @@ putting up with Stefan's patches.
 @{B}Olaf Barthel@{UB}: For all the information, anecdotes and for
 trackfile.device, a complete device implementation that is part of the
 AmigaOS 3.2 NDK (and nobody seems to know about this)
+
+@{B}Matt Harlum@{UB}: For many fixes and great help debugging!
 
 @{B}Szymon Gosk@{UB}: For creating A4091 compatible metal brackets and
 making the design available to the Amiga community.
@@ -364,6 +373,27 @@ Super Buster    :       The custom chip that handles translation between
 @{B}Version History@{UB}
 
 Full history available at https://github.com/A4091/a4091-software/commits/main
+
+Release v42.27:
+
+a4091.device
+
+  o) Add compression support to ROM (propack)
+  o) Improve CDFileSystem support
+  o) MBR and GPT support (disabled by default)
+  o) bootmenu: Open libraries on demand only
+  o) mounter: Disable drive motor after probing
+  o) mounter: checksum must pay attention to SummedLongs (LIV2)
+  o) mounter: fix offset calculation in readblock() (LIV2)
+  o) mounter: Fixes suggested by Olaf Barthel
+  o) mounter: Dynamically determine block size
+
+a4091 test utility
+  o) Document basics of the a4091 tool (tkurbad)
+  o) Changed `a4091 -t` Device access test to ignore ROM version
+  o) a4091 -t improvements for bus test failure output
+  o) Fix "a4091 -l <Loops>" invalid input checking
+  o) a4091 test fixes (-l, -c, ISTAT, ROM check)
 
 Release v42.26:
 
