@@ -326,8 +326,7 @@ static void about_page(void)
     Print("based on the NetBSD/Amiga SCSI subsystem and 53C710",118,84,FALSE);
     Print("code by many fine contributors over the years.",118,92,FALSE);
     Print("Original RDB mounter by Toni Wilen.",118,100,FALSE);
-    Print("Greetings to the Amiga community",118,122,FALSE);
-    Print("Only Amiga makes it possible.", 204,134,FALSE);
+    Print("Only Amiga makes it possible.", 204,122,FALSE);
     Print((char *)device_id_string, 118,155,FALSE);
 
     ng.ng_LeftEdge   = 400;
