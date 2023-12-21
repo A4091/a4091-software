@@ -4601,10 +4601,12 @@ main(int argc, char **argv)
                             printf("You must specify a loop count\n");
                             exit(1);
                         }
-                        if ((sscanf(argv[arg], "%x%n",
+                        if ((sscanf(argv[arg], "%i%n",
                                     &loop_count, &pos) != 1) ||
-                            (pos == 0) || (loop_count == 0)) {
-                            printf("Invalid loop count %s specified\n", ptr);
+                            (pos == 0) || (loop_count == 0) ||
+                            (loop_count >> 31)) {
+                            printf("Invalid loop count %s specified\n",
+                                   argv[arg]);
                             exit(1);
                         }
                         flag_loop = 1;
