@@ -809,13 +809,14 @@ void boot_menu(void)
 
     /* Open graphics.library for WaitTOF */
     GfxBase = (struct GfxBase *)OpenLibrary("graphics.library",0);
+    IntuitionBase = OpenLibrary("intuition.library", 0);
 
     /*
      * Configure Paula POTGO LX + LY pins (Port 0 Button 2 + 3) as
      * output high. Paula implements a pull-up on the pins in this
      * mode, which may be overdriven (low) by a mouse button press.
      */
-    *(volatile UWORD *)REG_POTGO = 0x0f00;
+    *(volatile UWORD *)REG_POTGO = 0xff00;
 
     /* Wait for Paula to refresh GPIO state */
     WaitTOF();
@@ -824,11 +825,11 @@ void boot_menu(void)
     /* Check right mouse button */
     if (REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) {
         printf("RMB mouse not pressed.\n");
+        CloseLibrary((struct Library *)IntuitionBase);
         CloseLibrary((struct Library *)GfxBase);
         return;
     }
 
-    IntuitionBase = OpenLibrary("intuition.library", 0);
     // Hack!?
     InitResident(FindResident("gadtools.library"), 0);
     GadToolsBase  = OpenLibrary("gadtools.library",36);
