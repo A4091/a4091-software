@@ -816,7 +816,7 @@ void boot_menu(void)
      * output high. Paula implements a pull-up on the pins in this
      * mode, which may be overdriven (low) by a mouse button press.
      */
-    *(volatile UWORD *)REG_POTGO = 0xff00;
+    *(volatile UWORD *)REG_POTGO = 0x0f00;
 
     /* Wait for Paula to refresh GPIO state */
     WaitTOF();
