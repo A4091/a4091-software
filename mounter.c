@@ -1407,10 +1407,10 @@ next_lun:
 				}
 				W_DeleteMsgPort(port, SysBase);
 			}
-			FreeMem(md, sizeof(struct MountData));
 			if (md->DOSBase) {
 				CloseLibrary(&md->DOSBase->dl_lib);
 			}
+			FreeMem(md, sizeof(struct MountData));
 		}
 		CloseLibrary(&ExpansionBase->LibNode);
 	}
