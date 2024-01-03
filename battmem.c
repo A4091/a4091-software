@@ -30,15 +30,15 @@ int Load_BattMem(void)
     ReadBattMem(&cdrom_boot,
                 BATTMEM_A4091_CDROM_BOOT_ADDR,
                 BATTMEM_A4091_CDROM_BOOT_LEN);
-    ReadBattMem(&cdrom_boot,
+    ReadBattMem(&ignore_last,
                 BATTMEM_A4091_IGNORE_LAST_ADDR,
                 BATTMEM_A4091_IGNORE_LAST_LEN);
 
     // CDROM_BOOT defaults to on, hence invert it
     asave->cdrom_boot = !cdrom_boot;
     asave->ignore_last = ignore_last;
-    printf("  cdrom_boot: %d\n", asave->cdrom_boot);
-    printf("  ignore_last: %d\n", asave->ignore_last);
+    printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
+    printf("  ignore_last: %s\n", asave->ignore_last?"on":"off");
     ReleaseBattSemaphore();
 
     return 1;
@@ -54,8 +54,8 @@ int Save_BattMem(void)
 
     ObtainBattSemaphore();
     printf("Storing settings to BattMem\n");
-    printf("  cdrom_boot: %d (%d)\n", asave->cdrom_boot, cdrom_boot);
-    printf("  ignore_last: %d (%d)\n", asave->ignore_last, ignore_last);
+    printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
+    printf("  ignore_last: %s\n", asave->ignore_last?"on":"off");
     WriteBattMem(&cdrom_boot,
                  BATTMEM_A4091_CDROM_BOOT_ADDR,
                  BATTMEM_A4091_CDROM_BOOT_LEN);
