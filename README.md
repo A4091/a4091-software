@@ -152,10 +152,14 @@ Forever CD or the AmigaOS 4.x Boot Floppy. Place that file in your source
 directory, and the Makefile will then also build a `a4091_cdfs.rom` ROM
 image.
 
-| Origin           | Version                        | Works
-|------------------+--------------------------------+----------
-| BootCDFileSystem | CDFileSystem 50.21 (30.8.2003) | YES
-| AmigaOS 3.2.2    | CDFileSystem 47.28             | YES
+| Origin            | Version                        | Works
+|-------------------+--------------------------------+----------
+| BootCDFileSystem  | CDFileSystem 50.21 (30.8.2003) | YES
+| AmigaOS 3.2       | CDFileSystem 47.26             | YES
+| AmigaOS 3.2.2     | CDFileSystem 47.28             | YES
+| Aminet amicdfs240 | AmiCDFS 2.40 (14.12.97)        | YES *
+
+*) Shows requester to insert CD01 during boot but seems to boot fine
 
 You can add another CDFileSystem to a ROM using romtool:
 
