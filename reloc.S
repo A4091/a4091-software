@@ -39,7 +39,7 @@ _relocate
         ; d2 / d3 = Original Ptr/Size
 
         bsr RomFetch32
-        add.l #18,d0 ; magic 18 bytes at the beginning
+        add.l   #18,d0 ; magic 18 bytes at the beginning
         move.l  d0,d5
         moveq.l #MEMF_PUBLIC,d1
         jsr     _LVOAllocMem(a6)
@@ -52,7 +52,7 @@ _relocate
         tst.l   4(a1)
         beq     .direct
         sub.l   #48,d0 ; 12 bytes
-        bra .storeHandle
+        bra     .storeHandle
 .direct
         sub.l   #12,d0 ; 12 bytes
 .storeHandle
@@ -61,12 +61,12 @@ _relocate
         ; Copy compressed file to ram.
         move.l  d4,a0
         move.l  d5,d1
-        addq.l #3,d1 ; round up
+        addq.l  #3,d1 ; round up
         lsr.l   #2,d1
 .Copy
         bsr     RomFetch32
         move.l  d0,(a0)
-        addq.l #4,a0
+        addq.l  #4,a0
         dbra    d1,.Copy
 
         move.l  d4,a0
