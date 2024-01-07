@@ -809,17 +809,28 @@ static void AddNode(struct PartitionBlock *part, struct ParameterPacket *pp, str
 	}
 }
 
-static void ProcessPatchFlags(ULONG patchFlags, ULONG *dstPatch, ULONG *srcPatch)
+static void ProcessPatchFlags(struct DeviceNode *dn, struct FileSysEntry *fse)
 {
 	// Process PatchFlags.
-	while (patchFlags) {
-		if (patchFlags & 1) {
-			*dstPatch = *srcPatch;
-		}
-		patchFlags >>= 1;
-		srcPatch++;
-		dstPatch++;
-	}
+	ULONG patchFlags = fse->fse_PatchFlags;
+	if (patchFlags & 0x0001)
+		dn->dn_Type = fse->fse_Type;
+	if (patchFlags & 0x0002)
+		dn->dn_Task = (struct MsgPort *)fse->fse_Task;
+	if (patchFlags & 0x0004)
+		dn->dn_Lock = fse->fse_Lock;
+	if (patchFlags & 0x0008)
+		dn->dn_Handler = fse->fse_Handler;
+	if (patchFlags & 0x0010)
+		dn->dn_StackSize = fse->fse_StackSize;
+	if (patchFlags & 0x0020)
+		dn->dn_Priority = fse->fse_Priority;
+	if (patchFlags & 0x0040)
+		dn->dn_Startup = fse->fse_Startup;
+	if (patchFlags & 0x0080)
+		dn->dn_SegList = fse->fse_SegList;
+	if (patchFlags & 0x0100)
+		dn->dn_GlobalVec = fse->fse_GlobalVec;
 }
 
 // Parse PART block, mount drive.
@@ -851,7 +862,7 @@ static ULONG ParsePART(UBYTE *buf, ULONG block, ULONG filesysblock, struct Mount
 			struct DeviceNode *dn = MakeDosNode(pp);
 			if (dn) {
 				if (fse) {
-					ProcessPatchFlags(fse->fse_PatchFlags, &dn->dn_Type, &fse->fse_Type);
+					ProcessPatchFlags(dn, fse);
 				}
 				dbg("Mounting partition\n");
 #if NO_CONFIGDEV
@@ -1058,7 +1069,7 @@ static LONG ScanCDROM(struct MountData *md)
 		return -1;
 	}
 
-	ProcessPatchFlags(fse->fse_PatchFlags, &node->dn_Type, &fse->fse_Type);
+	ProcessPatchFlags(node, fse);
 
 	AddBootNode(bootPri, ADNF_STARTPROC, node, md->configDev);
 	cnt++;
@@ -1137,7 +1148,7 @@ static LONG register_legacy(struct MountData *md, UBYTE bootable, UBYTE type, UL
 		return -1;
 	}
 
-	ProcessPatchFlags(fse->fse_PatchFlags, &node->dn_Type, &fse->fse_Type);
+	ProcessPatchFlags(node, fse);
 
 	AddBootNode(bootPri, ADNF_STARTPROC, node, md->configDev);
 	cnt++;
