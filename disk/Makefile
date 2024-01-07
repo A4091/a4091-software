@@ -4,7 +4,7 @@ disk: scsifix
 	./createdisk.sh
 
 clean:
-	rm -f A4091_????.adf
+	rm -f a4091_??.??.adf
 	rm -f NDK3.2.lha
 	rm -rf Tools
 

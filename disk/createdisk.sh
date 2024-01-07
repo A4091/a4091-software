@@ -1,7 +1,7 @@
 
 
-VER=$(awk '/#define DEVICE_/{if (V != "") print V""$NF; else V=$NF}' ../version.h)
-DISK=A4091_$VER.adf
+VER=$(awk '/#define DEVICE_/{if (V != "") print V""$NF; else V=$NF"."}' ../version.h)
+DISK=a4091_$VER.adf
 THIRDPARTY=../3rdparty
 
 echo "Looking for submodules..."
