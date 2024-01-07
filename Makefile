@@ -116,6 +116,8 @@ CDFS=BootCDFileSystem
 else
 ifneq (,$(wildcard CDFileSystem))
 CDFS=CDFileSystem
+else
+CDFS=$(OBJDIR)/CDVDFS
 endif
 endif
 ifneq (,$(CDFS))
@@ -245,6 +247,10 @@ distclean: clean
 	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM)
 	$(QUIET)rm -rf $(OBJDIR)
 
+$(OBJDIR)/CDVDFS:
+	$(QUIET)$(MAKE) -s -C 3rdparty/CDVDFS/src
+	$(QUIET)cp 3rdparty/CDVDFS/src/cdrom-handler $@
+
 lha:
 	$(QUIET)$(MAKE) distclean $(OBJDIR)
 	@echo Building a4091.rom Debug image
@@ -262,4 +268,4 @@ lha:
 	rm -rf a4091_$$VER
 	rm $(ROM_DB)
 
-.PHONY: verbose all
+.PHONY: verbose all $(OBJDIR)/CDVDFS
