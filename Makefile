@@ -261,7 +261,7 @@ lha:
 	$(QUIET)VER=$$(awk '/#define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
-	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_DB) $(ROM_ND) $(ROM_CD) a4091_$$VER ;\
+	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_DB) $(ROM_ND) $(ROM_CD) $(OBJDIR)/romtool a4091_$$VER ;\
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
