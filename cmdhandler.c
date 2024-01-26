@@ -205,7 +205,7 @@ td_remchangeint(struct IORequest *ior)
 
     Forbid();
     for (io = (struct IORequest *)periph->periph_changeintlist.mlh_Head;
-         io->io_Message.mn_Node.ln_Succ != NULL;
+         io && io->io_Message.mn_Node.ln_Succ != NULL;
          io = (struct IORequest *)io->io_Message.mn_Node.ln_Succ) {
         if (io == ior) {
             Remove(&io->io_Message.mn_Node);
