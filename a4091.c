@@ -975,7 +975,6 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
             AddHead(&a4091_save.driver_isrs, node);
             a4091_save.driver_isr_count++;
             suspend_name = name;
-            break;
         }
     }
     Enable();
