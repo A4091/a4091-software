@@ -507,13 +507,13 @@ scsipi_get_tag(struct scsipi_xfer *xs)
 		if (bit != 0)
 			break;
 	}
-#ifdef DIAGNOSTIC
 	if (word == PERIPH_NTAGWORDS) {
+#ifdef DIAGNOSTIC
 		scsipi_printaddr(periph);
+#endif
 		printf("no free tags\n");
 		panic("scsipi_get_tag");
 	}
-#endif
 
 	bit -= 1;
 	periph->periph_freetags[word] &= ~(1U << bit);
