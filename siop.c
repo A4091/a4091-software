@@ -291,21 +291,20 @@ siop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
         }
         bsd_splx(s);
 
-#ifdef DIAGNOSTIC
         /*
          * This should never happen as we track the resources
          * in the mid-layer.
          */
         if (acb == NULL) {
+#ifdef DIAGNOSTIC
             scsipi_printaddr(periph);
             printf("unable to allocate acb\n");
-#ifdef PORT_AMIGA
-            panic("siop_scsipi_request: no free ACB");
-#else
             panic("siop_scsipi_request");
 #endif
-        }
+#ifdef PORT_AMIGA
+            panic("siop_scsipi_request: no free ACB");
 #endif
+        }
 
         acb->flags = ACB_ACTIVE;
         acb->xs = xs;
