@@ -1689,8 +1689,8 @@ main(int argc, char *argv[])
     char   *devname = DEVICE_NAME;
 
     for (arg = 1; arg < argc; arg++) {
-        char *ptr = argv[arg];
-        if (*ptr == '-') {
+        if (*argv[arg] == '-') {
+            char *ptr = argv[arg];
             while (*(++ptr) != '\0') {
                 switch (*ptr) {
                     case 'c':
@@ -1731,9 +1731,9 @@ main(int argc, char *argv[])
                 }
             }
         } else {
-            if ((sscanf(ptr, "%d%n", &unitno, &pos) != 1) ||
-                (ptr[pos] != '\0')) {
-                printf("Invalid unit '%s'\n", ptr);
+            if ((sscanf(argv[arg], "%d%n", &unitno, &pos) != 1) ||
+                (argv[arg][pos] != '\0')) {
+                printf("Invalid unit '%s'\n", argv[arg]);
                 usage();
                 exit(1);
             }
@@ -1776,7 +1776,7 @@ main(int argc, char *argv[])
     if (open_and_wait) {
         int i;
         printf("Device open; press enter to proceed.\n");
-        scanf("%d", &i);
+        (void)scanf("%d", &i);
     }
 
     ior = &tio->iotd_Req;
