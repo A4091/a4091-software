@@ -1,5 +1,7 @@
 # A4091 Firmware & Factory Software
 
+[![Coverity](https://img.shields.io/coverity/scan/29390.svg)](https://scan.coverity.com/projects/a4091-a4091-software)
+
 This package contains source code to build an Open Source version of the AmigaOS
 driver, ROM image, test utility, and driver debug utility for the A4091 Zorro III
 Advanced SCSI disk controller.
@@ -155,6 +157,7 @@ image.
 
 | Origin            | Version                        | Works    |
 |-------------------|--------------------------------|----------|
+
 | BootCDFileSystem  | CDFileSystem 50.21 (30.8.2003) | YES      |
 | AmigaOS 3.2       | CDFileSystem 47.26             | YES      |
 | AmigaOS 3.2.2     | CDFileSystem 47.28             | YES      |
