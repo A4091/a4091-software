@@ -809,10 +809,8 @@ a4091_abort(void)
  * Handle interrupts from the 53C710 SCSI controller
  */
 LONG
-a4091_irq_handler(void)
+a4091_irq_handler(register a4091_save_t *save asm("a1"))
 {
-    register a4091_save_t *save asm("a1");
-
     uint8_t istat = get_ncrreg8_noglob(save->reg_addr, REG_ISTAT);
 
     if (istat == 0) {
