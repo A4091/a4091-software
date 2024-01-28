@@ -295,6 +295,9 @@ get_milli_ticks(uint64_t ltick)
     while ((etick = read_system_ticks()) == ctick)
         full_count++;
 
+    if (full_count == 0)
+        full_count = 1;
+
     if (left_count > full_count)
         left_count = full_count;
     return ((full_count * (ctick - ltick) - left_count) * 1000 / full_count);
