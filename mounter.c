@@ -582,16 +582,25 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 			fse = AllocMem(sizeof(struct FileSysEntry) + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
 			if (fse) {
 				// Process patchflags
-				ULONG *dstPatch = &fse->fse_Type;
-				ULONG *srcPatch = &fshb->fhb_Type;
 				ULONG patchFlags = fshb->fhb_PatchFlags;
-				while (patchFlags) {
-					if ((patchFlags & 1) != 0)
-						*dstPatch = *srcPatch;
-					dstPatch++;
-					srcPatch++;
-					patchFlags >>= 1;
-				}
+				if (patchFlags & 0x0001)
+					fse->fse_Type = fshb->fhb_Type;
+				if (patchFlags & 0x0002)
+					fse->fse_Task = fshb->fhb_Task;
+				if (patchFlags & 0x0004)
+					fse->fse_Lock = fshb->fhb_Lock;
+				if (patchFlags & 0x0008)
+					fse->fse_Handler = fshb->fhb_Handler;
+				if (patchFlags & 0x0010)
+					fse->fse_StackSize = fshb->fhb_StackSize;
+				if (patchFlags & 0x0020)
+					fse->fse_Priority = fshb->fhb_Priority;
+				if (patchFlags & 0x0040)
+					fse->fse_Startup = fshb->fhb_Startup;
+				if (patchFlags & 0x0080)
+					fse->fse_SegList = fshb->fhb_SegListBlocks;
+				if (patchFlags & 0x0100)
+					fse->fse_GlobalVec = fshb->fhb_GlobalVec;
 				fse->fse_DosType = fshb->fhb_DosType;
 				fse->fse_Version = fshb->fhb_Version;
 				fse->fse_PatchFlags = fshb->fhb_PatchFlags;
