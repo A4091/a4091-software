@@ -76,6 +76,9 @@ LDFLAGS_TOOLS  = -mcrt=clib2 -lgcc -lc -lamiga $(LDFLAGS_COMMON)
 #CFLAGS  += -g
 #LDFLAGS += -g
 
+#CFLAGS_TOOLS  += -g
+#LDFLAGS_TOOLS += -g
+
 # Add link-time optimization (must also have optimization specified in LDFLAGS)
 # -flto
 

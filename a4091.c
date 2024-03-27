@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.1 ("__DATE__") © Chris Hooper";
+const char *version = "\0$VER: A4091 1.2 ("__DATE__") © Chris Hooper";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,6 +152,7 @@ extern struct ExecBase *SysBase;
 #define REG_DMODE_BLE3  (BIT(6) | BIT(7))  // Burst length 8-transfers
 
 #define REG_DCNTL_COM   BIT(0)  // Enable 53C710 mode
+#define REG_DCNTL_FA    BIT(1)  // Enable fast arbitration (faster DMA start)
 #define REG_DCNTL_STD   BIT(2)  // Start DMA operation (execute SCRIPT)
 #define REG_DCNTL_LLM   BIT(3)  // Low level mode (no DMA or SCRIPTS)
 #define REG_DCNTL_SSM   BIT(4)  // SCRIPTS single-step mode
@@ -201,6 +202,9 @@ extern struct ExecBase *SysBase;
         *ADDR8(AMIGA_BERR_DSACK) &= ~BIT(7);
 #define BERR_DSACK_RESTORE() \
         *ADDR8(AMIGA_BERR_DSACK) = old_berr_dsack;
+
+#define DMA_LEN_BIT  12 // 4K DMA
+#define DMA_COPY_LEN BIT(DMA_LEN_BIT)
 
 /* Modern stdint types */
 typedef unsigned char      uint8_t;
@@ -750,7 +754,7 @@ a4091_reset(void)
 
     set_ncrreg8(REG_SCID, BIT(7));          // Set SCSI ID
 
-    set_ncrreg8(REG_DWT, 0xff);             // 25MHz DMA timeout: 640ns * 0xff
+    set_ncrreg8(REG_DWT, 60);               // 25MHz DMA timeout: 640ns * 60
 
     const int burst_mode = 8;
     switch (burst_mode) {
@@ -1396,12 +1400,13 @@ dma_clear_istat(void)
 }
 
 static int
-execute_script(uint32_t *script, ULONG script_len)
+execute_script(uint32_t *script, ULONG script_len, uint flags)
 {
     int rc = 0;
     int count = 1;
     uint8_t istat;
     uint8_t dstat;
+    uint    ignore_illegal = flags & BIT(0);
     uint64_t tick_start;
 
     a4091_save.ireg_istat = 0;
@@ -1434,7 +1439,12 @@ execute_script(uint32_t *script, ULONG script_len)
                     printf("Got DMA polled completion %02x %02x\n",
                            istat, dstat);
 got_dstat:
-                if (dstat & (REG_DSTAT_BF | REG_DSTAT_ABRT | REG_DSTAT_WDT)) {
+                if (ignore_illegal) {
+                    /* Ignore illegal instruction */
+                    dstat &= ~REG_DSTAT_IID;
+                }
+                if (dstat & (REG_DSTAT_BF | REG_DSTAT_ABRT | REG_DSTAT_WDT |
+                             REG_DSTAT_SSI | REG_DSTAT_IID)) {
                     printf("[");
                     if (dstat & REG_DSTAT_BF)
                         printf("Bus fault ");
@@ -1442,8 +1452,23 @@ got_dstat:
                         printf("Abort ");
                     if (dstat & REG_DSTAT_WDT)
                         printf("Watchdog timeout ");
-                    printf("%02x %08x %08x] ", dstat & ~REG_DSTAT_DFE,
-                           get_ncrreg32(REG_DSP), get_ncrreg32(REG_DSPS));
+                    if (dstat & REG_DSTAT_SSI)
+                        printf("Step interrupt ");
+                    if (dstat & REG_DSTAT_IID)
+                        printf("Illegal instruction ");
+                    printf("DSTAT=%02x", dstat & ~REG_DSTAT_DFE);
+                    if ((script[0] >> 24) == 0xc0) {
+                        /* Memory move */
+                        printf(" DSP=%08x Len=%04x %08x->%08x]",
+                               get_ncrreg32(REG_DSP),
+                               get_ncrreg32(REG_DSPS) & 0x00ffffff,
+                               get_ncrreg32(REG_TEMP), get_ncrreg32(REG_DNAD));
+                    } else {
+                        printf("]\n%20sDSP=%08x DSPS=%08x TEMP=%08x DNAD=%08x",
+                               "",
+                               get_ncrreg32(REG_DSP), get_ncrreg32(REG_DSPS),
+                               get_ncrreg32(REG_TEMP), get_ncrreg32(REG_DNAD));
+                    }
                     rc = 1;
                     goto fail;
                 }
@@ -1458,15 +1483,19 @@ got_dstat:
             uint8_t istat = get_ncrreg8(REG_ISTAT);
             dstat = get_ncrreg8(REG_DSTAT);
             dstat = get_ncrreg8(REG_DSTAT);
-            printf("ISTAT=%02x %02x DSTAT=%02x %02x ",
-                   a4091_save.ireg_istat, istat,
-                   a4091_save.ireg_dstat, dstat);
             if (dstat & REG_DSTAT_BF)
                 printf("Bus fault ");
             if (dstat & REG_DSTAT_ABRT)
                 printf("Abort ");
             if (dstat & REG_DSTAT_WDT)
                 printf("Watchdog timeout ");
+            if (dstat & REG_DSTAT_SSI)
+                printf("Step interrupt ");
+            if (dstat & REG_DSTAT_IID)
+                printf("Illegal instruction ");
+            printf("ISTAT=%02x %02x DSTAT=%02x %02x ",
+                   a4091_save.ireg_istat, istat,
+                   a4091_save.ireg_dstat, dstat);
             printf("SSTAT0=%02x SSTAT1=%02x SSTAT2=%02x\n",
                    get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
                    get_ncrreg8(REG_SSTAT2));
@@ -1729,7 +1758,7 @@ dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
     set_ncrreg8(REG_DMODE, get_ncrreg8(REG_DSTAT) | REG_DMODE_FAM);
 #endif
 
-    return (execute_script(script, 0x10));
+    return (execute_script(script, 0x10, 0));
 }
 
 /*
@@ -1803,7 +1832,7 @@ dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
         printf("DMA from %08x to %08x len %08x\n",
                (uint32_t) src, (uint32_t) dst, len);
 
-    return (execute_script(script, 0x20));
+    return (execute_script(script, 0x20, 0));
 }
 
 /*
@@ -1828,8 +1857,8 @@ script_write_reg_setup(uint32_t *script, uint8_t reg, uint8_t value)
      * Bits 7-0   00000000 = Reserved
      */
     script[0] = 0x78000000 | (reg << 16) | (value << 8);
-    script[1] = 0x98080000;
-    script[2] = 0x00000000;
+    script[1] = 0x00000000;
+    script[2] = 0x98080000;  // Transfer Control Opcode=011 (Interrupt and stop)
     script[3] = 0x00000000;
     CACHE_LINE_WRITE(script, 0x10);
 }
@@ -1848,7 +1877,7 @@ script_write_reg(uint32_t *script, uint8_t reg, uint8_t value)
     if (runtime_flags & FLAG_DEBUG)
         printf("Reg %02x = %02x\n", reg, value);
 
-    return (execute_script(script, 0x10));
+    return (execute_script(script, 0x10, 0));
 }
 #endif
 
@@ -2096,7 +2125,7 @@ static const uint8_t rom_expected_data[] =
  * 3. Verify autoconfig area header contents
  */
 static int
-test_device_access(void)
+test_device_access(uint extended)
 {
     uint8_t  saw_incorrect[ARRAY_SIZE(rom_expected_data)];
     int      i;
@@ -2265,7 +2294,7 @@ static bitdesc_t addr_pins[] = {
  * 4. Walking bits test of writable registers
  */
 static int
-test_register_access(void)
+test_register_access(uint extended)
 {
     int pass;
     int rc = 0;
@@ -2508,7 +2537,7 @@ srand32(uint32_t seed)
  *    FIFO status is reported as expected.
  */
 static int
-test_dma_fifo(void)
+test_dma_fifo(uint extended)
 {
     int     rc = 0;
     int     lane;
@@ -2712,7 +2741,7 @@ fail:
  *    FIFO status is reported as expected.
  */
 static int
-test_scsi_fifo(void)
+test_scsi_fifo(uint extended)
 {
     int     rc = 0;
     uint8_t scntl1;
@@ -2872,7 +2901,7 @@ fail:
  */
 #if 0
 static int
-test_loopback(void)
+test_loopback(uint extended)
 {
     int     rc = 0;
     int     pass;
@@ -2925,7 +2954,7 @@ calc_parity(uint8_t data)
  * operations do not affect the state of other SCSI pins.
  */
 static int
-test_scsi_pins(void)
+test_scsi_pins(uint extended)
 {
     int     rc = 0;
     int     pass;
@@ -3211,28 +3240,184 @@ AllocMem_aligned(uint len, uint alignment)
     Forbid();
     addr = AllocMem(len + alignment, MEMF_PUBLIC);
     if (addr != NULL) {
+        INTERRUPTS_DISABLE();
         FreeMem(addr, len + alignment);
         addr = (APTR) AllocAbs(len, (APTR) (((uint32_t) addr + alignment - 1) &
                                             ~(alignment - 1)));
+        INTERRUPTS_ENABLE();
     }
     Permit();
     return (addr);
 }
 
 /*
- * mem_not_zero
- * ------------
+ * AllocMem_random
+ * ---------------
+ * Allocate CPU memory with the specified minimum alignment, but at
+ * a relatively random address in the memory free list.
+ */
+static APTR
+AllocMem_random(uint len, uint alignment)
+{
+    uint32_t          rand = rand32();
+    uintptr_t         wantaddr;
+    uint              base;
+    uint              bases = 0;
+    uint              chunk;
+    uint              chunks = 0;
+    uint              chunksize = 0;
+    uint              chunkmod;
+    uint              chunkoff;
+    uint              cur;
+    uint32_t          mem_upper = 0;
+    uint32_t          mem_lower;
+    APTR             *raddr;
+    struct ExecBase  *eb = SysBase;
+    struct MemHeader *mem;
+    struct MemChunk  *memchunk;
+
+    /* Select a memory space */
+    INTERRUPTS_DISABLE();
+    for (mem = (struct MemHeader *)eb->MemList.lh_Head;
+         mem->mh_Node.ln_Succ != NULL;
+         mem = (struct MemHeader *)mem->mh_Node.ln_Succ) {
+        bases++;
+    }
+    if (bases == 0) {
+        /* Should not happen -- memory list corruption */
+        INTERRUPTS_ENABLE();
+        printf("Failed to locate a random memory space\n");
+        return (AllocMem_aligned(len, alignment));
+    }
+
+    rand ^= (rand >> 16);
+    rand ^= (rand >> 8);
+    cur = base = (rand >> 1) % bases;
+    for (mem = (struct MemHeader *)eb->MemList.lh_Head;
+         mem->mh_Node.ln_Succ != NULL;
+         mem = (struct MemHeader *)mem->mh_Node.ln_Succ) {
+        mem_lower = (uintptr_t) mem->mh_First;
+        mem_upper = (uintptr_t) mem->mh_Upper;
+        if (cur-- == 0)
+            break;
+    }
+    if (mem->mh_Node.ln_Succ == NULL) {
+        /* Couldn't find selected memory space */
+        INTERRUPTS_ENABLE();
+        printf("Failed to find memory space %x\n", base);
+        return (AllocMem_aligned(len, alignment));
+    }
+
+    /* Count available chunks */
+    for (memchunk = mem->mh_First; memchunk != NULL;
+         memchunk = memchunk->mc_Next) {
+        if (((uintptr_t) memchunk < mem_lower) ||
+            ((uintptr_t) memchunk >= mem_upper) ||
+            ((uintptr_t) memchunk + memchunk->mc_Bytes > mem_upper)) {
+            INTERRUPTS_ENABLE();
+            printf("Failed memory scan: address %08x not in range %08x-%08x\n",
+                   (uintptr_t) memchunk, mem_lower, mem_upper);
+            INTERRUPTS_DISABLE();
+            break;  // Memory list corrupt
+        }
+        if (memchunk->mc_Bytes >= len + alignment + 8 + 8)
+            chunks++;
+    }
+    if (chunks == 0) {
+        /* Couldn't find available chunks in this memory space (can happen) */
+        INTERRUPTS_ENABLE();
+        return (AllocMem_aligned(len, alignment));
+    }
+
+    /* Select a chunk */
+    rand = rand32();
+    rand ^= (rand >> 16);
+    cur = chunk = (rand32() >> 8) % chunks;
+    for (memchunk = mem->mh_First; memchunk != NULL;
+         memchunk = memchunk->mc_Next) {
+        chunksize = memchunk->mc_Bytes;
+        if (chunksize >= len + alignment + 8 + 8)
+            if (cur-- == 0)
+                break;
+    }
+
+    if (memchunk == NULL) {
+        INTERRUPTS_ENABLE();
+        printf("Failed to find memory chunk %08x in space %x\n", base, chunk);
+        return (AllocMem_aligned(len, alignment));
+    }
+
+    /*
+     * Select offset within a chunk.
+     * The first 8 or last 8 bytes of the chunk will not be used.
+     */
+    chunkmod = chunksize - len - alignment - 8 - 8;
+    if (chunkmod == 0)
+        chunkoff = 0;
+    else
+        chunkoff = ((rand32() % chunkmod) & ~0x3);
+    wantaddr = (uintptr_t) memchunk + chunkoff + 8;
+    wantaddr = (wantaddr + alignment - 1) & ~(alignment - 1);
+
+    raddr = (APTR) AllocAbs(len, (APTR) wantaddr);
+    INTERRUPTS_ENABLE();
+
+    if (raddr == NULL) {
+        printf("Failed to allocate address %08x len %x\n",
+               (uintptr_t) raddr, len);
+        return (AllocMem_aligned(len, alignment));
+    }
+    return (raddr);
+}
+
+/*
+ * mem_not_addr_value
+ * ------------------
  * Return a non-zero value if the specified memory block is not all zero.`
  */
 static int
-mem_not_zero(uint32_t paddr, uint len)
+mem_not_addr_value(uint32_t paddr, uint len, uint show)
 {
-    uint32_t *addr = (uint32_t *)paddr;
+    uint fail = 0;
+    uint32_t *addr;
     len >>= 2;
-    while (len-- > 0)
-        if (*(addr++) != 0)
-            return (1);
-    return (0);
+    while (len-- > 0) {
+        addr = (uint32_t *) paddr;
+        if (paddr != *addr) {
+            if (show) {
+                if (fail++ < 6)
+                    printf(" [%08x]=%08x", paddr, *addr);
+            } else {
+                return (1);
+            }
+        }
+        paddr += 4;
+    }
+    return (fail);
+}
+
+/*
+ * memshowcmp
+ * ----------
+ * Display the first few memory differences between two addresses.
+ */
+static void
+memshowcmp(uint32_t saveaddr, uint32_t modaddr, uint len)
+{
+    uint fail = 0;
+    uint32_t *saddr = (uint32_t *) saveaddr;
+    uint32_t *maddr = (uint32_t *) modaddr;
+    len >>= 2;
+    while (len-- > 0) {
+        if (*saddr != *maddr) {
+            if (fail++ < 6)
+                printf(" [%08x]%08x!=%08x", (uint32_t)maddr, *maddr, *saddr);
+            else
+                break;
+        }
+        saddr++;
+        maddr++;
+    }
 }
 
 /*
@@ -3241,7 +3426,7 @@ mem_not_zero(uint32_t paddr, uint len)
  * Search for memory which can be allocated at a specific power-of-two
  * address. Two memory addresses are returned. One is a memory address
  * without that address bit set, and the alternate is a memory address
- * with that address bit set.
+ * with that address bit set. The allocation size is fixed at 16 bytes.
  *
  * If both memory addresses can not be allocated, NULL will be
  * returned for both.
@@ -3313,14 +3498,41 @@ is_valid_ram(uint32_t addr)
     struct ExecBase  *eb = SysBase;
     struct MemHeader *mem;
 
+    INTERRUPTS_DISABLE();
     for (mem = (struct MemHeader *)eb->MemList.lh_Head;
          mem->mh_Node.ln_Succ != NULL;
          mem = (struct MemHeader *)mem->mh_Node.ln_Succ) {
         uint32_t base = (uint32_t) mem;
         uint32_t top  = (uint32_t) mem->mh_Upper;
-        if ((addr >= base) && (addr < top))
+        if ((addr >= base) && (addr < top)) {
+            INTERRUPTS_ENABLE();
             return (1);
+        }
     }
+    INTERRUPTS_ENABLE();
+    return (0);
+}
+
+/*
+ * is_volatile_ram
+ * ----------------
+ * Returns non-zero when the specified address is in the program's stack
+ * or data area.
+ */
+int
+is_volatile_ram(uint32_t addr)
+{
+    static uint8_t progdata = 0;
+    uint8_t        progstack = 9;
+
+    if (((addr - (uintptr_t) &progdata) < DMA_COPY_LEN) ||
+        (((uintptr_t) &progdata - addr) < DMA_COPY_LEN) ||
+        ((addr - (uintptr_t) &progstack) < DMA_COPY_LEN) ||
+        (((uintptr_t) &progstack - addr) < DMA_COPY_LEN)) {
+        return (1);
+    }
+    // XXX: Could also check console handler stack + data
+
     return (0);
 }
 
@@ -3359,7 +3571,7 @@ nonfunctional_tests(void)
  * Verify that 53C710 can access the host bus by fetching scripts.
  */
 static int
-test_bus_access(void)
+test_bus_access(uint extended)
 {
     int       rc = 0;
     int       rc2;
@@ -3430,7 +3642,7 @@ test_bus_access(void)
      *    11111111 = Mask to compare
      *    00000000 = Data to be compared
      */
-    rc = execute_script((uint32_t *) a4091_rom_base, 0x10);
+    rc = execute_script((uint32_t *) a4091_rom_base, 0x10, 1);
     if (rc != 0) {
         printf("SCRIPTS fetch from A4091 ROM %08x failed\n", a4091_rom_base);
     }
@@ -3459,7 +3671,7 @@ test_bus_access(void)
             script_write_reg_setup(saddr0, REG_SCRATCH, 0xa5);
             set_ncrreg32(REG_SCRATCH, 0xff);
 
-            if ((rc2 = execute_script(saddr0, 0x10)) != 0) {
+            if ((rc2 = execute_script(saddr0, 0x10, 0)) != 0) {
                 printf("A%u bus fetch failure from %08x\n",
                        bit, (uint32_t) saddr0);
                 rc++;
@@ -3484,17 +3696,38 @@ test_bus_access(void)
                        "%08x\n",
                        bit, 0, (uint32_t) saddr0, (uint32_t) saddr1);
             } else {
+                uint8_t got2;
                 /* address line */
                 if (rc++ == 0)
                     printf("\n");
                 printf("A%u=%u bus fetch from %08x failed, %02x != "
                        "expected %02x (diff %02x)\n",
                        bit, 0, (uint32_t) saddr0, got0, 0xa5, got0 ^ 0xa5);
+
+                got2 = get_ncrreg32(REG_SCRATCH);  // 0xa5 expected
+                if (got2 != got0) {
+                    printf("    Second fetch of %02x differs from first fetch "
+                           "%02x\n", got2, got0);
+                }
+                if (runtime_flags & FLAG_DEBUG) {
+                    uint32_t *ptr = (uint32_t *)saddr1;
+                    printf("    %08x %08x %08x %08x\n",
+                           ptr[0], ptr[1], ptr[2], ptr[3]);
+                    printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
+                    Delay(1);
+                    if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
+                        printf("    Failed: %d\n", rc2);
+                    } else {
+                        got0 = get_ncrreg32(REG_SCRATCH);
+                        printf("    Succeeded with %02x expected %02x (%s)\n",
+                               got0, 0xa5, (got0 == 0xa5) ? "FAIL" : "Pass");
+                    }
+                }
             }
         }
 
         set_ncrreg32(REG_SCRATCH, 0xff);
-        if ((rc2 = execute_script(saddr1, 0x10)) != 0) {
+        if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
             printf("A%u bus fetch failure from %08x\n",
                    bit, (uint32_t) saddr1);
             rc++;
@@ -3520,22 +3753,30 @@ test_bus_access(void)
             printf("A%u=%u bus fetch from %08x instead got data from %08x\n",
                    bit, 1, (uint32_t) saddr1, (uint32_t) saddr0);
         } else {
+            uint8_t got2;
+
             if (rc++ == 0)
                 printf("\n");
             printf("A%u=%u bus fetch from %08x failed, %02x != "
                    "expected %02x (diff %02x)\n",
                    bit, 1, (uint32_t) saddr1, got1, 0x5a, got1 ^ 0x5a);
+            got2 = get_ncrreg32(REG_SCRATCH);  // 0x5a expected
+            if (got2 != got1) {
+                printf("    Second fetch of %02x differs from first fetch %02x\n",
+                       got2, got1);
+            }
             if (runtime_flags & FLAG_DEBUG) {
                 uint32_t *ptr = (uint32_t *)saddr1;
                 printf("    %08x %08x %08x %08x\n",
                        ptr[0], ptr[1], ptr[2], ptr[3]);
                 printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
                 Delay(1);
-                if ((rc2 = execute_script(saddr1, 0x10)) != 0) {
+                if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
                     printf("    Failed: %d\n", rc2);
                 } else {
-                    printf("    Succeeded with %02x expected %02x\n",
-                           get_ncrreg32(REG_SCRATCH), 0x5a);
+                    got1 = get_ncrreg32(REG_SCRATCH);
+                    printf("    Succeeded with %02x expected %02x (%s)\n",
+                           got1, 0x5a, (got1 == 0x5a) ? "FAIL" : "Pass");
                 }
             }
         }
@@ -3593,7 +3834,7 @@ test_bus_access(void)
  * somewhat by configuring single step mode (DCNTL.bit4).
  */
 static int
-test_dma(void)
+test_dma(uint extended)
 {
     int      rc = 0;
     int      rc2 = 0;
@@ -3788,16 +4029,17 @@ fail_src_alloc:
  *      CTEST5.DMAWR controls direction of the transfer.
  */
 static int
-test_dma_copy(void)
+test_dma_copy(uint extended)
 {
-#define DMA_LEN_BIT 12 // 4K DMA
     int       rc = 0;
-    uint      dma_len = BIT(DMA_LEN_BIT);
+    uint      dma_len = DMA_COPY_LEN;
     uint      cur_dma_len = 4;
     uint      pass;
     uint      pos;
     uint      bit1;
     uint      bit2;
+    uint      copy_corrupt  = 0;
+    uint      pad_corrupt   = 0;
     uint      bf_mismatches = 0;
     uint      bf_copies     = 0;
     uint      bf_buffers    = 0;
@@ -3810,40 +4052,48 @@ test_dma_copy(void)
     uint32_t *bf_mem;
     uint8_t   bf_flags[32][32];
     ULONG     buf_handled;
-#define BF_FLAG_COPY    0x01
-#define BF_FLAG_CORRUPT 0x02
-#define BF_FLAG_NOTRAM  0x04
+#define BF_FLAG_COPY     0x01
+#define BF_FLAG_CORRUPT  0x02
+#define BF_FLAG_NOTRAM   0x04
+#define BF_FLAG_VOLATILE 0x08
 #define BF_ADDR(x, y) bf_addr[(x) * 32 + y]
 #define BF_MEM(x, y)  bf_mem[(x) * 32 + y]
+#define BFADDR_SIZE (32 * 32 * sizeof (uint32_t))
 
     show_test_state("DMA copy:", -1);
 
     srand32(time(NULL));
     memset(bf_flags, 0, sizeof (bf_flags));
 
+    /* Add some randomness to the dst_buf and src buffer allocations */
+    if (extended)
+        dst_buf = AllocMem_random(dma_len * 3, 8);
+    else
+        dst_buf = AllocMem_aligned(dma_len * 3, 16);
+    if (dst_buf == NULL) {
+        printf("Failed to allocate dst buffer\n");
+        rc = 1;
+        goto fail_dst_alloc;
+    }
+    if (extended)
+        src = AllocMem_random(dma_len, 8);
+    else
+        src = AllocMem_aligned(dma_len, 16);
+    if (src == NULL) {
+        printf("Failed to allocate src buffer\n");
+        rc = 1;
+        goto fail_src_alloc;
+    }
     src_backup = AllocMem_aligned(dma_len, 16);
     if (src_backup == NULL) {
         printf("Failed to allocate src_backup buffer\n");
         rc = 1;
         goto fail_src_backup_alloc;
     }
-    src = AllocMem_aligned(dma_len, 16);
-    if (src == NULL) {
-        printf("Failed to allocate src buffer\n");
-        rc = 1;
-        goto fail_src_alloc;
-    }
-    dst_buf = AllocMem_aligned(dma_len * 3, 16);
-    if (dst_buf == NULL) {
-        printf("Failed to allocate dst buffer\n");
-        rc = 1;
-        goto fail_dst_alloc;
-    }
 
     /* Land DMA in the middle of the buffer */
     dst = (APTR) ((uint32_t) dst_buf + dma_len);
 
-#define BFADDR_SIZE (32 * 32 * sizeof (uint32_t))
     bf_addr = AllocMem(BFADDR_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
     bf_mem = AllocMem(BFADDR_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
     if ((bf_addr == NULL) || (bf_mem == NULL)) {
@@ -3896,6 +4146,9 @@ got_target_mem:
                     goto fallback_copy_mem;
                 }
                 goto got_target_mem;
+            } else if (is_volatile_ram(BF_ADDR(bit1, bit2))) {
+                /* Special case -- address is in program stack or data */
+                bf_flags[bit1][bit2] |= BF_FLAG_VOLATILE;
             } else if (is_valid_ram(BF_ADDR(bit1, bit2))) {
 fallback_copy_mem:
                 BF_MEM(bit1, bit2) = (uint32_t) AllocMem(dma_len, MEMF_PUBLIC);
@@ -3920,7 +4173,9 @@ fallback_copy_mem:
                 if (bf_flags[bit1][bit2] & BF_FLAG_COPY)
                     state = "?";
                 else if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM)
-                    state = "?";
+                    state = "X";
+                else if (bf_flags[bit1][bit2] & BF_FLAG_VOLATILE)
+                    state = "V";
                 else
                     state = "";
                 printf(" %s%08x", state, BF_ADDR(bit1, bit2));
@@ -3947,6 +4202,25 @@ fallback_copy_mem:
             *ADDR32((uint32_t) src_backup + pos) = rvalue;
             *ADDR32((uint32_t) dst + pos) = ~rvalue;
         }
+#if 0
+        {
+            /*
+             * 2024-02-24 Test suspicion that source corruption was caused by
+             * CPU write into RAM. Code does not find corruption at this point.
+             */
+            uint count = 0;
+            CacheClearU();
+            CachePreDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
+            CachePostDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
+            for (pos = 0; pos < cur_dma_len; pos += 4) {
+                if (*ADDR32((uint32_t) src + pos) !=
+                    *ADDR32((uint32_t) src_backup + pos)) {
+                    if (count++ < 5)
+                        printf(" BAD %08x\n", *ADDR32((uint32_t) src + pos));
+                }
+            }
+        }
+#endif
         buf_handled = cur_dma_len;
         CachePreDMA((APTR) dst, &buf_handled, DMA_ReadFromRAM);
         CachePostDMA((APTR) dst, &buf_handled, DMA_ReadFromRAM);
@@ -3984,6 +4258,9 @@ fallback_copy_mem:
                         for (bit2 = bit1; bit2 < 32; bit2++) {
                             if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM) {
                                 continue;
+                            } else if (bf_flags[bit1][bit2] &
+                                       BF_FLAG_VOLATILE) {
+                                continue; // Ignore volatile RAM, such as stack
                             } else if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
                                 uint32_t cpyaddr  = BF_MEM(bit1, bit2) + pos;
                                 uint32_t cpyvalue = *(uint32_t *) cpyaddr;
@@ -4016,38 +4293,46 @@ fallback_copy_mem:
             }
         }
 
-        /*
-         * If any part of the landing area is wrong, look for the missing
-         * data elsewhere in memory (address line floating or shorted).
-         */
-        if (rc > 0) {
-            if (rc > 5)
-                printf("...");
+        if (rc > 5)
+            printf("...");
+        if (rc > 0)
             printf("%d total miscompares\n", rc);
 
-            /* Miscompare -- attempt to locate the data elsewhere in memory */
-
-
+        if ((rc > 0) || (runtime_flags & FLAG_DEBUG)) {
             /*
-             * For now, this code will just display all address blocks
-             * which differ from the before-test version.
+             * If rc > 0, then a miscompare has occurred.
+             *
+             * This code will display all address blocks which differ from
+             * the before-test version. The first mismatch will also report
+             * the data content which differs from what is expected.
              */
             for (bit1 = DMA_LEN_BIT; bit1 < 32; bit1++) {
                 for (bit2 = bit1; bit2 < 32; bit2++) {
                     if (bf_flags[bit1][bit2] & BF_FLAG_NOTRAM) {
                         continue;
+                    } else if (bf_flags[bit1][bit2] & BF_FLAG_VOLATILE) {
+                        continue; // Ignore volatile RAM, such as stack
                     } else if (bf_flags[bit1][bit2] & BF_FLAG_COPY) {
+                        if (rc == 0)
+                            continue;
                         if (memcmp((APTR)BF_MEM(bit1, bit2),
                                    (APTR)BF_ADDR(bit1, bit2), dma_len) != 0) {
                             bf_flags[bit1][bit2] |= BF_FLAG_CORRUPT;
                             if (bf_mismatches++ == 0)
-                                printf("Modified RAM blocks:");
+                                printf("Mismatch RAM blocks:");
                             printf(" (%08x)", BF_ADDR(bit1, bit2));
+                            if (copy_corrupt++ == 0) {
+                                memshowcmp(BF_MEM(bit1, bit2),
+                                           BF_ADDR(bit1, bit2), dma_len);
+                            }
                         }
-                    } else if (mem_not_zero(BF_MEM(bit1, bit2), dma_len)) {
+                    } else if (mem_not_addr_value(BF_MEM(bit1, bit2),
+                                                  dma_len, 0)) {
                         if (bf_mismatches++ == 0)
-                            printf("Modified RAM blocks:");
+                            printf("Mismatch RAM blocks:");
                         printf(" %08x", BF_ADDR(bit1, bit2));
+                        if (pad_corrupt++ == 0)
+                            mem_not_addr_value(BF_MEM(bit1, bit2), dma_len, 1);
                     }
                 }
             }
@@ -4055,7 +4340,7 @@ fallback_copy_mem:
                 printf("\n");
         }
 
-        if (rc != 0)
+        if ((rc != 0) || (bf_mismatches != 0))
             break;
 
         cur_dma_len <<= 1;
@@ -4065,7 +4350,7 @@ fallback_copy_mem:
     Permit();
 
     if (bf_mismatches != 0) {
-        printf("  Watched buffers=%u copies=%u notram=%u mismatches=%u\n",
+        printf("  Watched blocks=%u copies=%u notram=%u mismatch_blocks=%u\n",
                bf_buffers, bf_copies, bf_notram, bf_mismatches);
     }
 
@@ -4103,7 +4388,7 @@ fail_src_backup_alloc:
  * currently no range checking done on the measured performance.
  */
 static int
-test_dma_copy_perf(void)
+test_dma_copy_perf(uint extended)
 {
     uint      dma_len = 128 << 10;  // DMA maximum is 16MB - 1
     int       rc = 0;
@@ -4208,11 +4493,27 @@ show_test_numbers(void)
            "          RAM (Fastmem)   -> 53C710 SCRATCH register\n"
            "          53C710 SCRATCH  -> RAM (Fastmem)\n"
            "  -6  Copy block DMA: Main mem->main mem data verify\n"
-           "          Note KB/sec is reported but not range checked.\n"
            "  -7  DMA copy performance (no verify)\n"
 //         "  -8  SCSI Loopback (not implemented)\n"
-           "  -9  SCSI pins: data pins and some control pins\n");
+           "  -8  SCSI pins: data pins and some control pins\n");
 }
+
+typedef struct {
+    uint bit;
+    int (*func)(uint extended);
+} test_funcs_t;
+static const test_funcs_t test_funcs[] = {
+    { 0, test_device_access },
+    { 1, test_register_access },
+    { 2, test_dma_fifo },
+    { 3, test_scsi_fifo },
+    { 4, test_bus_access },
+    { 5, test_dma },
+    { 6, test_dma_copy },
+    { 7, test_dma_copy_perf },
+    { 8, test_scsi_pins },
+//  { 9, test_loopback },
+};
 
 /*
  * test_card
@@ -4220,51 +4521,22 @@ show_test_numbers(void)
  * Tests the specified A4091 card.
  */
 static int
-test_card(uint test_flags)
+test_card(uint test_flags, uint extended)
 {
     int rc = 0;
+    uint pos;
 
     if (test_flags == 0)
         test_flags = -1;
 
-    /* Take over 53C710 interrupt handling and register state */
-    if ((rc == 0) && (test_flags & BIT(0)))
-        rc = test_device_access();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(1)))
-        rc = test_register_access();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(2)))
-        rc = test_dma_fifo();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(3)))
-        rc = test_scsi_fifo();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(4)))
-        rc = test_bus_access();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(5)))
-        rc = test_dma();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(6)))
-        rc = test_dma_copy();
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(7)))
-        rc = test_dma_copy_perf();
+    for (pos = 0; pos < ARRAY_SIZE(test_funcs); pos++) {
+        uint mask = BIT(test_funcs[pos].bit);
+        if ((rc == 0) && (test_flags & mask)) {
+            rc = test_funcs[pos].func(extended);
+        }
+        if (check_break())
+            return (1);
+    }
 
 #if 0
     /* Loopback test not implemented yet */
@@ -4273,11 +4545,6 @@ test_card(uint test_flags)
     if ((rc == 0) && (test_flags & BIT(8)))
         rc = test_loopback();
 #endif
-
-    if (check_break())
-        return (1);
-    if ((rc == 0) && (test_flags & BIT(8)))
-        rc = test_scsi_pins();
 
     return (rc);
 }
@@ -4767,7 +5034,7 @@ main(int argc, char **argv)
             rc += rc2;
         }
         if (flag_test)
-            rc += test_card(test_flags);
+            rc += test_card(test_flags, flag_test - 1);
         if ((rc == 8) && check_break())
             break;
     } while ((rc == 0) && flag_loop);
