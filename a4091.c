@@ -3715,7 +3715,7 @@ test_bus_access(uint extended)
                            ptr[0], ptr[1], ptr[2], ptr[3]);
                     printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
                     Delay(1);
-                    if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
+                    if ((rc2 = execute_script(saddr0, 0x10, 0)) != 0) {
                         printf("    Failed: %d\n", rc2);
                     } else {
                         got0 = get_ncrreg32(REG_SCRATCH);
