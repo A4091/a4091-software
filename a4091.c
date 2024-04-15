@@ -4368,14 +4368,15 @@ fail_bfaddr_alloc:
         FreeMem(bf_mem, BFADDR_SIZE);
     if (bf_addr != NULL)
         FreeMem(bf_addr, BFADDR_SIZE);
-    FreeMem(dst_buf, dma_len * 3);
-fail_dst_alloc:
+
+    FreeMem((APTR *)src_backup, dma_len);
+fail_src_backup_alloc:
     FreeMem(src, dma_len);
 
-fail_src_alloc:
-    FreeMem((APTR *)src_backup, dma_len);
+fail_dst_alloc:
+    FreeMem(dst_buf, dma_len * 3);
 
-fail_src_backup_alloc:
+fail_src_alloc:
     show_test_state("DMA copy:", rc);
     return (rc);
 }
