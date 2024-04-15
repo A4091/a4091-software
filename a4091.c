@@ -3715,7 +3715,7 @@ test_bus_access(uint extended)
                            ptr[0], ptr[1], ptr[2], ptr[3]);
                     printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
                     Delay(1);
-                    if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
+                    if ((rc2 = execute_script(saddr0, 0x10, 0)) != 0) {
                         printf("    Failed: %d\n", rc2);
                     } else {
                         got0 = get_ncrreg32(REG_SCRATCH);
@@ -4368,14 +4368,15 @@ fail_bfaddr_alloc:
         FreeMem(bf_mem, BFADDR_SIZE);
     if (bf_addr != NULL)
         FreeMem(bf_addr, BFADDR_SIZE);
-    FreeMem(dst_buf, dma_len * 3);
-fail_dst_alloc:
+
+    FreeMem((APTR *)src_backup, dma_len);
+fail_src_backup_alloc:
     FreeMem(src, dma_len);
 
-fail_src_alloc:
-    FreeMem((APTR *)src_backup, dma_len);
+fail_dst_alloc:
+    FreeMem(dst_buf, dma_len * 3);
 
-fail_src_backup_alloc:
+fail_src_alloc:
     show_test_state("DMA copy:", rc);
     return (rc);
 }
