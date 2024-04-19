@@ -1731,8 +1731,10 @@ main(int argc, char *argv[])
                 }
             }
         } else {
-            if ((sscanf(argv[arg], "%d%n", &unitno, &pos) != 1) ||
-                (argv[arg][pos] != '\0')) {
+            char *endptr;
+            unitno = strtol(argv[arg], &endptr, 10);
+            if ((errno == ERANGE && (unitno == LONG_MIN || unitno == LONG_MAX)) ||
+                (*endptr != '\0')) {
                 printf("Invalid unit '%s'\n", argv[arg]);
                 usage();
                 exit(1);
