@@ -13,7 +13,7 @@ jobs:
     container: stefanreinauer/amiga-gcc
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
 
@@ -36,19 +36,19 @@ jobs:
       run: cd disk && make
 
     - name: Archive CI artifacts (ROM)
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
           name: Driver (AutoBoot ROM)
           path: ${{ github.workspace }}/a4091*.rom
 
     - name: Archive CI artifacts (LHA)
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
           name: Driver (LHA)
           path: ${{ github.workspace }}/a4091_??.??.lha
 
     - name: Archive CI artifacts (ADF)
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
           name: Disk Image (ADF)
           path: ${{ github.workspace }}/disk/a4091_??.??.adf
