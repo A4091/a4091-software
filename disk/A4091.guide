@@ -1,5 +1,5 @@
 @DATABASE "A4091"
-@$VER: A4091.guide 1.1 (20.12.2023)
+@$VER: A4091.guide 1.2 (25.08.2024)
 @(C) Stefan Reinauer & Chris Hooper
 @WORDWRAP
 @AUTHOR Stefan Reinauer & Chris Hooper
@@ -14,7 +14,7 @@
               \\ \\__\\ \\__\\     \\ \\__\\ \\_______\\|\\_______\\   \\ \\__\\
                \\|__|\\|__|      \\|__|\\|_______|\\|_______|    \\|__|
 
-                       © 2022 Stefan Reinauer & Chris Hooper
+                       © 2022-2024 Stefan Reinauer & Chris Hooper
 
 ____________________________________________________________________________
 
@@ -23,7 +23,7 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.1                               a4091.device Version 42.27
+Guide Version 1.2                               a4091.device Version 42.30
 
 
      @{"License      : Legal restrictions                                  " link License}
@@ -50,7 +50,7 @@ Contacts:
 
 @NODE License "License"
 
-Copyright 2021-2022 Chris D Hooper, Stefan Reinauer
+Copyright 2021-2024 Chris D Hooper, Stefan Reinauer
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -173,7 +173,7 @@ You can find the source code at https://github.com/A4091/
 @NODE A4091Tool "a4091 tool"
 
 1> a4091
-A4091 1.1 (Dec  8 2023) © Chris Hooper
+A4091 1.2 (Jun 17 2024) © Chris Hooper
 
 This tool will test an installed A4091 SCSI controller for correct operation.
 Options:
@@ -195,6 +195,25 @@ Options:
 	-?  show individual test steps
 1>
 
+Example:  a4091 -t56
+          This will execute both test 5 and test 6.
+  -0  Device access: Check ROM header and Zorro config area
+  -1  Register access
+          53C710 register read-only bits are verified.
+          TEMP and SCRATCH walking bits test
+          Byte, word, and long register access (A0 & A1)
+          53C710 register DNAD/DBC auto increment/decrement
+  -2  DMA FIFO: 53C710 RAM + parity
+  -3  SCSI FIFO: 53C710 RAM + parity
+  -4  Bus access
+  -5  Simple DMA (4 bytes at a time)
+          53C710 SCRATCH  -> 53C710 TEMP register
+          RAM (Fastmem)   -> 53C710 SCRATCH register
+          53C710 SCRATCH  -> RAM (Fastmem)
+  -6  Copy block DMA: Main mem->main mem data verify
+  -7  DMA copy performance (no verify)
+  -8  SCSI pins: data pins and some control pins
+
 @ENDNODE
 
 @NODE A4091D "a4091d debug tool"
@@ -214,7 +233,7 @@ Usage:  a4091d [<unit>]
 
 1> devtest
 You must specify an operation to perform
-devtest 1.4 (Dec 20 2023) © Chris Hooper
+devtest 1.6 (Aug 25 2024) © Chris Hooper
 
 usage: devtest <options> <x.device> <unit>
    -b           benchmark device performance [-bb tests latency]
@@ -222,6 +241,7 @@ usage: devtest <options> <x.device> <unit>
    -d           also do destructive operations (write)
    -g           test drive geometry
    -h           display help
+   -i <tsize>   data integrity test (destructive) [-i=rand -ii=addr -iii=patt]
    -l <loops>   run multiple times
    -m <addr>    use specific memory (<addr> Chip Fast 24Bit Zorro -=list)
    -mm <addr>   use specific address without allocation by OS
@@ -290,21 +310,26 @@ Q:      Does the A4091 work with Kickstart 1.3
 
 A:      Honestly, we have never tried. The old Commodore driver expects
         to run at least on v39 (Kickstart 3.0). The Open Source driver might
-        be fixed to run on 1.3. Patches welcome!
+        be fixed to run on 1.3. Reports, tests, patches welcome!
 ____________________________________________________________________________
 
 Q:      CDROM Booting doesn't work for me, what do I do?
 
-A:      Make sure you use BootCDFileSystem from the AmigaOS 4.1 installation
-        disk or CDFileSystem from 3.2(.x)
+A:      Use a4091_cdfs.rom from the release archive. This version will use
+        the AROS version of CDVDFS as CDFileSystem.
+
+A:      If you do not want to use CDVDFS, make sure you use BootCDFileSystem
+        from the AmigaOS 4.1 installation disk or CDFileSystem from 3.2(.x)
 ___________________________________________________________________________
 
 Q:      All of a sudden, I can't boot from CD anymore but it worked before.
 
 A:      Please check whether you have the RDBFF_LAST flag is set in the
-RDB of your disk. If it is, the driver might just be ignoring all CDROM
-drives coming after this disk. There is an option in the A4091 boot menu
-to ignore the RDBFF_LAST flag.
+        RDB of your disk. If it is, the driver might just be ignoring all
+	CDROM drives coming after this disk. There is an option in the A4091
+	boot menu to ignore the RDBFF_LAST flag.
+
+A:      Booting from CD requires a functioning RTC.
 ____________________________________________________________________________
 
 
@@ -374,10 +399,42 @@ Super Buster    :       The custom chip that handles translation between
 
 Full history available at https://github.com/A4091/a4091-software/commits/main
 
+Release v42.30:
+
+a4091.rom
+ o) Fully integrate CDVDFS with A4091 ROMs and use it as default CDFilesystem
+ o) Add CDFS rom to release LHA
+ o) Add romtool to release LHA
+ o) Coverity fixes for various potential code issues
+
+a4091 utilities
+ o) a4091 -t6 enhancements
+ o) Upgrade devtest to v1.6
+
+
+Release v42.29:
+
+a4091.device
+ o) reloc.S: Fix memory corruption with compressed files
+ o) mounter: Fix use after free memory corruption
+ o) battmem: Fix handling of RDBFF_LAST setting
+ o) bootmenu: Don't configure joystick pullups
+
+Documentation
+ o) README.md: Update supported CD Filesystems
+ o) Leave a hint on how to add fat95
+
+
+Release v42.28:
+
+This is a quick fix release to prevent some machines to always enter the A4091
+boot menu upon booting. If that does not happen to you with 42.27, there is no
+benefit in updating to 42.28.
+
+
 Release v42.27:
 
 a4091.device
-
   o) Add compression support to ROM (propack)
   o) Improve CDFileSystem support
   o) MBR and GPT support (disabled by default)
@@ -394,6 +451,7 @@ a4091 test utility
   o) a4091 -t improvements for bus test failure output
   o) Fix "a4091 -l <Loops>" invalid input checking
   o) a4091 test fixes (-l, -c, ISTAT, ROM check)
+
 
 Release v42.26:
 
@@ -417,10 +475,10 @@ Release v42.26:
   o) Fix compilation with gcc 13.1
   o) Misc. smaller bug fixes
 
+
 Release v42.25:
 
 a4091.device
-
   o) Fix cache handling (LIV2)
       * Unbalanced CachePre/PostDMA calls caused issues for mmulibs
       * Add CachePostDMA() call
@@ -429,7 +487,6 @@ a4091.device
       * Re-enable error handling in relocation code
 
 a4091 test utility
-
   o) Improved detection and disable/enable of driver present in system
   o) Expunge is attempted first if driver is present
   o) If driver is present, -f (ignore) or -S (suspend driver) must be issued
@@ -442,7 +499,6 @@ a4091 test utility
 Release v42.24:
 
 a4091.device
-
   o) Kickstart 3.1 and Reloc fixes by LIV2 in #1
 
 Release v42.23:
