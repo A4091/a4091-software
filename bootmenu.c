@@ -428,6 +428,7 @@ next_lun:
             trim_spaces(inq_res.revision, sizeof (inq_res.revision));
 
             if (err == 0) {
+                int t_len;
                 char unit_str[]="0.0";
                 unit_str[0]='0'+(unitNum % 10);
                 unit_str[2]='0'+(unitNum / 10);
@@ -435,13 +436,22 @@ next_lun:
                 Text(rp, (char *)unit_str, 3);
                 x+=48;
                 Move(rp,x,y);
-                Text(rp, inq_res.vendor, strlen(inq_res.vendor));
+                t_len = strlen(inq_res.vendor);
+                if (t_len > sizeof(inq_res.vendor))
+                        t_len=sizeof(inq_res.vendor);
+                Text(rp, inq_res.vendor, t_len);
                 x+=96;
                 Move(rp,x,y);
-                Text(rp, inq_res.product, strlen(inq_res.product));
+                t_len = strlen(inq_res.product);
+                if (t_len > sizeof(inq_res.product))
+                        t_len=sizeof(inq_res.product);
+                Text(rp, inq_res.product, t_len);
                 x+=176;
                 Move(rp,x,y);
-                Text(rp, inq_res.revision, strlen(inq_res.revision));
+                t_len = strlen(inq_res.revision);
+                if (t_len > sizeof(inq_res.revision))
+                        t_len=sizeof(inq_res.revision);
+                Text(rp, inq_res.revision, t_len);
                 x+=48;
                 Move(rp,x,y);
                 const char *dtype=devtype_str(inq_res.device & SID_TYPE);
