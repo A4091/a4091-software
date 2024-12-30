@@ -68,6 +68,7 @@ CFLAGS  += -Wall -Wno-pointer-sign -Wno-strict-aliasing
 CFLAGS += -mcpu=68060
 
 CFLAGS_TOOLS := -Wall -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
+CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"
 
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
 LDFLAGS        = -nostartfiles -nostdlib -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
