@@ -954,8 +954,8 @@ static void list_filesystems(void)
 		return;
 	}
 
-	printf("DosType   Version   Creator\n");
-	printf("---------------------------------------------------\n");
+	printf("DosType Version   Creator\n");
+	printf("---------------------------------------------------------------------------\n");
 	for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
 		  fse->fse_Node.ln_Succ;
 		  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
@@ -966,14 +966,22 @@ static void list_filesystems(void)
 		putchar((fse->fse_DosType & 0xFF) < 0x30
 						? (fse->fse_DosType & 0xFF) + 0x30
 						: (fse->fse_DosType & 0xFF));
-		printf("	  %s%d", (fse->fse_Version >> 16)<10 ? " " : "",
-				(fse->fse_Version >> 16));
-		printf(".%d%s", (fse->fse_Version & 0xFFFF),
-				(fse->fse_Version & 0xFFFF)<10 ? " " : "");
-		if(fse->fse_Node.ln_Name[0])
-			printf("	    %s",fse->fse_Node.ln_Name);
-		else
-			printf("	    N/A\n");
+		printf("    %3d.%-3d", (fse->fse_Version >> 16), (fse->fse_Version & 0xFFFF));
+		if(fse->fse_Node.ln_Name[0]) {
+			char term;
+			int name_len = strlen(fse->fse_Node.ln_Name);
+
+			printf("  %.55s", fse->fse_Node.ln_Name);
+			if (name_len >= 55) {
+				printf("...");
+				name_len = 55;
+			}
+			term = fse->fse_Node.ln_Name[name_len-1];
+			if (term != 10 && term != 13)
+				printf("\n");
+		} else {
+			printf("  N/A\n");
+		}
 	}
 #endif
 }

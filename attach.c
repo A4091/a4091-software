@@ -407,7 +407,7 @@ init_chan(device_t self, UBYTE *boardnum)
      *   SW 8 Off  SCSI LUNs Enabled                chan->chan_nluns
      *   SW 7 Off  Internal Termination On          Handled by hardware
      *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync
-     *   SW 5 Off  Short Spinup                     NOT SUPPORTED YET
+     *   SW 5 Off  Short Spinup                     ms.slowSpinup
      *   SW 4 Off  SCSI-2 Fast Bus Mode             NOT SUPPORTED YET
      *   SW 3 Off  ADR2=1                           chan->chan_id
      *   SW 2 Off  ADR1=1                           chan->chan_id
