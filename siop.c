@@ -373,6 +373,9 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
                 i = WAIT_ITERS;
                 --to;
                 if (to <= 0) {
+#ifdef PORT_AMIGA
+                    bsd_splbio();
+#endif
                     siopreset(sc);
                     return;
                 }
