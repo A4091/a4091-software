@@ -22,10 +22,7 @@ dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq)
 	memset(&cmd, 0, sizeof (cmd));
 	cmd.opcode = INQUIRY;
 	cmd.bytes[0] = lun << 5;
-	//cmd.bytes[1] = 0;  // Page code
-	//cmd.bytes[2] = 0;
 	cmd.bytes[3] = sizeof (scsi_inquiry_data_t);
-	//cmd.bytes[4] = 0;  // Control
 
 	memset(&scmd, 0, sizeof (scmd));
 	scmd.scsi_Data = (UWORD *) inq;

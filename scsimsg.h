@@ -41,14 +41,7 @@ typedef struct scsi_generic {
     uint8_t bytes[15];
 } __packed scsi_generic_t;
 
-#define READ_CAPACITY_10        0x25
-typedef struct scsi_read_capacity_10_data {
-    uint8_t addr[4];
-    uint8_t length[4];
-} __packed scsi_read_capacity_10_data_t;
-
 int dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq);
-scsi_read_capacity_10_data_t * dev_scsi_read_capacity_10(struct IOExtTD *tio, uint lun);
 int dev_scsi_get_drivegeometry(struct IOExtTD *tio, struct DriveGeometry *geom);
 
 #endif
