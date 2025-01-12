@@ -416,8 +416,10 @@ CMD_SEEK_continue:
                     ((struct scsipi_periph *) ior->io_Unit)->periph_lun * 10 +
                     ((struct scsipi_periph *) ior->io_Unit)->periph_target);
             if (iotd->iotd_Req.io_Length < sizeof (struct DriveGeometry)) {
+                PRINTF_CMD("badlength\n");
                 rc = IOERR_BADLENGTH;
             } else {
+                PRINTF_CMD("sd_getgeometry\n");
                 rc = sd_getgeometry(iotd->iotd_Req.io_Unit,
                                     iotd->iotd_Req.io_Data, ior);
             }
@@ -426,6 +428,7 @@ CMD_SEEK_continue:
                 ReplyMsg(&ior->io_Message);
             }
             // TD_GETGEOMETRY without media should return TDERR_DiskChanged 29
+            PRINTF_CMD("done (rc=%x)\n", rc);
             break;
 
 #ifdef OLD_NSD_IDENTIFY
