@@ -82,8 +82,6 @@ extern UBYTE entrypoint, entrypoint_end;
 extern UBYTE bootblock, bootblock_end;
 #endif
 
-struct FileSysResource *FileSysResBase = NULL;
-
 struct MountData
 {
 	struct ExecBase *SysBase;
@@ -951,6 +949,7 @@ static LONG ScanRDSK(struct MountData *md)
 
 static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2)
 {
+	struct FileSysResource *FileSysResBase = NULL;
 	struct FileSysEntry *fse, *fs=NULL;
 	Forbid();
 	if ((FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
