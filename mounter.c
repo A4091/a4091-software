@@ -970,6 +970,7 @@ static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2)
 static void list_filesystems(void)
 {
 #ifdef DEBUG_MOUNTER
+	struct FileSysResource *FileSysResBase = NULL;
 	struct FileSysEntry *fse;
 
 	if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
