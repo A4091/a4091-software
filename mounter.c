@@ -44,6 +44,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include <proto/exec.h>
 #include <proto/expansion.h>
@@ -737,6 +738,29 @@ static BOOL CompareBSTRNoCase(const UBYTE *src1, const UBYTE *src2)
 }
 
 // Check for duplicate device names
+static bool CheckDevName(struct MountData *md, UBYTE *bname)
+{
+	struct ExecBase *SysBase = md->SysBase;
+	bool found = false;
+
+	Forbid();
+	struct BootNode *bn;
+	for (bn = (struct BootNode*)md->ExpansionBase->MountList.lh_Head;
+		 bn->bn_Node.ln_Succ != NULL;
+		 bn = (struct BootNode*)bn->bn_Node.ln_Succ)
+	{
+		struct DeviceNode *dn = bn->bn_DeviceNode;
+		const UBYTE *bname2 = BADDR(dn->dn_Name);
+		if (CompareBSTRNoCase(bname, bname2)) {
+			found = true;
+		}
+	}
+
+	Permit();
+	return found;
+}
+
+// Check for duplicate device names
 static void CheckAndFixDevName(struct MountData *md, UBYTE *bname)
 {
 	struct ExecBase *SysBase = md->SysBase;
@@ -1043,8 +1067,7 @@ done:
 static LONG ScanCDROM(struct MountData *md)
 {
 	struct FileSysEntry *fse=NULL;
-	char dosName[] = "CD0";
-	static unsigned int cnt = 0;
+	char dosName[] = "\3CD0"; // BCPL string
 	LONG bootPri;
 
 	fse=find_filesystem(0x43443031, 0x43445644);
@@ -1064,7 +1087,7 @@ static LONG ScanCDROM(struct MountData *md)
 
 	memset(&pp,0,sizeof(struct ParameterPacket));
 
-	pp.dosname              = dosName;
+	pp.dosname              = dosName + 1;
 	pp.execname             = md->devicename;
 	pp.unitnum              = md->unitnum;
 	pp.de.de_TableSize      = sizeof(struct DosEnvec);
@@ -1079,7 +1102,14 @@ static LONG ScanCDROM(struct MountData *md)
 	pp.de.de_DosType        = fse->fse_DosType; // CD01 / CDVD
 	pp.de.de_BootPri        = bootPri;
 
-	dosName[2]='0' + cnt;
+	for (int i=0; i<9; i++) {
+		if (CheckDevName(md,dosName)) {
+			dosName[3] += 1;
+		} else {
+			break;
+		}
+	}
+
 	struct DeviceNode *node = MakeDosNode(&pp);
 	if (!node) {
 		printf("Could not create DosNode\n");
@@ -1089,7 +1119,6 @@ static LONG ScanCDROM(struct MountData *md)
 	ProcessPatchFlags(node, fse);
 
 	AddBootNode(bootPri, ADNF_STARTPROC, node, md->configDev);
-	cnt++;
 
 	return 1;
 }
