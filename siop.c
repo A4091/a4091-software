@@ -1133,7 +1133,7 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #endif
 }
 
-#ifdef DEBUG_SYNC
+#if defined(DEBUG_SIOP) && defined(DEBUG_SYNC)
 static void
 report_scsi_speed(siop_regmap_p rp, uint sbcl)
 {
@@ -1204,7 +1204,7 @@ report_scsi_speed(siop_regmap_p rp, uint sbcl)
     }
 
     uint xferp = (rp->siop_sxfer >> 4) & 0x7;
-// CDH for 50MHz A4091, if xferp == 0, then 80ns period = 12.5MHz. 1 = 10MHz
+    // CDH for 50MHz A4091, if xferp == 0, then 80ns period = 12.5MHz. 1 = 10MHz
     uint period;
     uint scntl1 = rp->siop_scntl1;
     uint khz100;
@@ -1216,7 +1216,10 @@ report_scsi_speed(siop_regmap_p rp, uint sbcl)
         period = tcp * (4 + xferp) / 1000;
     khz100 = 10000 / period;
 
-    printf("bclk=%u sclk=%u dcntl_cf=%u aclk=%uMHz \"%s\" sclk=%uMHz \"%s\" tcp=%u xferp=%u scntl1(7)=%x  SCSI Sync period=%uns %u.%uMHz\n", bclk, sclk, dcntl_cf, scsi_aclk_freq, scsi_aclk_str, scsi_cclk_freq, scsi_sclk_str, tcp, xferp, !!(scntl1 & BIT(7)), period, khz100 / 10, khz100 % 10);
+    printf("bclk=%u sclk=%u dcntl_cf=%u aclk=%uMHz \"%s\" sclk=%uMHz"
+	   " \"%s\" tcp=%u xferp=%u scntl1(7)=%x  SCSI Sync period=%uns %u.%uMHz\n",
+	   bclk, sclk, dcntl_cf, scsi_aclk_freq, scsi_aclk_str, scsi_cclk_freq,
+	   scsi_sclk_str, tcp, xferp, !!(scntl1 & BIT(7)), period, khz100 / 10, khz100 % 10);
 }
 #endif
 
@@ -1440,7 +1443,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             }
             rp->siop_sxfer = sc->sc_sync[target].sxfer;
             rp->siop_sbcl = sc->sc_sync[target].sbcl;
-#ifdef DEBUG_SYNC
+#if defined(DEBUG_SIOP) && defined(DEBUG_SYNC)
             report_scsi_speed(rp, sc->sc_sync[target].sbcl);
 #endif
             if (sc->sc_sync[target].state == NEG_WAITS) {
