@@ -1337,35 +1337,6 @@ static LONG ScanMBR(struct MountData *md)
 }
 #endif
 
-struct MountStruct
-{
-	// Device name. ("myhddriver.device")
-	// Offset 0.
-	const UBYTE *deviceName;
-	// Unit number pointer or single integer value.
-	// if >= 0x100 (256), pointer to array of ULONGs, first ULONG is number of unit numbers followed (for example { 2, 0, 1 }. 2 units, unit numbers 0 and 1).
-	// if < 0x100 (256): used as a single unit number value.
-	// Offset 4.
-	ULONG *unitNum;
-	// Name string used to set Creator field in FileSystem.resource (if KS 1.3) and in FileSystem.resource entries.
-	// If NULL: use device name.
-	// Offset 8.
-	const UBYTE *creatorName;
-	// ConfigDev: set if autoconfig board autoboot support is wanted.
-	// If NULL and bootable partition found: fake ConfigDev is automatically created.
-	// Offset 12.
-	struct ConfigDev *configDev;
-	// SysBase.
-	// Offset 16.
-	struct ExecBase *SysBase;
-	// LUNs
-	// Offset 20.
-	BOOL luns;
-	// Short/Long Spinup
-	// Offset 22.
-	BOOL slowSpinup;
-};
-
 // Return values:
 // If single unit number:
 // -1 = No RDB found, device failed to open, disk error or RDB block checksum error.
