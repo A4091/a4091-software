@@ -1379,14 +1379,14 @@ next_lun:
 						dbg("OpenDevice('%s', %"PRId32", %p, 0)\n", ms->deviceName, unitNum, request);
 						UBYTE err = OpenDevice(ms->deviceName, unitNum, (struct IORequest*)request, 0);
 						if (err == 0) {
-							md->request = request;
-							md->devicename = ms->deviceName;
-							md->unitnum = unitNum;
-							ret = -1;
-
 							err = dev_scsi_get_drivegeometry(request, &geom);
 							if (err == 0) {
+								ret = -1;
+								md->request = request;
+								md->devicename = ms->deviceName;
 								md->blocksize = geom.dg_SectorSize;
+								md->unitnum = unitNum;
+
 								switch (geom.dg_DeviceType & SID_TYPE) {
 								case DG_CDROM:
 								case DG_WORM:
@@ -1419,6 +1419,7 @@ next_lun:
 							DoIO((struct IORequest*)md->request);
 
 							CloseDevice((struct IORequest*)request);
+
 							if (ms->luns && (lun++ < 8) &&
 							    (!md->wasLastLun)) {
 								goto next_lun;
