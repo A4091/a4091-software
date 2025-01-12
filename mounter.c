@@ -1418,7 +1418,9 @@ next_lun:
 							if (err == 0) {
 								md->blocksize = geom.dg_SectorSize;
 								switch (geom.dg_DeviceType & SID_TYPE) {
-								case 5: // CDROM
+								case DG_CDROM:
+								case DG_WORM:
+								case DG_OPTICAL_DISK:
 									if (!asave->cdrom_boot) {
 										printf("CDROM boot disabled.\n");
 										break;
@@ -1427,7 +1429,7 @@ next_lun:
 									if (ret==-1)
 										ret = ScanCDROM(md);
 									break;
-								case 0: // DISK
+								case DG_DIRECT_ACCESS: // DISK
 									ret = ScanRDSK(md);
 #ifdef DISKLABELS
 									if (ret==-1)
