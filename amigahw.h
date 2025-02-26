@@ -12,6 +12,9 @@
 #define REG_CIAAPRA_PA6  (1<<6)    // CIA-A Game Port 0 fire button (pin 6)
 #define REG_CIAAPRA_PA7  (1<<7)    // CIA-A Game Port 1 fire button (pin 6)
 
+#define REG_CIAASDR      0xBFEC01  // CIA-A SDR register
+#define KEY_DEL_CODE     0x46      // DEL key scan code
+
 #define REG_POTGOR       0xDFF016  // Paula proportional pin values [Read]
 #define REG_POTGO        0xDFF034  // Paula proportional pin config [Write]
 #define REG_POTGOR_DATLX (1<<8)    // Paula Pin 32 P0X Data
