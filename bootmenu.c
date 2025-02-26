@@ -811,7 +811,10 @@ void boot_menu(void)
 {
     printf("Bootmenu:\n");
 
-    /* Check left mouse button */
+    /* Check left mouse button.
+     * (If the left mouse button is pressed, we do not enter the boot menu.)
+     */
+
     if (!(REG_CIAAPRA_PA6 & *((volatile char *)REG_CIAAPRA))) {
         printf("LMB pressed.\n");
         return;
@@ -832,9 +835,22 @@ void boot_menu(void)
     WaitTOF();
     WaitTOF();
 
-    /* Check right mouse button */
-    if (REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) {
-        printf("RMB mouse not pressed.\n");
+    /*
+     * Check if neither the right mouse button nor the DEL key is pressed.
+     * - For the right mouse button, REG_POTGOR_DATLY is active low.
+     * - For the DEL key, we read the CIAA SDR at 0xBFEC01. If no key is
+     *   pressed or a key other than DEL is present, the value will not
+     *   equal KEY_DEL_CODE.
+     *
+     * If both inputs are inactive (i.e. right mouse not pressed and DEL key
+     * not pressed), then do not show the boot menu.
+     */
+    unsigned char key = (~(*(volatile unsigned char *)REG_CIAASDR)&0xff);
+    key = (key >> 1) | (key << 7);
+    if ((REG_POTGOR_DATLY & *(volatile UWORD *)REG_POTGOR) &&
+        (key != KEY_DEL_CODE))
+    {
+        printf("Neither RMB nor DEL key pressed.\n");
         CloseLibrary((struct Library *)IntuitionBase);
         CloseLibrary((struct Library *)GfxBase);
         return;
