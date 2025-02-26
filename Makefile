@@ -161,7 +161,7 @@ $(PROG): $(OBJS) $(ASMOBJS)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
-	@printf "${yellow}$(PROG) is "`wc -c < $@`" bytes${end}\n"
+	@LEN="`wc -c < $@| sed 's/^ *//'`"; printf "${yellow}$(PROG) is $${LEN} bytes${end}\n"
 
 $(PROGU): $(OBJSU)
 	@echo Building $@
