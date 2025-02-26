@@ -577,6 +577,8 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 			}
 			fse = (struct FileSysEntry*)fse->fse_Node.ln_Succ;
 		}
+		if (fse && fse->fse_DosType != dostype)
+			fse = NULL;
 		if (fshb && newOnly) {
 			fse = AllocMem(sizeof(struct FileSysEntry) + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
 			if (fse) {
