@@ -142,7 +142,7 @@ struct __attribute__((packed)) SCSI_CD_TOC {
 // Get Block size of unit
 BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
-	
+
 	req->iotd_Req.io_Command = TD_GETGEOMETRY;
 	req->iotd_Req.io_Data    = geometry;
 	req->iotd_Req.io_Length  = sizeof(struct DriveGeometry);
@@ -1069,7 +1069,7 @@ static void list_filesystems(void)
 bool UnitIsReady(struct IOStdReq *req) {
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
 	BYTE err;
-	
+
 	// First spin up the disc
 	// Not critical if there's an error so no need to check
 	req->io_Command = CMD_START;
@@ -1099,7 +1099,7 @@ bool isDataCD(struct IOStdReq *ior) {
 
 	struct SCSICmd     *scsiCmd = NULL;
 	struct SCSI_CD_TOC *tocBuf  = NULL;
-	
+
 	ULONG bufSize = sizeof(struct SCSI_CD_TOC);
 
 	char cdb[10];
@@ -1112,17 +1112,17 @@ bool isDataCD(struct IOStdReq *ior) {
 			scsiCmd->scsi_Flags     = SCSIF_READ;
 			scsiCmd->scsi_CmdLength = 10;
 			scsiCmd->scsi_Command   = cdb;
-			
+
 			cdb[0] = SCSI_CMD_READ_TOC;
 			cdb[2] = 0;                  // Format: 0
 			cdb[6] = 1;                  // Track 1
 			cdb[7] = bufSize >> 8;
 			cdb[8] = bufSize & 0xFF;
-		
+
 			ior->io_Data    = scsiCmd;
 			ior->io_Length  = sizeof(struct SCSICmd);
 			ior->io_Command = HD_SCSICMD;
-		
+
 			for (int retry = 0; retry < 3; retry++) {
 				if ((err = DoIO((struct IORequest *)ior)) == 0 && scsiCmd->scsi_Status == 0)
 					break;
