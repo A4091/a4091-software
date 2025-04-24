@@ -3,7 +3,35 @@
 
 #include <devices/trackdisk.h>
 
-#define INQUIRY                 0x12
+#define SCSI_CMD_TEST_UNIT_READY  0x00
+#define SCSI_CMD_REQUEST_SENSE    0x03
+#define SCSI_CMD_READ_6           0x08
+#define SCSI_CMD_WRITE_6          0x0A
+#define SCSI_CMD_INQUIRY          0x12
+#define SCSI_CMD_MODE_SELECT_6    0x15
+#define SCSI_CMD_MODE_SENSE_6     0x1A
+#define SCSI_CMD_READ_CAPACITY_10 0x25
+#define SCSI_CMD_READ_10          0x28
+#define SCSI_CMD_WRITE_10         0x2A
+#define SCSI_CMD_READ_TOC         0x43
+#define SCSI_CMD_PLAY_AUDIO_MSF   0x47
+#define SCSI_CMD_PLAY_TRACK_INDEX 0x48
+#define SCSI_CMD_MODE_SELECT_10   0x55
+#define SCSI_CMD_MODE_SENSE_10    0x5A
+#define SCSI_CMD_START_STOP_UNIT  0x1B
+#define SCSI_CMD_ATA_PASSTHROUGH  0xA1
+#define SCSI_CHECK_CONDITION      0x02
+
+#define SZ_CDB_10 10
+#define SZ_CDB_12 12
+
+#define SCSI_CD_MAX_TRACKS 100
+
+#define SCSI_TOC_SIZE (SCSI_CD_MAX_TRACKS * 8) + 4 // SCSI_CD_MAX_TRACKS track descriptors + the toc header
+
+#define INQUIRY                 SCSI_CMD_INQUIRY
+
+// TODO deduplicate with scsipi_inquiry_data?
 typedef struct scsi_inquiry_data {
     uint8_t device;
 #define SID_TYPE                0x1f    /* device type mask */
@@ -40,6 +68,24 @@ typedef struct scsi_generic {
     uint8_t opcode;
     uint8_t bytes[15];
 } __packed scsi_generic_t;
+
+struct __packed SCSI_TOC_TRACK_DESCRIPTOR {
+    uint8_t reserved1;
+    uint8_t adrControl;
+    uint8_t trackNumber;
+    uint8_t reserved2;
+    uint8_t reserved3;
+    uint8_t minute;
+    uint8_t second;
+    uint8_t frame;
+};
+
+struct __packed SCSI_CD_TOC {
+    uint16_t length;
+    uint8_t  firstTrack;
+    uint8_t  lastTrack;
+    struct SCSI_TOC_TRACK_DESCRIPTOR td[SCSI_CD_MAX_TRACKS];
+};
 
 int dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq);
 int dev_scsi_get_drivegeometry(struct IOExtTD *tio, struct DriveGeometry *geom);
