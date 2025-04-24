@@ -28,6 +28,7 @@
 #include <exec/ports.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
+#include <exec/errors.h>
 #include <devices/trackdisk.h>
 #include <devices/hardblocks.h>
 #include <devices/scsidisk.h>
@@ -115,6 +116,27 @@ struct MountData
 	BOOL wasLastLun;
 	BOOL slowSpinup;
 	int blocksize;
+};
+
+#define SCSI_CD_MAX_TRACKS 100
+#define SCSI_CMD_READ_TOC 0x43
+
+struct __attribute__((packed)) SCSI_TOC_TRACK_DESCRIPTOR {
+    UBYTE reserved1;
+    UBYTE adrControl;
+    UBYTE trackNumber;
+    UBYTE reserved2;
+    UBYTE reserved3;
+    UBYTE minute;
+    UBYTE second;
+    UBYTE frame;
+};
+
+struct __attribute__((packed)) SCSI_CD_TOC {
+    UWORD length;
+    UBYTE firstTrack;
+    UBYTE lastTrack;
+    struct SCSI_TOC_TRACK_DESCRIPTOR td[SCSI_CD_MAX_TRACKS];
 };
 
 // Get Block size of unit
@@ -1042,6 +1064,32 @@ static void list_filesystems(void)
 	}
 #endif
 }
+
+// Check if there is a disc inserted
+bool UnitIsReady(struct IOStdReq *req) {
+	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
+	BYTE err;
+	
+	// First spin up the disc
+	// Not critical if there's an error so no need to check
+	req->io_Command = CMD_START;
+	req->io_Error   = 0;
+	DoIO((struct IORequest *)req);
+
+	req->io_Command = TD_CHANGESTATE;
+	req->io_Actual  = 0;
+	req->io_Error   = 0;
+	err = DoIO((struct IORequest *)req);
+
+	// Some devices/units don't support this - assume that it is ready
+	if (err == IOERR_NOCMD) return true;
+
+	if (err == 0 && req->io_Actual == 0) return true;
+
+	return false;
+}
+
+
 // Check if this is a data disc by reading the TOC and checking that track 1 is a data track.
 bool isDataCD(struct IOStdReq *ior) {
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
@@ -1149,6 +1197,9 @@ static LONG ScanCDROM(struct MountData *md)
 		printf("Could not load filesystem\n");
 		return -1;
 	}
+
+	if (!UnitIsReady((struct IOStdReq *)md->request))
+		return -1;
 
 	if (!isDataCD((struct IOStdReq *)md->request))
 		return -1;
