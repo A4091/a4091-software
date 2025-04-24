@@ -22,8 +22,6 @@
 #define USE_SERIAL_OUTPUT
 #endif
 
-#include "port.h"
-
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/alerts.h>
@@ -50,13 +48,22 @@
 #include <proto/expansion.h>
 #include <proto/dos.h>
 
-#include "scsimsg.h"
 #include "ndkcompat.h"
+
 #include "mounter.h"
+
+#ifdef A4091
+#include "port.h"
+#include "scsimsg.h"
 #include "device.h"
 #include "a4091.h"
 #include "attach.h"
 #include "legacy.h"
+#endif
+
+#ifndef A4091
+#define SID_TYPE 0x1F
+#endif
 
 #define TRACE 1
 #undef TRACE_LSEG
@@ -74,6 +81,7 @@
 #define dbg
 #endif
 
+#define printf(...)
 #define MAX_BLOCKSIZE 2048
 #define LSEG_DATASIZE (512 / 4 - 5)
 
@@ -109,6 +117,23 @@ struct MountData
 	int blocksize;
 };
 
+// Get Block size of unit
+BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
+	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
+	
+	req->iotd_Req.io_Command = TD_GETGEOMETRY;
+	req->iotd_Req.io_Data    = geometry;
+	req->iotd_Req.io_Length  = sizeof(struct DriveGeometry);
+
+	return DoIO((struct IORequest *)req);
+}
+
+void W_NewList(struct List *new_list) {
+    new_list->lh_Head = (struct Node *)&new_list->lh_Tail;
+    new_list->lh_Tail = 0;
+    new_list->lh_TailPred = (struct Node *)new_list;
+}
+
 // KS 1.3 compatibility functions
 APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct ExecBase *SysBase)
 {
@@ -140,7 +165,7 @@ struct MsgPort *W_CreateMsgPort(struct ExecBase *SysBase)
 		{
 			ret->mp_Flags = PA_SIGNAL;
 			ret->mp_Node.ln_Type = NT_MSGPORT;
-  			NewList(&ret->mp_MsgList);
+			W_NewList(&ret->mp_MsgList);
 			ret->mp_SigBit = sb;
 			ret->mp_SigTask = FindTask(NULL);
 			return ret;
@@ -224,6 +249,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		if (!err) {
 			break;
 		}
+#ifdef A4091
 		if (err != ERROR_NOT_READY) {
 			dbg("Read block %"PRIu32" error %"PRId32"\n", block, err);
 			/* Error retry handled in a4091.device, fail quickly here. */
@@ -233,6 +259,7 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		/* Give the drive more time to spin up */
 		dbg("Drive not ready.\n");
 		delay(1000000);
+#endif
 	}
 	if (i == max_retries) {
 		return FALSE;
@@ -512,7 +539,7 @@ static APTR fsrelocate(struct MountData *md)
 			goto end;
 		}
 	}
-        ret = 1;
+	ret = 1;
 
 end:
 	if (!ret) {
@@ -552,7 +579,7 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 		if (fsr) {
 			char *FsResName  = (UBYTE *)(fsr + 1);
 			char *CreatorStr = (UBYTE *)FsResName + (strlen(resourceName) + 1);
-			NewList(&fsr->fsr_FileSysEntries);
+			W_NewList(&fsr->fsr_FileSysEntries);
 			fsr->fsr_Node.ln_Type = NT_RESOURCE;
 			strcpy(FsResName, resourceName);
 			fsr->fsr_Node.ln_Name = FsResName;
@@ -927,8 +954,12 @@ static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 		}
 		partblock = ParsePART(buf, partblock, filesysblock, md);
 	}
+#ifdef A4091
 	md->wasLastDev = !asave->ignore_last && (flags & RDBFF_LAST) != 0;
 	md->wasLastLun = (flags & RDBFF_LASTLUN) != 0;
+#else
+	md->wasLastDev = (flags & RDBFF_LAST) != 0;
+#endif
 	return md->ret;
 }
 
@@ -949,7 +980,7 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
-static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2)
+static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2, struct ExecBase *SysBase)
 {
 	struct FileSysResource *FileSysResBase = NULL;
 	struct FileSysEntry *fse, *fs=NULL;
@@ -1014,7 +1045,7 @@ static void list_filesystems(void)
 
 // CheckPVD
 // Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
-BOOL CheckPVD(struct IOStdReq *ior)
+BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
 {
 	const char sys_id_1[] = "CDTV";
 	const char sys_id_2[] = "AMIGA BOOT";
@@ -1068,18 +1099,20 @@ done:
 // Search for Bootable CDROM
 static LONG ScanCDROM(struct MountData *md)
 {
+	struct ExecBase *SysBase = md->SysBase;
+	struct ExpansionBase *ExpansionBase = md->ExpansionBase;
 	struct FileSysEntry *fse=NULL;
 	char dosName[] = "\3CD0"; // BCPL string
 	LONG bootPri;
 
-	fse=find_filesystem(0x43443031, 0x43445644);
+	fse=find_filesystem(0x43443031, 0x43445644, md->SysBase);
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
 	}
 
 	// "CDTV" or "AMIGA BOOT"?
-	if (CheckPVD((struct IOStdReq *)md->request)) {
+	if (CheckPVD((struct IOStdReq *)md->request,SysBase)) {
 		bootPri = 2;  // Yes, give priority
 	} else {
 		bootPri = -1; // May not be a boot disk, lower priority than HDD
@@ -1162,7 +1195,7 @@ static LONG register_legacy(struct MountData *md, UBYTE bootable, UBYTE type, UL
 	printf("register_legacy: %d - %d  (%d/%d/%d - %d/%d/%d)\n",
 			pstart, pend, cs,h,s,ce,h,s);
 
-	fse=find_filesystem(0x46415401, 0);
+	fse=find_filesystem(0x46415401, 0, md->SysBase);
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
@@ -1354,9 +1387,8 @@ LONG MountDrive(struct MountStruct *ms)
 	struct MsgPort *port = NULL;
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
-	struct ExecBase *SysBase = ms->SysBase;
 	struct DriveGeometry geom;
-
+	struct ExecBase *SysBase = ms->SysBase;
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
 	if (ExpansionBase) {
@@ -1382,18 +1414,23 @@ next_lun:
 						dbg("OpenDevice('%s', %"PRId32", %p, 0)\n", ms->deviceName, unitNum, request);
 						UBYTE err = OpenDevice(ms->deviceName, unitNum, (struct IORequest*)request, 0);
 						if (err == 0) {
+#ifdef A4091
 							err = dev_scsi_get_drivegeometry(request, &geom);
+#else
+							err = GetGeometry(request ,&geom);
+#endif
 							if (err == 0) {
 								ret = -1;
-								md->request = request;
+								md->request    = request;
 								md->devicename = ms->deviceName;
-								md->blocksize = geom.dg_SectorSize;
-								md->unitnum = unitNum;
+								md->blocksize  = geom.dg_SectorSize;
+								md->unitnum    = unitNum;
 
 								switch (geom.dg_DeviceType & SID_TYPE) {
 								case DG_CDROM:
 								case DG_WORM:
 								case DG_OPTICAL_DISK:
+#ifdef A4091
 									if (!asave->cdrom_boot) {
 										printf("CDROM boot disabled.\n");
 										break;
@@ -1402,6 +1439,9 @@ next_lun:
 									if (ret==-1)
 										ret = ScanCDROM(md);
 									break;
+#else
+									ret = ScanCDROM(md);
+#endif
 								case DG_DIRECT_ACCESS: // DISK
 									ret = ScanRDSK(md);
 #ifdef DISKLABELS
@@ -1428,10 +1468,12 @@ next_lun:
 								goto next_lun;
 							}
 
+#ifndef NO_RDBLAST
 							if (md->wasLastDev) {
 								dbg("RDBFF_LAST exit\n");
 								break;
 							}
+#endif
 						} else {
 							dbg("OpenDevice(%s,%"PRId32") failed: %"PRId32"\n", ms->deviceName, unitNum, (BYTE)err);
 						}
@@ -1451,6 +1493,7 @@ next_lun:
 	return ret;
 }
 
+#ifdef A4091
 int mount_drives(struct ConfigDev *cd, struct Library *dev)
 {
 	extern char real_device_name[];
@@ -1484,3 +1527,4 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	list_filesystems();
 	return ret;
 }
+#endif
