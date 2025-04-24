@@ -1042,6 +1042,58 @@ static void list_filesystems(void)
 	}
 #endif
 }
+// Check if this is a data disc by reading the TOC and checking that track 1 is a data track.
+bool isDataCD(struct IOStdReq *ior) {
+	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
+	bool ret = false;
+
+	BYTE err;
+
+	struct SCSICmd     *scsiCmd = NULL;
+	struct SCSI_CD_TOC *tocBuf  = NULL;
+	
+	ULONG bufSize = sizeof(struct SCSI_CD_TOC);
+
+	char cdb[10];
+	memset(&cdb,0,10);
+
+	if ((scsiCmd = AllocMem(sizeof(struct SCSICmd),MEMF_PUBLIC | MEMF_CLEAR))) {
+		if ((tocBuf = AllocMem(bufSize,MEMF_PUBLIC | MEMF_CLEAR))) {
+			scsiCmd->scsi_Data      = (UWORD *)tocBuf;
+			scsiCmd->scsi_Length    = bufSize;
+			scsiCmd->scsi_Flags     = SCSIF_READ;
+			scsiCmd->scsi_CmdLength = 10;
+			scsiCmd->scsi_Command   = cdb;
+			
+			cdb[0] = SCSI_CMD_READ_TOC;
+			cdb[2] = 0;                  // Format: 0
+			cdb[6] = 1;                  // Track 1
+			cdb[7] = bufSize >> 8;
+			cdb[8] = bufSize & 0xFF;
+		
+			ior->io_Data    = scsiCmd;
+			ior->io_Length  = sizeof(struct SCSICmd);
+			ior->io_Command = HD_SCSICMD;
+		
+			for (int retry = 0; retry < 3; retry++) {
+				if ((err = DoIO((struct IORequest *)ior)) == 0 && scsiCmd->scsi_Status == 0)
+					break;
+			}
+
+			if (err == 0) {
+				if (tocBuf->firstTrack == 1 && tocBuf->td[0].trackNumber == 1) {
+					if (tocBuf->td[0].adrControl & 0x04) {	// Data Track?
+						ret = true;
+					}
+				}
+			}
+
+			FreeMem(tocBuf,bufSize);
+		}
+		FreeMem(scsiCmd,sizeof(struct SCSICmd));
+	}
+	return ret;
+}
 
 // CheckPVD
 // Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
@@ -1056,10 +1108,6 @@ BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
 	char *buf = NULL;
 
 	if (!(buf = AllocMem(2048,MEMF_ANY|MEMF_CLEAR))) goto done;
-
-	ior->io_Command = TD_CHANGESTATE; // Check if there's a disc in the drive
-
-	if (err = DoIO((struct IORequest *)ior) || ior->io_Actual != 0) goto done;
 
 	char *id_string = buf + 1;
 	char *system_id = buf + 8;
@@ -1110,6 +1158,9 @@ static LONG ScanCDROM(struct MountData *md)
 		printf("Could not load filesystem\n");
 		return -1;
 	}
+
+	if (!isDataCD((struct IOStdReq *)md->request))
+		return -1;
 
 	// "CDTV" or "AMIGA BOOT"?
 	if (CheckPVD((struct IOStdReq *)md->request,SysBase)) {
