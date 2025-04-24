@@ -1080,7 +1080,7 @@ BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
 
 		// Check ISO ID String & for PVD Version & Type code
 		if ((strncmp(iso_id,id_string,5) == 0) && buf[0] == 1 && buf[6] == 1) {
-			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2) == 0)) {
+			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2)) == 0) {
 				ret = TRUE; // CDTV or AMIGA BOOT
 			} else {
 				ret = FALSE;
