@@ -251,7 +251,7 @@ a4091_release(uint32_t as_addr)
     asave->as_cd->cd_Flags |= CDB_CONFIGME;
 }
 
-int
+static int
 a4091_validate(uint32_t dev_base)
 {
     uint32_t temp;

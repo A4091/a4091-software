@@ -49,7 +49,8 @@ static BPTR saved_seg_list;
  * followed by a Resident structure.
  * ------------------------------------------------------------
  */
-int __attribute__((no_reorder)) _start()
+int __attribute__((no_reorder)) _start(void);
+int __attribute__((no_reorder)) _start(void)
 {
     return (-1);
 }
@@ -223,7 +224,7 @@ drv_expunge(struct Library *dev asm("a6"))
  *          to be single-threaded; only one task will execute Open()
  *          at a time.
  */
-void __used __saveds
+static void __used __saveds
 drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
          uint scsi_unit asm("d0"), ULONG flags asm("d1"))
 {

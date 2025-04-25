@@ -32,8 +32,8 @@ int irq_and_timer_handler(void);
 void *device_private(device_t dev);
 const char *device_xname(void *dev);
 
-int bsd_splbio();
-void bsd_splx();
+int bsd_splbio(void);
+void bsd_splx(int ilevel);
 
 #define hz TICKS_PER_SECOND
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)

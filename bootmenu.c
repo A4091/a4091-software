@@ -385,7 +385,7 @@ devtype_str(uint dtype)
 }
 
 static char _itoabuf[12]; // MAXINT
-int scan_disks(void)
+static int scan_disks(void)
 {
     int i;
     int cnt=0;
