@@ -884,7 +884,7 @@ siopreset(struct siop_softc *sc)
             sc->sc_nexus->xs->error = XS_RESET;
             siop_scsidone(sc->sc_nexus, sc->sc_nexus->stat[0]);
         }
-        while ((acb = sc->nexus_list.tqh_first) > 0) {
+        while ((acb = sc->nexus_list.tqh_first) != NULL) {
             acb->xs->error = XS_RESET;
             siop_scsidone(acb, acb->stat[0]);
         }
@@ -1611,7 +1611,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         if (acb->iob_len && rp->siop_temp) {
             int n = rp->siop_temp - sc->sc_scriptspa;
 
-            if (acb->iob_curlen && acb->iob_curlen != acb->ds.chain[0].datalen)
+            if (acb->iob_curlen && acb->iob_curlen != (u_long)acb->ds.chain[0].datalen)
                 printf("%s: iob_curbuf/len already set? n %x iob %lx/%lx chain[0] %p/%lx\n",
                     device_xname(sc->sc_dev), n, acb->iob_curbuf, acb->iob_curlen,
                     acb->ds.chain[0].databuf, acb->ds.chain[0].datalen);
@@ -1656,8 +1656,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             for (i = 0; i < DMAMAXIO; ++i) {
                 if (acb->ds.chain[i].datalen == 0)
                     break;
-                if (acb->iob_curbuf >= (long)acb->ds.chain[i].databuf &&
-                    acb->iob_curbuf < (long)(acb->ds.chain[i].databuf +
+                if (acb->iob_curbuf >= (u_long)acb->ds.chain[i].databuf &&
+                    acb->iob_curbuf < (u_long)(acb->ds.chain[i].databuf +
                     acb->ds.chain[i].datalen))
                     break;
             }

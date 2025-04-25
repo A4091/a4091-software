@@ -106,7 +106,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
     struct FileSysResource *FileSysResBase;
     struct FileSysEntry *fse = NULL;
 
-    int i;
+    unsigned int i;
     printf("Looking for FS in A4091 ROM slot %d... ", slot);
 
     if (rom->romfile_len[slot])

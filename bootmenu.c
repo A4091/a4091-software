@@ -428,7 +428,7 @@ next_lun:
             trim_spaces(inq_res.revision, sizeof (inq_res.revision));
 
             if (err == 0) {
-                int t_len;
+                unsigned int t_len;
                 char unit_str[]="0.0";
                 unit_str[0]='0'+(unitNum % 10);
                 unit_str[2]='0'+(unitNum / 10);
