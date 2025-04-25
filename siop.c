@@ -1477,10 +1477,10 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             if (sstat1 & SIOP_SSTAT1_OLF)
                 ++adjust;
             acb->iob_curlen =
-                *((long *)__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
+                *ADDR32(__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
             acb->iob_curlen += adjust;
             acb->iob_curbuf =
-                *((long *)__UNVOLATILE(&rp->siop_dnad)) - adjust;
+                *ADDR32(__UNVOLATILE(&rp->siop_dnad)) - adjust;
 #ifdef DEBUG
             if (siop_debug & 0x100) {
                 int i;
