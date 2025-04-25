@@ -22,6 +22,8 @@
 #define USE_SERIAL_OUTPUT
 #endif
 
+#include "port.h"
+
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/alerts.h>
@@ -53,7 +55,6 @@
 #include "mounter.h"
 
 #ifdef A4091
-#include "port.h"
 #include "scsimsg.h"
 #include "device.h"
 #include "a4091.h"
@@ -81,7 +82,7 @@
 #define dbg
 #endif
 
-#define printf(...)
+
 #define MAX_BLOCKSIZE 2048
 #define LSEG_DATASIZE (512 / 4 - 5)
 
