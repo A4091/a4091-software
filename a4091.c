@@ -53,7 +53,7 @@ extern struct ExecBase *SysBase;
 #define ADDR32(x)     (volatile uint32_t *)(x)
 
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
-#define BIT(x)        (1 << (x))
+#define BIT(x)        (uint32_t)(1 << (x))
 
 #define FLAG_DEBUG            0x01        /* Debug output */
 #define FLAG_MORE_DEBUG       0x02        /* More debug output */
@@ -568,45 +568,45 @@ static const ncr_regdefs_t ncr_regdefs[] =
 {
     { 0x03, 1, 1, 0, "SCNTL0",   "SCSI control 0", bits_scntl0 },
     { 0x02, 1, 1, 0, "SCNTL1",   "SCSI control 1", bits_scntl1 },
-    { 0x01, 1, 1, 0, "SDID",     "SCSI destination ID" },
+    { 0x01, 1, 1, 0, "SDID",     "SCSI destination ID", NULL },
     { 0x00, 1, 1, 0, "SIEN",     "SCSI IRQ enable", bits_sien },
-    { 0x07, 1, 1, 0, "SCID",     "SCSI chip ID" },
-    { 0x06, 1, 1, 0, "SXFER",    "SCSI transfer" },
-    { 0x05, 1, 1, 0, "SODL",     "SCSI output data latch" },
+    { 0x07, 1, 1, 0, "SCID",     "SCSI chip ID", NULL },
+    { 0x06, 1, 1, 0, "SXFER",    "SCSI transfer", NULL },
+    { 0x05, 1, 1, 0, "SODL",     "SCSI output data latch", NULL },
     { 0x04, 1, 1, 0, "SOCL",     "SCSI output control latch", bits_sbcl },
-    { 0x0b, 1, 1, 0, "SFBR",     "SCSI first byte received" },
-    { 0x0a, 1, 1, 0, "SIDL",     "SCSI input data latch" },
-    { 0x09, 1, 1, 0, "SBDL",     "SCSI bus data lines" },
+    { 0x0b, 1, 1, 0, "SFBR",     "SCSI first byte received", NULL },
+    { 0x0a, 1, 1, 0, "SIDL",     "SCSI input data latch", NULL },
+    { 0x09, 1, 1, 0, "SBDL",     "SCSI bus data lines", NULL },
     { 0x08, 1, 1, 0, "SBCL",     "SCSI bus control lines", bits_sbcl },
     { 0x0f, 1, 1, 0, "DSTAT",    "DMA status", bits_dstat },
     { 0x0e, 1, 1, 0, "SSTAT0",   "SCSI status 0", bits_sstat0 },
     { 0x0d, 1, 1, 0, "SSTAT1",   "SCSI status 1", bits_sstat1 },
     { 0x0c, 1, 1, 0, "SSTAT2",   "SCSI status 2", bits_sstat2 },
-    { 0x10, 4, 1, 0, "DSA",      "Data structure address" },
+    { 0x10, 4, 1, 0, "DSA",      "Data structure address", NULL },
     { 0x17, 1, 1, 0, "CTEST0",   "Chip test 0", bits_ctest0 },
-    { 0x16, 1, 1, 0, "CTEST1",   "Chip test 1 7-4=FIFO_Empty 3-0=FIFO_Full" },
+    { 0x16, 1, 1, 0, "CTEST1",   "Chip test 1 7-4=FIFO_Empty 3-0=FIFO_Full", NULL },
     { 0x15, 1, 1, 0, "CTEST2",   "Chip test 2", bits_ctest2 },
-    { 0x14, 1, 0, 0, "CTEST3",   "Chip test 3 SCSI FIFO" },
+    { 0x14, 1, 0, 0, "CTEST3",   "Chip test 3 SCSI FIFO", NULL },
     { 0x1b, 1, 1, 0, "CTEST4",   "Chip test 4", bits_ctest4 },
     { 0x1a, 1, 1, 0, "CTEST5",   "Chip test 5", bits_ctest5 },
-    { 0x19, 1, 0, 0, "CTEST6",   "Chip test 6 DMA FIFO" },
+    { 0x19, 1, 0, 0, "CTEST6",   "Chip test 6 DMA FIFO", NULL },
     { 0x18, 1, 1, 0, "CTEST7",   "Chip test 7", bits_ctest7 },
-    { 0x1c, 4, 1, 0, "TEMP",     "Temporary Stack" },
-    { 0x23, 1, 1, 0, "DFIFO",    "DMA FIFO" },
+    { 0x1c, 4, 1, 0, "TEMP",     "Temporary Stack", NULL },
+    { 0x23, 1, 1, 0, "DFIFO",    "DMA FIFO", NULL },
     { 0x22, 1, 1, 0, "ISTAT",    "Interrupt Status", bits_istat },
     { 0x21, 1, 1, 0, "CTEST8",   "Chip test 8", bits_ctest8 },
-    { 0x20, 1, 1, 0, "LCRC",     "Longitudinal parity" },
-    { 0x25, 3, 1, 0, "DBC",      "DMA byte counter" },
-    { 0x24, 1, 1, 0, "DCMD",     "DMA command" },
-    { 0x28, 4, 1, 0, "DNAD",     "DMA next address for data" },
-    { 0x2c, 4, 1, 0, "DSP",      "DMA SCRIPTS pointer" },
-    { 0x30, 4, 1, 0, "DSPS",     "DMA SCRIPTS pointer save" },
-    { 0x34, 4, 1, 0, "SCRATCH",  "General purpose scratch pad" },
+    { 0x20, 1, 1, 0, "LCRC",     "Longitudinal parity", NULL },
+    { 0x25, 3, 1, 0, "DBC",      "DMA byte counter", NULL },
+    { 0x24, 1, 1, 0, "DCMD",     "DMA command", NULL },
+    { 0x28, 4, 1, 0, "DNAD",     "DMA next address for data", NULL },
+    { 0x2c, 4, 1, 0, "DSP",      "DMA SCRIPTS pointer", NULL },
+    { 0x30, 4, 1, 0, "DSPS",     "DMA SCRIPTS pointer save", NULL },
+    { 0x34, 4, 1, 0, "SCRATCH",  "General purpose scratch pad", NULL },
     { 0x3b, 1, 1, 0, "DMODE",    "DMA mode", bits_dmode },
     { 0x3a, 1, 1, 0, "DIEN",     "DMA interrupt enable", bits_dien },
-    { 0x39, 1, 1, 0, "DWT",      "DMA watchdog timer" }, // No support in FS-UAE
+    { 0x39, 1, 1, 0, "DWT",      "DMA watchdog timer", NULL }, // No support in FS-UAE
     { 0x38, 1, 1, 0, "DCNTL",    "DMA control", bits_dcntl },
-    { 0x3c, 4, 1, 0, "ADDER",    "Sum output of internal adder" },
+    { 0x3c, 4, 1, 0, "ADDER",    "Sum output of internal adder", NULL },
 };
 
 static uint8_t
@@ -1554,7 +1554,7 @@ static int
 decode_registers(void)
 {
     const char *fmt;
-    int         reg;
+    uint32_t    reg;
     uint32_t    value;
 
     printf("  Reg    Value  Name     Description\n");
@@ -2128,13 +2128,15 @@ static int
 test_device_access(uint extended)
 {
     uint8_t  saw_incorrect[ARRAY_SIZE(rom_expected_data)];
-    int      i;
+    uint32_t i;
     int      rc = 0;
     int      pass;
     uint64_t tick_start;
     uint8_t  pins_stuck_high = 0xff;
     uint8_t  pins_stuck_low  = 0xff;
     uint8_t  pins_diff       = 0x00;
+
+    (void)extended;
 
     show_test_state("Device access:", -1);
 
@@ -2307,6 +2309,8 @@ test_register_access(uint extended)
     uint     rot;
     uint     pos;
     uint     mode;
+
+    (void)extended;
 
     show_test_state("Register test:", -1);
 
@@ -2546,6 +2550,8 @@ test_dma_fifo(uint extended)
     uint8_t ctest7;
     uint    cbyte;
 
+    (void)extended;
+
     /* The DMA FIFO test fails in FS-UAE due to incomplete emulation */
     if (is_running_in_uae())
         return (0);
@@ -2749,6 +2755,8 @@ test_scsi_fifo(uint extended)
     uint8_t sstat2;
     uint    cbyte;
     uint    pass;
+
+    (void)extended;
 
 #if 0
     /* The SCSI FIFO test fails in FS-UAE due to incomplete emulation */
@@ -2970,6 +2978,8 @@ test_scsi_pins(uint extended)
     uint    stuck_high;
     uint    stuck_low;
     uint    pins_diff;
+
+    (void)extended;
 
     show_test_state("SCSI pin test:", -1);
 
@@ -3588,6 +3598,8 @@ test_bus_access(uint extended)
     uint32_t  start_intcount;
     uint64_t  tick_start;
 
+    (void)extended;
+
     show_test_state("Bus access test:", -1);
 
     a4091_reset();
@@ -3838,7 +3850,7 @@ test_dma(uint extended)
 {
     int      rc = 0;
     int      rc2 = 0;
-    int      pos;
+    uint32_t pos;
     uint     dma_len = 2048;
     APTR    *tsrc;
     APTR    *src;
@@ -3847,6 +3859,8 @@ test_dma(uint extended)
     uint32_t addr;
     uint32_t scratch;
     uint32_t temp;
+
+    (void)extended;
 
     srand32(time(NULL));
     show_test_state("DMA test:", -1);
@@ -4401,6 +4415,8 @@ test_dma_copy_perf(uint extended)
     uint64_t  tick_end;
     ULONG     buf_handled;
 
+    (void)extended;
+
     show_test_state("DMA copy perf:", -1);
 
     a4091_reset();
@@ -4561,7 +4577,7 @@ a4091_list(uint32_t addr)
     struct Library        *ExpansionBase;
     struct ConfigDev      *cdev = NULL;
     struct CurrentBinding  cbind;
-    int                    count = 0;
+    unsigned int           count = 0;
     int                    did_header = 0;
 
     if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
@@ -4623,7 +4639,7 @@ a4091_find(uint32_t pos)
     struct Library   *ExpansionBase;
     struct ConfigDev *cdev  = NULL;
     uint32_t          addr  = -1;  /* Default to not found */
-    int               count = 0;
+    unsigned int      count = 0;
 
     if ((ExpansionBase = OpenLibrary(expansion_library_name, 0)) == 0) {
         printf("Could not open %s\n", expansion_library_name);
@@ -4948,7 +4964,7 @@ main(int argc, char **argv)
     else
         a4091_base = addr;
 
-    if (a4091_base == -1) {
+    if (a4091_base == (uint32_t)-1) {
         printf("No A4091 cards detected\n");
         exit(1);
     }
