@@ -21,6 +21,9 @@
 #ifdef DEBUG_MOUNTER
 #define USE_SERIAL_OUTPUT
 #endif
+#ifdef A4091
+#include "port.h"
+#endif
 
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -54,7 +57,6 @@
 #include "mounter.h"
 
 #ifdef A4091
-#include "port.h"
 #include "scsimsg.h"
 #include "device.h"
 #include "a4091.h"
