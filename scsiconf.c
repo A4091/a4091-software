@@ -59,8 +59,7 @@
 #include "scsi_all.h"
 #include "scsipi_all.h"
 #include "scsipiconf.h"
-int
-scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed);
+
 #else /* !PORT_AMIGA */
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp $");

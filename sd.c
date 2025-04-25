@@ -81,7 +81,7 @@ translate_xs_error(struct scsipi_xfer *xs)
     return (res);
 }
 
-static void
+void
 call_changeintlist(struct scsipi_periph *periph)
 {
     struct IOStdReq *io;
@@ -625,7 +625,7 @@ sd_startstop(void *periph_p, void *ior, int start, int load_eject, int immed)
 }
 
 
-static void
+void
 queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
                     void *modepage_p, void (*done_cb)(struct scsipi_xfer *))
 {

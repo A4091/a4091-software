@@ -162,7 +162,6 @@ bsd_splx(int ilevel)
 const char *
 device_xname(void *ptr)
 {
-    (void)ptr;
     return ("A4091");
 }
 
@@ -235,7 +234,6 @@ callout_remove(callout_t *c)
 void
 callout_init(callout_t *c, u_int flags)
 {
-    (void)flags;
     c->func = NULL;
 }
 

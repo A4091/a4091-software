@@ -57,7 +57,7 @@ typedef struct {
 } start_msg_t;
 
 
-static void
+void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
     if (got_int) {
