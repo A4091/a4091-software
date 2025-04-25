@@ -311,7 +311,7 @@ struct ioerr {
 static void
 decode_io_error(uint code)
 {
-    unsigned int pos;
+    int pos;
     printf(" code=%u", code);
     for (pos = 0; pos < ARRAY_SIZE(ioerrs); pos++)
         if (code == ioerrs[pos].ie_code) {
@@ -485,7 +485,7 @@ decode_io_command(int indent_count, struct IOStdReq *ior)
 }
 
 static const char *
-decode_xs_error(unsigned int error)
+decode_xs_error(int error)
 {
     static const char *const errs[] = {
         "XS_NOERROR",           // 0 No error
@@ -505,7 +505,7 @@ decode_xs_error(unsigned int error)
 }
 
 static const char *
-decode_scsi_sense_key(unsigned int key)
+decode_scsi_sense_key(int key)
 {
     static const char *const keys[] = {
         "NO SENSE",          // 0x0 SKEY_NO_SENSE
@@ -1678,7 +1678,7 @@ main(int argc, char *argv[])
 {
     int unitno = -1;
     int arg;
-    unsigned int pos = 0;
+    int pos = 0;
     int rc = 0;
     int open_and_wait = 0;
     struct IOExtTD     *tio;

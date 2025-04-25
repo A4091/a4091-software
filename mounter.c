@@ -22,13 +22,14 @@
 #define USE_SERIAL_OUTPUT
 #endif
 
+#include "port.h"
+
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/alerts.h>
 #include <exec/ports.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
-#include <exec/errors.h>
 #include <devices/trackdisk.h>
 #include <devices/hardblocks.h>
 #include <devices/scsidisk.h>
@@ -49,22 +50,13 @@
 #include <proto/expansion.h>
 #include <proto/dos.h>
 
-#include "ndkcompat.h"
-
-#include "mounter.h"
-
-#ifdef A4091
-#include "port.h"
 #include "scsimsg.h"
+#include "ndkcompat.h"
+#include "mounter.h"
 #include "device.h"
 #include "a4091.h"
 #include "attach.h"
 #include "legacy.h"
-#endif
-
-#ifndef SID_TYPE
-#define SID_TYPE 0x1F
-#endif
 
 #define TRACE 1
 #undef TRACE_LSEG
@@ -82,9 +74,6 @@
 #define dbg
 #endif
 
-#ifndef printf
-#define printf(...)
-#endif
 #define MAX_BLOCKSIZE 2048
 #define LSEG_DATASIZE (512 / 4 - 5)
 
@@ -120,50 +109,6 @@ struct MountData
 	int blocksize;
 };
 
-#define SCSI_CD_MAX_TRACKS 100
-#define SCSI_CMD_READ_TOC 0x43
-
-struct __attribute__((packed)) SCSI_TOC_TRACK_DESCRIPTOR {
-    UBYTE reserved1;
-    UBYTE adrControl;
-    UBYTE trackNumber;
-    UBYTE reserved2;
-    UBYTE reserved3;
-    UBYTE minute;
-    UBYTE second;
-    UBYTE frame;
-};
-
-struct __attribute__((packed)) SCSI_CD_TOC {
-    UWORD length;
-    UBYTE firstTrack;
-    UBYTE lastTrack;
-    struct SCSI_TOC_TRACK_DESCRIPTOR td[SCSI_CD_MAX_TRACKS];
-};
-
-#ifdef A4091
-#define GetGeometry dev_scsi_get_drivegeometry
-#else
-// Get Block size of unit
-BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry)
-{
-	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
-
-	req->iotd_Req.io_Command = TD_GETGEOMETRY;
-	req->iotd_Req.io_Data    = geometry;
-	req->iotd_Req.io_Length  = sizeof(struct DriveGeometry);
-
-	return DoIO((struct IORequest *)req);
-}
-#endif
-
-static void W_NewList(struct List *new_list)
-{
-    new_list->lh_Head = (struct Node *)&new_list->lh_Tail;
-    new_list->lh_Tail = 0;
-    new_list->lh_TailPred = (struct Node *)new_list;
-}
-
 // KS 1.3 compatibility functions
 APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct ExecBase *SysBase)
 {
@@ -195,7 +140,7 @@ struct MsgPort *W_CreateMsgPort(struct ExecBase *SysBase)
 		{
 			ret->mp_Flags = PA_SIGNAL;
 			ret->mp_Node.ln_Type = NT_MSGPORT;
-			W_NewList(&ret->mp_MsgList);
+  			NewList(&ret->mp_MsgList);
 			ret->mp_SigBit = sb;
 			ret->mp_SigTask = FindTask(NULL);
 			return ret;
@@ -242,7 +187,6 @@ static UWORD checksum(UBYTE *buf, struct MountData *md)
 {
 	ULONG chk = 0;
 	ULONG num_longs;
-	(void)md;
 
 	num_longs = (buf[4] << 24) | (buf[5] << 16) | (buf[6] << 8) | (buf[7]);
 	if (num_longs > 65535)
@@ -280,7 +224,6 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		if (!err) {
 			break;
 		}
-#ifdef A4091
 		if (err != ERROR_NOT_READY) {
 			dbg("Read block %"PRIu32" error %"PRId32"\n", block, err);
 			/* Error retry handled in a4091.device, fail quickly here. */
@@ -290,7 +233,6 @@ static BOOL readblock(UBYTE *buf, ULONG block, ULONG id, struct MountData *md)
 		/* Give the drive more time to spin up */
 		dbg("Drive not ready.\n");
 		delay(1000000);
-#endif
 	}
 	if (i == max_retries) {
 		return FALSE;
@@ -390,8 +332,8 @@ static APTR fsrelocate(struct MountData *md)
 	ULONG data;
 	struct RelocHunk *relocHunks;
 	LONG firstHunk, lastHunk;
-	ULONG totalHunks;
-	UWORD hunkCnt;
+	LONG totalHunks;
+	WORD hunkCnt;
 	WORD ret = 0;
 	APTR firstProcessedHunk = NULL;
 
@@ -570,7 +512,7 @@ static APTR fsrelocate(struct MountData *md)
 			goto end;
 		}
 	}
-	ret = 1;
+        ret = 1;
 
 end:
 	if (!ret) {
@@ -610,7 +552,7 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 		if (fsr) {
 			char *FsResName  = (UBYTE *)(fsr + 1);
 			char *CreatorStr = (UBYTE *)FsResName + (strlen(resourceName) + 1);
-			W_NewList(&fsr->fsr_FileSysEntries);
+			NewList(&fsr->fsr_FileSysEntries);
 			fsr->fsr_Node.ln_Type = NT_RESOURCE;
 			strcpy(FsResName, resourceName);
 			fsr->fsr_Node.ln_Name = FsResName;
@@ -985,12 +927,8 @@ static LONG ParseRDSK(UBYTE *buf, struct MountData *md)
 		}
 		partblock = ParsePART(buf, partblock, filesysblock, md);
 	}
-#ifdef A4091
 	md->wasLastDev = !asave->ignore_last && (flags & RDBFF_LAST) != 0;
 	md->wasLastLun = (flags & RDBFF_LASTLUN) != 0;
-#else
-	md->wasLastDev = (flags & RDBFF_LAST) != 0;
-#endif
 	return md->ret;
 }
 
@@ -1011,7 +949,7 @@ static LONG ScanRDSK(struct MountData *md)
 	return ret;
 }
 
-static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2, struct ExecBase *SysBase)
+static struct FileSysEntry *find_filesystem(ULONG id1, ULONG id2)
 {
 	struct FileSysResource *FileSysResBase = NULL;
 	struct FileSysEntry *fse, *fs=NULL;
@@ -1074,89 +1012,9 @@ static void list_filesystems(void)
 #endif
 }
 
-// Check if there is a disc inserted
-static bool UnitIsReady(struct IOStdReq *req)
-{
-	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
-	BYTE err;
-
-	// First spin up the disc
-	// Not critical if there's an error so no need to check
-	req->io_Command = CMD_START;
-	req->io_Error   = 0;
-	DoIO((struct IORequest *)req);
-
-	req->io_Command = TD_CHANGESTATE;
-	req->io_Actual  = 0;
-	req->io_Error   = 0;
-	err = DoIO((struct IORequest *)req);
-
-	// Some devices/units don't support this - assume that it is ready
-	if (err == IOERR_NOCMD) return true;
-
-	if (err == 0 && req->io_Actual == 0) return true;
-
-	return false;
-}
-
-
-// Check if this is a data disc by reading the TOC and checking that track 1 is a data track.
-static bool isDataCD(struct IOStdReq *ior)
-{
-	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
-	bool ret = false;
-
-	BYTE err;
-
-	struct SCSICmd     *scsiCmd = NULL;
-	struct SCSI_CD_TOC *tocBuf  = NULL;
-
-	ULONG bufSize = sizeof(struct SCSI_CD_TOC);
-
-	char cdb[10];
-	memset(&cdb,0,10);
-
-	if ((scsiCmd = AllocMem(sizeof(struct SCSICmd),MEMF_PUBLIC | MEMF_CLEAR))) {
-		if ((tocBuf = AllocMem(bufSize,MEMF_PUBLIC | MEMF_CLEAR))) {
-			scsiCmd->scsi_Data      = (UWORD *)tocBuf;
-			scsiCmd->scsi_Length    = bufSize;
-			scsiCmd->scsi_Flags     = SCSIF_READ;
-			scsiCmd->scsi_CmdLength = 10;
-			scsiCmd->scsi_Command   = cdb;
-
-			cdb[0] = SCSI_CMD_READ_TOC;
-			cdb[2] = 0;                  // Format: 0
-			cdb[6] = 1;                  // Track 1
-			cdb[7] = bufSize >> 8;
-			cdb[8] = bufSize & 0xFF;
-
-			ior->io_Data    = scsiCmd;
-			ior->io_Length  = sizeof(struct SCSICmd);
-			ior->io_Command = HD_SCSICMD;
-
-			for (int retry = 0; retry < 3; retry++) {
-				if ((err = DoIO((struct IORequest *)ior)) == 0 && scsiCmd->scsi_Status == 0)
-					break;
-			}
-
-			if (err == 0) {
-				if (tocBuf->firstTrack == 1 && tocBuf->td[0].trackNumber == 1) {
-					if (tocBuf->td[0].adrControl & 0x04) {	// Data Track?
-						ret = true;
-					}
-				}
-			}
-
-			FreeMem(tocBuf,bufSize);
-		}
-		FreeMem(scsiCmd,sizeof(struct SCSICmd));
-	}
-	return ret;
-}
-
 // CheckPVD
 // Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
-static BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
+BOOL CheckPVD(struct IOStdReq *ior)
 {
 	const char sys_id_1[] = "CDTV";
 	const char sys_id_2[] = "AMIGA BOOT";
@@ -1168,27 +1026,40 @@ static BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
 
 	if (!(buf = AllocMem(2048,MEMF_ANY|MEMF_CLEAR))) goto done;
 
+	ior->io_Command = TD_CHANGESTATE; // Check if there's a disc in the drive
+
+	if (err = DoIO((struct IORequest *)ior) || ior->io_Actual != 0) goto done;
+
 	char *id_string = buf + 1;
 	char *system_id = buf + 8;
 
 	ior->io_Command = CMD_READ;
 	ior->io_Data    = buf;
 	ior->io_Length  = 2048;
-	ior->io_Offset  = 32768; // Sector 16
 
-	for (int retry = 0; retry < 3; retry++) {
-		if ((err = DoIO((struct IORequest*)ior)) == 0) break;
-	}
+	for (int i=0; i < 32; i++) {
 
-	if (err == 0) {
+		ior->io_Offset = (i + 16) << 11;
+
+		for (int retry = 0; retry < 3; retry++) {
+			if ((err = DoIO((struct IORequest*)ior)) == 0) break;
+		}
+
+		if (ior->io_Actual < 2048) break;
+
 		// Check ISO ID String & for PVD Version & Type code
 		if ((strncmp(iso_id,id_string,5) == 0) && buf[0] == 1 && buf[6] == 1) {
-			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2)) == 0) {
-				ret = true; // CDTV or AMIGA BOOT
+			if (strncmp(sys_id_1,system_id,strlen(sys_id_1)) == 0 || strncmp(sys_id_2,system_id,strlen(sys_id_2) == 0)) {
+				ret = TRUE; // CDTV or AMIGA BOOT
+			} else {
+				ret = FALSE;
 			}
+			break;
+		} else {
+			continue;
 		}
-	}
 
+	}
 done:
 	if (buf)  FreeMem(buf,2048);
 	return ret;
@@ -1197,26 +1068,18 @@ done:
 // Search for Bootable CDROM
 static LONG ScanCDROM(struct MountData *md)
 {
-	struct ExecBase *SysBase = md->SysBase;
-	struct ExpansionBase *ExpansionBase = md->ExpansionBase;
 	struct FileSysEntry *fse=NULL;
 	char dosName[] = "\3CD0"; // BCPL string
 	LONG bootPri;
 
-	fse=find_filesystem(0x43443031, 0x43445644, md->SysBase);
+	fse=find_filesystem(0x43443031, 0x43445644);
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
 	}
 
-	if (!UnitIsReady((struct IOStdReq *)md->request))
-		return -1;
-
-	if (!isDataCD((struct IOStdReq *)md->request))
-		return -1;
-
 	// "CDTV" or "AMIGA BOOT"?
-	if (CheckPVD((struct IOStdReq *)md->request,SysBase)) {
+	if (CheckPVD((struct IOStdReq *)md->request)) {
 		bootPri = 2;  // Yes, give priority
 	} else {
 		bootPri = -1; // May not be a boot disk, lower priority than HDD
@@ -1299,7 +1162,7 @@ static LONG register_legacy(struct MountData *md, UBYTE bootable, UBYTE type, UL
 	printf("register_legacy: %d - %d  (%d/%d/%d - %d/%d/%d)\n",
 			pstart, pend, cs,h,s,ce,h,s);
 
-	fse=find_filesystem(0x46415401, 0, md->SysBase);
+	fse=find_filesystem(0x46415401, 0);
 	if (!fse) {
 		printf("Could not load filesystem\n");
 		return -1;
@@ -1491,8 +1354,9 @@ LONG MountDrive(struct MountStruct *ms)
 	struct MsgPort *port = NULL;
 	struct IOExtTD *request = NULL;
 	struct ExpansionBase *ExpansionBase;
-	struct DriveGeometry geom;
 	struct ExecBase *SysBase = ms->SysBase;
+	struct DriveGeometry geom;
+
 	dbg("Starting..\n");
 	ExpansionBase = (struct ExpansionBase*)OpenLibrary("expansion.library", 34);
 	if (ExpansionBase) {
@@ -1518,19 +1382,18 @@ next_lun:
 						dbg("OpenDevice('%s', %"PRId32", %p, 0)\n", ms->deviceName, unitNum, request);
 						UBYTE err = OpenDevice(ms->deviceName, unitNum, (struct IORequest*)request, 0);
 						if (err == 0) {
-							err = GetGeometry(request ,&geom);
+							err = dev_scsi_get_drivegeometry(request, &geom);
 							if (err == 0) {
 								ret = -1;
-								md->request    = request;
+								md->request = request;
 								md->devicename = ms->deviceName;
-								md->blocksize  = geom.dg_SectorSize;
-								md->unitnum    = unitNum;
+								md->blocksize = geom.dg_SectorSize;
+								md->unitnum = unitNum;
 
 								switch (geom.dg_DeviceType & SID_TYPE) {
 								case DG_CDROM:
 								case DG_WORM:
 								case DG_OPTICAL_DISK:
-#ifdef A4091
 									if (!asave->cdrom_boot) {
 										printf("CDROM boot disabled.\n");
 										break;
@@ -1539,9 +1402,6 @@ next_lun:
 									if (ret==-1)
 										ret = ScanCDROM(md);
 									break;
-#else
-									ret = ScanCDROM(md);
-#endif
 								case DG_DIRECT_ACCESS: // DISK
 									ret = ScanRDSK(md);
 #ifdef DISKLABELS
@@ -1568,12 +1428,10 @@ next_lun:
 								goto next_lun;
 							}
 
-#ifndef NO_RDBLAST
 							if (md->wasLastDev) {
 								dbg("RDBFF_LAST exit\n");
 								break;
 							}
-#endif
 						} else {
 							dbg("OpenDevice(%s,%"PRId32") failed: %"PRId32"\n", ms->deviceName, unitNum, (BYTE)err);
 						}
@@ -1593,7 +1451,6 @@ next_lun:
 	return ret;
 }
 
-#ifdef A4091
 int mount_drives(struct ConfigDev *cd, struct Library *dev)
 {
 	extern char real_device_name[];
@@ -1602,7 +1459,6 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	int i, j = 1, ret = 0;
 	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES);
 	UBYTE hostid = dip_switches & 7;
-	(void)dev;
 
 	/* Produce unitNum at runtime */
 	unitNum[0] = 7;
@@ -1628,4 +1484,3 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	list_filesystems();
 	return ret;
 }
-#endif

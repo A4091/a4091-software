@@ -603,8 +603,6 @@ siop_scsidone(struct siop_acb *acb, int stat)
 void
 siopabort(register struct siop_softc *sc, siop_regmap_p rp, const char *where)
 {
-    (void)rp;
-    (void)where;
 #ifdef fix_this
     int i;
 #endif
@@ -884,7 +882,7 @@ siopreset(struct siop_softc *sc)
             sc->sc_nexus->xs->error = XS_RESET;
             siop_scsidone(sc->sc_nexus, sc->sc_nexus->stat[0]);
         }
-        while ((acb = sc->nexus_list.tqh_first) != NULL) {
+        while ((acb = sc->nexus_list.tqh_first) > 0) {
             acb->xs->error = XS_RESET;
             siop_scsidone(acb, acb->stat[0]);
         }
@@ -1279,7 +1277,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     struct siop_acb *acb = sc->sc_nexus;
     int target = 0;
     int dfifo, dbc, sstat1;
-    (void)istat;
 
     dfifo = rp->siop_dfifo;
     dbc = rp->siop_dbc0;
@@ -1477,10 +1474,10 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             if (sstat1 & SIOP_SSTAT1_OLF)
                 ++adjust;
             acb->iob_curlen =
-                *ADDR32(__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
+                *((long *)__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
             acb->iob_curlen += adjust;
             acb->iob_curbuf =
-                *ADDR32(__UNVOLATILE(&rp->siop_dnad)) - adjust;
+                *((long *)__UNVOLATILE(&rp->siop_dnad)) - adjust;
 #ifdef DEBUG
             if (siop_debug & 0x100) {
                 int i;
@@ -1611,7 +1608,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         if (acb->iob_len && rp->siop_temp) {
             int n = rp->siop_temp - sc->sc_scriptspa;
 
-            if (acb->iob_curlen && acb->iob_curlen != (u_long)acb->ds.chain[0].datalen)
+            if (acb->iob_curlen && acb->iob_curlen != acb->ds.chain[0].datalen)
                 printf("%s: iob_curbuf/len already set? n %x iob %lx/%lx chain[0] %p/%lx\n",
                     device_xname(sc->sc_dev), n, acb->iob_curbuf, acb->iob_curlen,
                     acb->ds.chain[0].databuf, acb->ds.chain[0].datalen);
@@ -1656,8 +1653,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             for (i = 0; i < DMAMAXIO; ++i) {
                 if (acb->ds.chain[i].datalen == 0)
                     break;
-                if (acb->iob_curbuf >= (u_long)acb->ds.chain[i].databuf &&
-                    acb->iob_curbuf < (u_long)(acb->ds.chain[i].databuf +
+                if (acb->iob_curbuf >= (long)acb->ds.chain[i].databuf &&
+                    acb->iob_curbuf < (long)(acb->ds.chain[i].databuf +
                     acb->ds.chain[i].datalen))
                     break;
             }

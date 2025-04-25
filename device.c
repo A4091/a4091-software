@@ -49,8 +49,7 @@ static BPTR saved_seg_list;
  * followed by a Resident structure.
  * ------------------------------------------------------------
  */
-int __attribute__((no_reorder)) _start(void);
-int __attribute__((no_reorder)) _start(void)
+int __attribute__((no_reorder)) _start()
 {
     return (-1);
 }
@@ -224,7 +223,7 @@ drv_expunge(struct Library *dev asm("a6"))
  *          to be single-threaded; only one task will execute Open()
  *          at a time.
  */
-static void __used __saveds
+void __used __saveds
 drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
          uint scsi_unit asm("d0"), ULONG flags asm("d1"))
 {
@@ -288,8 +287,6 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __used __saveds
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-    (void)dev;
-
     /* These commands are forced to always execute in immediate mode */
     switch (ior->io_Command) {
         case TD_REMCHANGEINT:
@@ -328,9 +325,6 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 static ULONG __used __saveds
 drv_abort_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
-    (void)dev;
-    (void)ior;
-
     printf("abort_io(%d)\n", ior->io_Command);
 
     return (IOERR_NOCMD);

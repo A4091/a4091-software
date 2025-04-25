@@ -8,13 +8,10 @@
 #include <exec/execbase.h>
 #include <inline/exec.h>
 
-
-typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
-
 #define BIT(x)        (1 << (x))
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
 #define ADDR8(x)      (volatile uint8_t *)(x)
-#define ADDR32(x)     (volatile aliased_uint32_t *)(x)
+#define ADDR32(x)     (volatile uint32_t *)(x)
 
 #include <sys/param.h>
 
@@ -35,8 +32,8 @@ int irq_and_timer_handler(void);
 void *device_private(device_t dev);
 const char *device_xname(void *dev);
 
-int bsd_splbio(void);
-void bsd_splx(int ilevel);
+int bsd_splbio();
+void bsd_splx();
 
 #define hz TICKS_PER_SECOND
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)

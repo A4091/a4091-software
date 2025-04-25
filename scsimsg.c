@@ -12,7 +12,7 @@
 int
 dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq)
 {
-	struct scsipi_inquiry cmd;
+	scsi_generic_t cmd;
 	struct SCSICmd scmd;
 	uint lun = unit / 10;
 	BYTE ret;
@@ -21,8 +21,8 @@ dev_scsi_inquiry(struct IOExtTD *tio, uint unit, scsi_inquiry_data_t *inq)
 
 	memset(&cmd, 0, sizeof (cmd));
 	cmd.opcode = INQUIRY;
-	cmd.byte2 = lun << 5;
-	cmd.length = sizeof (scsi_inquiry_data_t);
+	cmd.bytes[0] = lun << 5;
+	cmd.bytes[3] = sizeof (scsi_inquiry_data_t);
 
 	memset(&scmd, 0, sizeof (scmd));
 	scmd.scsi_Data = (UWORD *) inq;
