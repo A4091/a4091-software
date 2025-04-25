@@ -82,7 +82,9 @@
 #define dbg
 #endif
 
+#ifndef printf
 #define printf(...)
+#endif
 #define MAX_BLOCKSIZE 2048
 #define LSEG_DATASIZE (512 / 4 - 5)
 
@@ -139,6 +141,9 @@ struct __attribute__((packed)) SCSI_CD_TOC {
     struct SCSI_TOC_TRACK_DESCRIPTOR td[SCSI_CD_MAX_TRACKS];
 };
 
+#ifdef A4091
+#define GetGeometry dev_scsi_get_drivegeometry
+#else
 // Get Block size of unit
 BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
@@ -149,6 +154,7 @@ BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
 
 	return DoIO((struct IORequest *)req);
 }
+#endif
 
 void W_NewList(struct List *new_list) {
     new_list->lh_Head = (struct Node *)&new_list->lh_Tail;
@@ -1507,11 +1513,7 @@ next_lun:
 						dbg("OpenDevice('%s', %"PRId32", %p, 0)\n", ms->deviceName, unitNum, request);
 						UBYTE err = OpenDevice(ms->deviceName, unitNum, (struct IORequest*)request, 0);
 						if (err == 0) {
-#ifdef A4091
-							err = dev_scsi_get_drivegeometry(request, &geom);
-#else
 							err = GetGeometry(request ,&geom);
-#endif
 							if (err == 0) {
 								ret = -1;
 								md->request    = request;
