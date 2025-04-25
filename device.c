@@ -287,6 +287,8 @@ drv_close(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"))
 static void __used __saveds
 drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
+    (void)dev;
+
     /* These commands are forced to always execute in immediate mode */
     switch (ior->io_Command) {
         case TD_REMCHANGEINT:
@@ -325,6 +327,9 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 static ULONG __used __saveds
 drv_abort_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 {
+    (void)dev;
+    (void)ior;
+
     printf("abort_io(%d)\n", ior->io_Command);
 
     return (IOERR_NOCMD);

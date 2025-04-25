@@ -119,13 +119,13 @@ irq_handler(register a4091_save_t *save asm("a1"))
     return (irq_handler_core(save));
 }
 
-/* CDH: HACK */
 void *
 device_private(device_t dev)
 {
+    (void)dev;
+    /* CDH: HACK - This should be per device but it is global */
     return (asave->as_device_private);
 }
-/* CDH: HACK */
 
 static int
 a4091_add_local_irq_handler(void)
@@ -441,6 +441,7 @@ scsipi_alloc_periph(int flags)
 {
     struct scsipi_periph *periph;
     uint i;
+    (void)flags;
 
     periph = AllocMem(sizeof (*periph), MEMF_PUBLIC | MEMF_CLEAR);
     if (periph == NULL)
@@ -483,6 +484,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     int lun    = (scsi_target / 10) % 10;
     int rc;
     int failed = 0;
+    (void)flags;
 
     if (scsi_target >= 100)
         return (ERROR_OPEN_FAIL);

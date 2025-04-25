@@ -259,6 +259,7 @@ static uint32_t
 scsipi_chan_periph_hash(uint64_t t, uint64_t l)
 {
 #ifdef PORT_AMIGA
+	(void)t; (void)l;
         return (0);
 #else
 	uint32_t hash;
@@ -297,7 +298,7 @@ void
 scsipi_remove_periph(struct scsipi_channel *chan,
     struct scsipi_periph *periph)
 {
-
+	(void)chan;
 	LIST_REMOVE(periph, periph_hash);
 }
 
@@ -1439,6 +1440,8 @@ scsipi_inquiry3_ok(const struct scsipi_inquiry_data *ib)
 		if (MATCH(vendor) && MATCH(product) && MATCH(revision))
 			return 0;
 	}
+#else
+	(void)ib;
 #endif
 	return 1;
 }

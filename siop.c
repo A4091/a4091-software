@@ -603,6 +603,8 @@ siop_scsidone(struct siop_acb *acb, int stat)
 void
 siopabort(register struct siop_softc *sc, siop_regmap_p rp, const char *where)
 {
+    (void)rp;
+    (void)where;
 #ifdef fix_this
     int i;
 #endif
@@ -1277,6 +1279,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     struct siop_acb *acb = sc->sc_nexus;
     int target = 0;
     int dfifo, dbc, sstat1;
+    (void)istat;
 
     dfifo = rp->siop_dfifo;
     dbc = rp->siop_dbc0;
