@@ -62,7 +62,7 @@
 #include "legacy.h"
 #endif
 
-#ifndef A4091
+#ifndef SID_TYPE
 #define SID_TYPE 0x1F
 #endif
 
@@ -145,7 +145,8 @@ struct __attribute__((packed)) SCSI_CD_TOC {
 #define GetGeometry dev_scsi_get_drivegeometry
 #else
 // Get Block size of unit
-BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
+BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry)
+{
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
 
 	req->iotd_Req.io_Command = TD_GETGEOMETRY;
@@ -156,7 +157,8 @@ BYTE GetGeometry(struct IOExtTD *req, struct DriveGeometry *geometry) {
 }
 #endif
 
-void W_NewList(struct List *new_list) {
+static void W_NewList(struct List *new_list)
+{
     new_list->lh_Head = (struct Node *)&new_list->lh_Tail;
     new_list->lh_Tail = 0;
     new_list->lh_TailPred = (struct Node *)new_list;
@@ -240,6 +242,7 @@ static UWORD checksum(UBYTE *buf, struct MountData *md)
 {
 	ULONG chk = 0;
 	ULONG num_longs;
+	(void)md;
 
 	num_longs = (buf[4] << 24) | (buf[5] << 16) | (buf[6] << 8) | (buf[7]);
 	if (num_longs > 65535)
@@ -387,8 +390,8 @@ static APTR fsrelocate(struct MountData *md)
 	ULONG data;
 	struct RelocHunk *relocHunks;
 	LONG firstHunk, lastHunk;
-	LONG totalHunks;
-	WORD hunkCnt;
+	ULONG totalHunks;
+	UWORD hunkCnt;
 	WORD ret = 0;
 	APTR firstProcessedHunk = NULL;
 
@@ -1072,7 +1075,8 @@ static void list_filesystems(void)
 }
 
 // Check if there is a disc inserted
-bool UnitIsReady(struct IOStdReq *req) {
+static bool UnitIsReady(struct IOStdReq *req)
+{
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
 	BYTE err;
 
@@ -1097,7 +1101,8 @@ bool UnitIsReady(struct IOStdReq *req) {
 
 
 // Check if this is a data disc by reading the TOC and checking that track 1 is a data track.
-bool isDataCD(struct IOStdReq *ior) {
+static bool isDataCD(struct IOStdReq *ior)
+{
 	struct ExecBase *SysBase = *(struct ExecBase **)4UL;
 	bool ret = false;
 
@@ -1151,7 +1156,7 @@ bool isDataCD(struct IOStdReq *ior) {
 
 // CheckPVD
 // Check for "CDTV" or "AMIGA BOOT" as the System ID in the PVD
-BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
+static BOOL CheckPVD(struct IOStdReq *ior, struct ExecBase *SysBase)
 {
 	const char sys_id_1[] = "CDTV";
 	const char sys_id_2[] = "AMIGA BOOT";
@@ -1597,6 +1602,7 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	int i, j = 1, ret = 0;
 	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES);
 	UBYTE hostid = dip_switches & 7;
+	(void)dev;
 
 	/* Produce unitNum at runtime */
 	unitNum[0] = 7;
