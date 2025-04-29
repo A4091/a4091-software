@@ -217,6 +217,13 @@ static int
 calc_blkshift(uint32_t blksize)
 {
     uint shift = 0;
+
+    if (blksize == 0) {
+        // Log2(0) is undefined. This is an invalid input for block size shift.
+        // Return -1 to indicate an error or invalid shift.
+        return -1;
+    }
+
     for (shift = 0; blksize != 0; shift++)
         blksize >>= 1;
 
