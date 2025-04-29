@@ -235,52 +235,63 @@ int write_file(char *filename, struct file rom)
 	return 0;
 }
 
-int replace_file(struct file *rom, int num, struct file *file, int dostype)
+int replace_file(struct file *rom, int num, struct file *file_to_insert, int dostype)
 {
 	struct rom_inventory *inv = (struct rom_inventory *)(rom->addr + rom->len -
 			sizeof(struct rom_inventory));
 
 	int new_space = 0;
-	struct file filesystem1 = {NULL,0},
-		    filesystem2 = {NULL,0},
-		    device = {NULL,0};
+	struct file local_filesystem1 = {NULL,0},
+		    local_filesystem2 = {NULL,0},
+		    device_content    = {NULL,0};
+
+	// Flags to track which local struct file's .addr was allocated by file_backup
+	int device_content_is_backup = 0;
+	int filesystem1_is_backup = 0;
+	int filesystem2_is_backup = 0;
 
 	switch (num) {
 	case DEVICE:
-		new_space = ntohl(inv->device_offset) + file->len + ntohl(inv->filesystem1_len) + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
+		new_space = ntohl(inv->device_offset) + file_to_insert->len + ntohl(inv->filesystem1_len) + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
 
-		device = *file;
+		device_content = *file_to_insert;
 
-		filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
-		filesystem1.len = ntohl(inv->filesystem1_len);
+		local_filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
+		local_filesystem1.len = ntohl(inv->filesystem1_len);
+		if (local_filesystem1.addr) filesystem1_is_backup = 1;
 
-		filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
-		filesystem2.len = ntohl(inv->filesystem2_len);
+		local_filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
+		local_filesystem2.len = ntohl(inv->filesystem2_len);
+		if (local_filesystem2.addr) filesystem2_is_backup = 1;
 		break;
 	case FILESYSTEM1:
-		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + file->len + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
+		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + file_to_insert->len + ntohl(inv->filesystem2_len) + sizeof(struct rom_inventory);
 
-		device.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
-		device.len = ntohl(inv->device_len);
+		device_content.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
+		device_content.len = ntohl(inv->device_len);
+		if (device_content.addr) device_content_is_backup = 1;
 
-		filesystem1 = *file;
+		local_filesystem1 = *file_to_insert;
 
-		filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
-		filesystem2.len = ntohl(inv->filesystem2_len);
+		local_filesystem2.addr = file_backup(rom->addr+ntohl(inv->filesystem2_offset), ntohl(inv->filesystem2_len));
+		local_filesystem2.len = ntohl(inv->filesystem2_len);
+		if (local_filesystem2.addr) filesystem2_is_backup = 1;
 
 		inv->filesystem1_dostype = htonl(dostype);
 
 		break;
 	case FILESYSTEM2:
-		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + ntohl(inv->filesystem1_len) + file->len + sizeof(struct rom_inventory);
+		new_space = ntohl(inv->device_offset) + ntohl(inv->device_len) + ntohl(inv->filesystem1_len) + file_to_insert->len + sizeof(struct rom_inventory);
 
-		device.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
-		device.len = ntohl(inv->device_len);
+		device_content.addr = file_backup(rom->addr+ntohl(inv->device_offset), ntohl(inv->device_len));
+		device_content.len = ntohl(inv->device_len);
+		if (device_content.addr) device_content_is_backup = 1;
 
-		filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
-		filesystem1.len = ntohl(inv->filesystem1_len);
+		local_filesystem1.addr = file_backup(rom->addr+ntohl(inv->filesystem1_offset), ntohl(inv->filesystem1_len));
+		local_filesystem1.len = ntohl(inv->filesystem1_len);
+		if (local_filesystem1.addr) filesystem1_is_backup = 1;
 
-		filesystem2 = *file;
+		local_filesystem2 = *file_to_insert;
 
 		inv->filesystem2_dostype = htonl(dostype);
 
@@ -290,31 +301,47 @@ int replace_file(struct file *rom, int num, struct file *file, int dostype)
 	if (new_space > rom->len) {
 		printf("File can not fit into image (%zd bytes too big)\n",
 				new_space - rom->len);
+		// Free any allocated backups before returning
+		if (device_content_is_backup && device_content.addr) free(device_content.addr);
+		if (filesystem1_is_backup && local_filesystem1.addr) free(local_filesystem1.addr);
+		if (filesystem2_is_backup && local_filesystem2.addr) free(local_filesystem2.addr);
 		return -1;
 	}
 
-	inv->device_len = 0;
-	inv->filesystem1_offset = 0;
-	inv->filesystem1_len = 0;
-	inv->filesystem2_offset = 0;
-	inv->filesystem2_len = 0;
-
 	/* Write device driver back */
+	// First, clear the area where content will be placed (or the free space after the last item)
 	memset(rom->addr + ntohl(inv->device_offset), 0xff, rom->len - ntohl(inv->device_offset) - sizeof(struct rom_inventory));
-	memcpy(rom->addr + ntohl(inv->device_offset), device.addr, device.len);
-	inv->device_len = htonl(device.len);
+	if (device_content.addr && device_content.len > 0) { // Ensure there's content to copy
+		memcpy(rom->addr + ntohl(inv->device_offset), device_content.addr, device_content.len);
+	}
+	inv->device_len = htonl(device_content.len); // This correctly reflects the new device length or existing if not replaced
 
-	if (filesystem1.len) {
-		inv->filesystem1_offset = htonl(ntohl(inv->device_offset)+ntohl(inv->device_len));
-		inv->filesystem1_len =htonl(filesystem1.len);
-		memcpy(rom->addr+ntohl(inv->filesystem1_offset), filesystem1.addr, filesystem1.len);
+	uint32_t current_offset = ntohl(inv->device_offset) + device_content.len;
+
+	if (local_filesystem1.len > 0 && local_filesystem1.addr) { // Ensure there's content to copy
+		inv->filesystem1_offset = htonl(current_offset);
+		inv->filesystem1_len = htonl(local_filesystem1.len);
+		memcpy(rom->addr + current_offset, local_filesystem1.addr, local_filesystem1.len);
+		current_offset += local_filesystem1.len;
+	} else {
+		inv->filesystem1_offset = 0; // Or an offset indicating no file, e.g., current_offset if it's 0 length
+		inv->filesystem1_len = 0;
 	}
 
-	if (filesystem2.len) {
-		inv->filesystem2_offset = htonl(ntohl(inv->device_offset)+ntohl(inv->device_len)+ntohl(inv->filesystem1_len));
-		inv->filesystem2_len = htonl(filesystem2.len);
-		memcpy(rom->addr+ntohl(inv->filesystem2_offset), filesystem2.addr, filesystem2.len);
+	if (local_filesystem2.len > 0 && local_filesystem2.addr) { // Ensure there's content to copy
+		inv->filesystem2_offset = htonl(current_offset);
+		inv->filesystem2_len = htonl(local_filesystem2.len);
+		memcpy(rom->addr + current_offset, local_filesystem2.addr, local_filesystem2.len);
+		// current_offset += local_filesystem2.len; // Not needed after this
+	} else {
+		inv->filesystem2_offset = 0;
+		inv->filesystem2_len = 0;
 	}
+
+	// Free any allocated backups
+	if (device_content_is_backup && device_content.addr) free(device_content.addr);
+	if (filesystem1_is_backup && local_filesystem1.addr) free(local_filesystem1.addr);
+	if (filesystem2_is_backup && local_filesystem2.addr) free(local_filesystem2.addr);
 
 	return 0;
 }
