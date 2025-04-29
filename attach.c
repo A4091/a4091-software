@@ -284,7 +284,7 @@ a4091_validate(uint32_t dev_base)
     for (rot = 0; rot < 32; rot++, patt = next) {
         uint32_t got_scratch;
         uint32_t got_temp;
-        next = (patt << 1) | (patt >> 31);
+        next = ((patt & 0x7fffffff) << 1) | (patt >> 31);
         rp->siop_scratch2 = patt;
         rp->siop_temp2 = next;
 
