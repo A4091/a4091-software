@@ -2351,7 +2351,7 @@ test_register_access(uint extended)
             uint32_t got_temp;
             uint32_t diff_s;
             uint32_t diff_t;
-            next = (patt << 1) | (patt >> 31);
+            next = ((patt & 0x7fffffff) << 1) | (patt >> 31);
             if ((mode & BIT(0)) == 0) {
                 /* mode=0 and mode=2 */
                 set_ncrreg32(REG_SCRATCH, patt);
