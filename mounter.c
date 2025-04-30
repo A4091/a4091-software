@@ -600,7 +600,7 @@ end:
 static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG dostype, ULONG version, BOOL newOnly, struct MountData *md)
 {
 	struct ExecBase *SysBase = md->SysBase;
-	struct FileSysEntry *fse = NULL;
+	struct FileSysEntry *result_fse = NULL;
 	const UBYTE *creator = md->creator ? md->creator : md->zero;
 	const char resourceName[] = "FileSystem.resource";
 
@@ -608,73 +608,97 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 	struct FileSysResource *fsr = OpenResource(FSRNAME);
 	if (!fsr) {
 		// FileSystem.resource didn't exist (KS 1.3), create it.
-		fsr = AllocMem(sizeof(struct FileSysResource) + strlen(resourceName) + 1 + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
+		fsr = AllocMem(sizeof(struct FileSysResource) + strlen(resourceName) + 1 + strlen((const char *)creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
 		if (fsr) {
-			char *FsResName  = (UBYTE *)(fsr + 1);
-			char *CreatorStr = (UBYTE *)FsResName + (strlen(resourceName) + 1);
+			char *FsResName  = (char *)(fsr + 1);
+			char *CreatorStr = (char *)FsResName + (strlen(resourceName) + 1);
 			W_NewList(&fsr->fsr_FileSysEntries);
 			fsr->fsr_Node.ln_Type = NT_RESOURCE;
 			strcpy(FsResName, resourceName);
 			fsr->fsr_Node.ln_Name = FsResName;
-			strcpy(CreatorStr, creator);
+			strcpy(CreatorStr, (const char *)creator);
 			fsr->fsr_Creator = CreatorStr;
 			AddTail(&SysBase->ResourceList, &fsr->fsr_Node);
 		}
 		dbg("FileSystem.resource created %p\n", fsr);
 	}
+
 	if (fsr) {
-		fse = (struct FileSysEntry*)fsr->fsr_FileSysEntries.lh_Head;
-		while (fse->fse_Node.ln_Succ)  {
-			if (fse->fse_DosType == dostype) {
-				if (fse->fse_Version >= version) {
-					// FileSystem.resource filesystem is same or newer, don't update
-					if (newOnly) {
-						dbg("FileSystem.resource scan: %p dostype %08"PRIx32" found, FSRES version %08"PRIx32" >= FSHD version %08"PRIx32"\n", fse, dostype, fse->fse_Version, version);
-						fse = NULL;
-					}
-					goto end;
+		struct Node *node;
+		struct FileSysEntry *found_existing_fse = NULL;
+
+		// Correctly iterate through the list to find if an entry for 'dostype' already exists
+		for (node = fsr->fsr_FileSysEntries.lh_Head;
+			 node->ln_Succ != NULL; // Standard AmigaOS list traversal: loop while node is not the tail sentinel
+			 node = node->ln_Succ) {
+			struct FileSysEntry *current_entry = (struct FileSysEntry *)node;
+			if (current_entry->fse_DosType == dostype) {
+				found_existing_fse = current_entry; // Found a match by DosType
+				break; // Process this first match
+			}
+		}
+
+		if (found_existing_fse) {
+			// An entry with the same DosType was found
+			if (found_existing_fse->fse_Version >= version) {
+				if (newOnly) {
+					// Existing entry is suitable, and we only want to add a new one if necessary.
+					dbg("FileSystem.resource scan: Existing up-to-date entry 0x%p for 0x%08lX found. Version 0x%08lX >= requested 0x%08lX. No action needed.\n",
+						found_existing_fse, dostype, found_existing_fse->fse_Version, version);
+					Permit();
+					return NULL; // Indicate no new/updated fse needed from this call
+				} else {
+					// newOnly is false. We found an existing entry.
+					result_fse = found_existing_fse;
 				}
 			}
-			fse = (struct FileSysEntry*)fse->fse_Node.ln_Succ;
 		}
-		if (fse && fse->fse_DosType != dostype)
-			fse = NULL;
+		// If found_existing_fse is NULL, no entry for this dostype was found.
+
+		// If fshb is provided (i.e., we have a FileSystem definition from RDB/disk)
+		// AND newOnly is true (caller wants to add this if it's new or an upgrade)
+		// AND we haven't already decided to return an existing (up-to-date, !newOnly) entry:
 		if (fshb && newOnly) {
-			fse = AllocMem(sizeof(struct FileSysEntry) + strlen(creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
-			if (fse) {
-				// Process patchflags
-				ULONG patchFlags = fshb->fhb_PatchFlags;
-				if (patchFlags & 0x0001)
-					fse->fse_Type = fshb->fhb_Type;
-				if (patchFlags & 0x0002)
-					fse->fse_Task = fshb->fhb_Task;
-				if (patchFlags & 0x0004)
-					fse->fse_Lock = fshb->fhb_Lock;
-				if (patchFlags & 0x0008)
-					fse->fse_Handler = fshb->fhb_Handler;
-				if (patchFlags & 0x0010)
-					fse->fse_StackSize = fshb->fhb_StackSize;
-				if (patchFlags & 0x0020)
-					fse->fse_Priority = fshb->fhb_Priority;
-				if (patchFlags & 0x0040)
-					fse->fse_Startup = fshb->fhb_Startup;
-				if (patchFlags & 0x0080)
-					fse->fse_SegList = fshb->fhb_SegListBlocks;
-				if (patchFlags & 0x0100)
-					fse->fse_GlobalVec = fshb->fhb_GlobalVec;
-				fse->fse_DosType = fshb->fhb_DosType;
-				fse->fse_Version = fshb->fhb_Version;
-				fse->fse_PatchFlags = fshb->fhb_PatchFlags;
-				strcpy((UBYTE*)(fse + 1), creator);
-				fse->fse_Node.ln_Name = (UBYTE*)(fse + 1);
+			if (!(found_existing_fse && found_existing_fse->fse_Version >= version)) {
+				// Either no existing FSE for this DosType, or existing one is older.
+				// So, we create a new one based on fshb.
+				result_fse = AllocMem(sizeof(struct FileSysEntry) + strlen((const char *)creator) + 1, MEMF_PUBLIC | MEMF_CLEAR);
+				if (result_fse) {
+					ULONG patchFlags = fshb->fhb_PatchFlags;
+					if (patchFlags & 0x0001)
+						result_fse->fse_Type = fshb->fhb_Type;
+					if (patchFlags & 0x0002)
+						result_fse->fse_Task = fshb->fhb_Task;
+					if (patchFlags & 0x0004)
+						result_fse->fse_Lock = fshb->fhb_Lock;
+					if (patchFlags & 0x0008)
+						result_fse->fse_Handler = fshb->fhb_Handler;
+					if (patchFlags & 0x0010)
+						result_fse->fse_StackSize = fshb->fhb_StackSize;
+					if (patchFlags & 0x0020)
+						result_fse->fse_Priority = fshb->fhb_Priority;
+					if (patchFlags & 0x0040)
+						result_fse->fse_Startup = fshb->fhb_Startup;
+					if (patchFlags & 0x0080)
+						result_fse->fse_SegList = fshb->fhb_SegListBlocks;
+					if (patchFlags & 0x0100)
+						result_fse->fse_GlobalVec = fshb->fhb_GlobalVec;
+					result_fse->fse_DosType = fshb->fhb_DosType;
+					result_fse->fse_Version = fshb->fhb_Version;
+					result_fse->fse_PatchFlags = fshb->fhb_PatchFlags;
+					strcpy((char *)(result_fse + 1), (const char *)creator);
+					result_fse->fse_Node.ln_Name = (UBYTE *)(result_fse + 1);
+					dbg("FileSystem.resource scan: new FileSysEntry 0x%p created for 0x%08lX based on fshb.\n", result_fse, dostype);
+				}
 			}
-			dbg("FileSystem.resource scan: dostype %08"PRIx32" not found or old version: created new\n", dostype);
+		} else if (fshb && !newOnly && found_existing_fse) {
+			result_fse = found_existing_fse;
 		}
 	}
-end:
 	Permit();
-	return fse;
+	return result_fse;
 }
+
 // Add new FileSysEntry to FileSystem.resource or free it if filesystem load failed.
 static void FSHDAdd(struct FileSysEntry *fse, struct MountData *md)
 {
