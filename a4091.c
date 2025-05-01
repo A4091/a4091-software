@@ -3073,7 +3073,7 @@ test_scsi_pins(uint extended)
         for (bit = -1; bit < 8; bit++) {
             uint    cin;
             uint    din;
-            uint    dout = BIT(bit);
+            uint    dout = (bit == -1) ? 0 : BIT(bit);
             uint    diff;
             uint8_t parity_exp;
 

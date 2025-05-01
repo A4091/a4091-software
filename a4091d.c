@@ -1363,8 +1363,9 @@ decode_scsi_sense(const char *indent, struct scsi_sense_data *ssd)
         len = SSD_ADD_BYTES_LIM(ssd);
         if (len > 0) {
             printf("%s  extra ", indent);
+            uint8_t *additional_sense_ptr = (uint8_t *)ssd->csi;
             for (count = 0; count < len; count++)
-                printf(" 0x%x", ssd->csi[count]);
+                printf(" 0x%x", additional_sense_ptr[count]);
             printf("\n");
         }
     }
