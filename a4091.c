@@ -3148,7 +3148,7 @@ test_scsi_pins(uint extended)
         for (bit = -1; bit < 8; bit++) {
             uint    cin;
             uint8_t din;
-            uint8_t cout = BIT(bit);
+            uint8_t cout = (bit == -1) ? 0 : BIT(bit);
             uint8_t diff;
 
             /*
