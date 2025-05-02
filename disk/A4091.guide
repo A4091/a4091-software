@@ -23,7 +23,7 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.2                               a4091.device Version 42.30
+Guide Version 1.2                               a4091.device Version 42.31
 
 
      @{"License      : Legal restrictions                                  " link License}
@@ -398,6 +398,16 @@ Super Buster    :       The custom chip that handles translation between
 @{B}Version History@{UB}
 
 Full history available at https://github.com/A4091/a4091-software/commits/main
+
+Release v42.31:
+
+a4091.rom
+ o) mounter: Fix bug in filesystem.resource parsing
+ o) bootmenu now can be invoked with DEL key
+ o) romfile: Don't add duplicate filesystems to filesystem.resource
+ o) siop_poll(): Turn interrupts on before exiting to prevent performance degradation
+ o) Properly count CDROM drives
+ o) Allow booting from WORM and optical disks
 
 Release v42.30:
 
