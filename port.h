@@ -7,7 +7,8 @@
 #include <proto/exec.h>
 #include <exec/execbase.h>
 #include <inline/exec.h>
-
+#include <exec/memory.h>
+#include <clib/exec_protos.h>
 
 typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 
@@ -50,13 +51,8 @@ void delay(int usecs);
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
 
-#define memcpy USE_CopyMem
-
-// void *local_memcpy(void *dest, const void *src, size_t n);
-// void *local_memset(void *dest, int value, size_t len);
-// #define memcpy local_memcpy
-// #define memset local_memset
-// #define memcpy(dst, src, len) CopyMem(src, dst, len)
+#define memcpy(dst, src, len) CopyMem(src, dst, len)
+// SetMem needs utility.library
 // #define memset(dst, value, len) SetMem(dst, value, len)
 
 #define SDT_PROBE1(v,w,x,y,z)

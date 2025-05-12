@@ -368,11 +368,7 @@ scsipi_make_xs_internal(struct scsipi_periph *periph,
      * Fill out the scsipi_xfer structure.  We don't know whose context
      * the cmd is in, so copy it.
      */
-#ifdef PORT_AMIGA
-    CopyMem(cmd, &xs->cmdstore, cmdlen);
-#else
     memcpy(&xs->cmdstore, cmd, cmdlen);
-#endif
     xs->cmd = &xs->cmdstore;
     xs->cmdlen = cmdlen;
     xs->data = data_addr;
@@ -1522,11 +1518,7 @@ printf("inquire: error=%d\n", error);
 		inqbuf->response_format = SID_FORMAT_SCSI1;
 		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
 		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
-#ifdef PORT_AMIGA
-		CopyMem("ADAPTEC ACB-4000            ", inqbuf->vendor, 28);
-#else
 		memcpy(inqbuf->vendor, "ADAPTEC ACB-4000            ", 28);
-#endif
 		error = 0;
 	}
 
@@ -1546,11 +1538,7 @@ printf("inquire: error=%d\n", error);
 		inqbuf->dev_qual2 = SID_REMOVABLE;
 		inqbuf->additional_length = SCSIPI_INQUIRY_LENGTH_SCSI2 - 4;
 		inqbuf->flags1 = inqbuf->flags2 = inqbuf->flags3 = 0;
-#ifdef PORT_AMIGA
-		CopyMem("EMULEX  MT-02 QIC           ", inqbuf->vendor, 28);
-#else
 		memcpy(inqbuf->vendor, "EMULEX  MT-02 QIC           ", 28);
-#endif
 	}
 #endif /* SCSI_OLD_NOINQUIRY */
 
