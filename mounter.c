@@ -84,7 +84,7 @@
 #define dbg
 #endif
 
-#ifndef printf
+#ifndef A4091
 #define printf(...)
 #endif
 #define MAX_BLOCKSIZE 2048
@@ -643,7 +643,7 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 			if (found_existing_fse->fse_Version >= version) {
 				if (newOnly) {
 					// Existing entry is suitable, and we only want to add a new one if necessary.
-					dbg("FileSystem.resource scan: Existing up-to-date entry 0x%p for 0x%08lX found. Version 0x%08lX >= requested 0x%08lX. No action needed.\n",
+					dbg("FileSystem.resource scan: Existing up-to-date entry 0x%p for 0x%08X found. Version 0x%08X >= requested 0x%08X. No action needed.\n",
 						found_existing_fse, dostype, found_existing_fse->fse_Version, version);
 					Permit();
 					return NULL; // Indicate no new/updated fse needed from this call
@@ -688,7 +688,7 @@ static struct FileSysEntry *FSHDProcess(struct FileSysHeaderBlock *fshb, ULONG d
 					result_fse->fse_PatchFlags = fshb->fhb_PatchFlags;
 					strcpy((char *)(result_fse + 1), (const char *)creator);
 					result_fse->fse_Node.ln_Name = (UBYTE *)(result_fse + 1);
-					dbg("FileSystem.resource scan: new FileSysEntry 0x%p created for 0x%08lX based on fshb.\n", result_fse, dostype);
+					dbg("FileSystem.resource scan: new FileSysEntry 0x%p created for 0x%08X based on fshb.\n", result_fse, dostype);
 				}
 			}
 		} else if (fshb && !newOnly && found_existing_fse) {
