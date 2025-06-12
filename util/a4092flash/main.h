@@ -40,8 +40,6 @@ void *UnLockDosList(ULONG);
 struct scsiBoard {
   struct ConfigDev *cd;
   void * volatile flashbase;
-  bool rebootRequired;
-  void (*writeEnable)(struct scsiBoard *);
 };
 
 struct dosDev {

@@ -18,14 +18,12 @@
 #ifndef FLASH_CONSTANTS_H
 #define FLASH_CONSTANTS_H
 
-// SST 39SF010
-#define FLASH_MANUF      0xBF
-#define FLASH_DEV        0xB5
+// Maximum flash size
 #define FLASH_SIZE       0x20000
 
-// Command addresses left-shifted because Flash A0 = CPU A1
-#define ADDR_CMD_STEP_1  (0x5555 << 1)
-#define ADDR_CMD_STEP_2  (0x2AAA << 1)
+// Command addresses
+#define ADDR_CMD_STEP_1  0x5555
+#define ADDR_CMD_STEP_2  0x2AAA
 
 #define CMD_SDP_STEP_1   0xAA
 #define CMD_SDP_STEP_2   0x55

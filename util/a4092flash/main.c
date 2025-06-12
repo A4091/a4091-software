@@ -35,10 +35,6 @@
 
 #define PROD_ID_A4092  84
 
-#define SERIAL_LIV2  0x4C495632
-
-#define ROMSIZE 32768
-
 const char ver[] = VERSION_STRING;
 
 struct Library *DosBase;
@@ -46,8 +42,6 @@ struct ExecBase *SysBase;
 struct ExpansionBase *ExpansionBase = NULL;
 struct Config *config;
 bool devsInhibited = false;
-
-void bankSelect(UBYTE bank, struct scsiBoard *board);
 
 /**
  * _ColdReboot()
@@ -75,7 +69,6 @@ static void _ColdReboot() {
  * inhibitDosDevs
  * 
  * inhibit/uninhibit all drives
- * Some boards lock out IDE when flash mode is enabled
  * Send an ACTION_INHIBIT packet to all devices to flush the buffers to disk first
  * 
  * @param inhibit (bool) True: inhibit, False: uninhibit 
@@ -188,9 +181,6 @@ bool inhibitDosDevs(bool inhibit) {
  * @param board pointer to the board struct
  */
 static void setup_a4092_board(struct scsiBoard *board) {
-  board->writeEnable      = NULL;
-  board->rebootRequired   = false;
-
   board->flashbase = board->cd->cd_BoardAddr;
 }
 
@@ -253,13 +243,13 @@ int main(int argc, char *argv[])
         goto exit;
       }
 
-      if (romSize > 32768) {
+      if (romSize > 2048*1024) {
         printf("ROM file too large.\n");
         rc = 5;
         goto exit;
       }
 
-      if (romSize < 4096) {
+      if (romSize < 64*1024) {
         printf("ROM file too small.\n");
         rc = 5;
         goto exit;
@@ -317,12 +307,6 @@ int main(int argc, char *argv[])
         // Ask the user if they wish to update this board
         if (!promptUser(config)) continue;
 
-        if (board.writeEnable != NULL)  // Setup board to allow flash write access
-          board.writeEnable(&board);
-
-        if (board.rebootRequired)
-          config->rebootRequired = true;
-
         UBYTE manufId,devId;
         UWORD sectorSize;
 
@@ -349,9 +333,6 @@ int main(int argc, char *argv[])
 
         } else {
           printf("Error: A4092 - Unknown Flash device Manufacturer: %02X Device: %02X\n", manufId, devId);
-          if (cd->cd_BoardSize == 65535) {
-            printf("Turn A4092 off and try again.\n");
-          }
           rc = 5;
         }
       }
