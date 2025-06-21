@@ -1362,7 +1362,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		} else {
 			printf("%s, data=", uc);
 		}
-		for (i = 0; i < sizeof (sense); i++)
+		for (i = 0; i < (ssize_t)sizeof (sense); i++)
 			printf(" 0x%02x", *(cptr++) & 0xff);
 		printf("\n");
 	}

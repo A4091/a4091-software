@@ -62,6 +62,7 @@
 int
 scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed);
 #else /* !PORT_AMIGA */
+#define ENABLE_QUIRKS
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.293 2021/12/21 22:53:21 riastradh Exp $");
 
@@ -580,6 +581,9 @@ scsibusprint(void *aux, const char *pnp)
 	return (UNCONF);
 }
 
+#endif  /* !PORT_AMIGA */
+
+#ifdef ENABLE_QUIRKS
 static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
 	{{T_DIRECT, T_REMOV,
 	 "Apple   ", "iPod            ", ""},	  PQUIRK_START},
@@ -857,7 +861,7 @@ static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
 	{{T_ENCLOSURE, T_FIXED,
 	 "SUN     ", "SENA            ", ""},     PQUIRK_NOLUNS},
 };
-#endif  /* !PORT_AMIGA */
+#endif
 
 /*
  * given a target and lun, ask the device what
@@ -872,21 +876,22 @@ static int
 scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #endif
 {
-#ifdef PORT_AMIGA
-	struct scsipi_inquiry_data inqbuf;
-	int checkdtype, docontinue, quirks;
-
-        *failed = 0;  // Default to success
-#else /* !PORT_AMIGA */
+#ifndef PORT_AMIGA
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
+#endif
 	struct scsipi_inquiry_data inqbuf;
+	int checkdtype, docontinue, quirks;
+#ifdef ENABLE_QUIRKS
 	const struct scsi_quirk_inquiry_pattern *finger;
 	int priority;
-	int checkdtype, docontinue, quirks;
 	struct scsipibus_attach_args sa;
+#endif
+#ifndef PORT_AMIGA
 	cfdata_t cf;
 	int locs[SCSIBUSCF_NLOCS];
+#else
+        *failed = 0;  // Default to success
 #endif
 	/*
 	 * Assume no more LUNs to search after this one.
@@ -1026,7 +1031,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		}
 	}
 
-#ifndef PORT_AMIGA
+#if ENABLE_QUIRKS
 	sa.sa_periph = periph;
 	sa.sa_inqbuf.type = inqbuf.device;
 	sa.sa_inqbuf.removable = inqbuf.dev_qual2 & SID_REMOVABLE ?
@@ -1103,7 +1108,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 		}
 	}
 
-#ifndef PORT_AMIGA
+#if ENABLE_QUIRKS
 	if (quirks & PQUIRK_CAP_SYNC)
 		periph->periph_cap |= PERIPH_CAP_SYNC;
 	if (quirks & PQUIRK_CAP_WIDE16)
@@ -1121,8 +1126,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	if ((periph->periph_quirks & PQUIRK_NOLUNS) == 0)
 		docontinue = 1;
 
-#if 0
-        printf("SCSI Caps:%s%s%s%s%s%s%s%s%s%s\n",
+#ifdef ENABLE_QUIRKS
+        if (periph->periph_cap)
+            printf("SCSI Caps:%s%s%s%s%s%s%s%s%s%s\n",
                (periph->periph_cap & PERIPH_CAP_SYNC) ? " SYNC" : "",
                (periph->periph_cap & PERIPH_CAP_WIDE16) ? " WIDE16" : "",
                (periph->periph_cap & PERIPH_CAP_WIDE32) ? " WIDE32" : "",
