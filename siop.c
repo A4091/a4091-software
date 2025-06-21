@@ -141,11 +141,7 @@ void siop_dump_acb(struct siop_acb *);
 
 /* default to not inhibit sync negotiation on any drive */
 u_char siop_inhibit_sync[8] = { 0, 0, 0, 0, 0, 0, 0 }; /* initialize, so patchable */
-#ifndef PORT_AMIGA
 u_char siop_allow_disc[8] = {3, 3, 3, 3, 3, 3, 3, 3};
-#else
-u_char siop_allow_disc[8];
-#endif
 int siop_no_disc = 0;  // Disable Synchronous SCSI when this flag is set
 int siop_no_dma = 0;   // Disable 53C710 DMA when this flag is set
 
