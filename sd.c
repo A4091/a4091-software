@@ -5,6 +5,7 @@
 #include "port.h"
 #include "port_bsd.h"
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/param.h>
 #include <exec/errors.h>
@@ -394,13 +395,22 @@ sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
     int flags;
 
     /*
-     * Fill out the scsi command.  Use the smallest CDB possible
-     * (6-byte, 10-byte, or 16-byte). If we need FUA or DPO,
-     * need to use 10-byte or bigger, as the 6-byte doesn't support
-     * the flags.
+     * Determine if we can use a 6-byte command.
+     * We can't if:
+     * - The device is an optical drive (which may not support 6-byte I/O).
+     * - The block number or length exceeds the 6-byte CDB limits.
      */
-    if (((blkno & 0x1fffff) == blkno) &&
-        ((nblks & 0xff) == nblks)) {
+    bool use_6_byte_cmd = true;
+
+    if (periph->periph_type == T_CDROM || periph->periph_type == T_WORM) {
+        use_6_byte_cmd = false;
+    }
+
+    if ((blkno & 0x1fffff) != blkno || (nblks & 0xff) != nblks) {
+        use_6_byte_cmd = false;
+    }
+
+    if (use_6_byte_cmd) {
         /* 6-byte CDB */
         struct scsi_rw_6 *cmd = (struct scsi_rw_6 *) &cmdbuf;
         cmdlen = sizeof (*cmd);
