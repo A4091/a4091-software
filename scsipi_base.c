@@ -1113,6 +1113,15 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 
 	sense = &xs->sense.scsi_sense;
 #ifdef SCSIPI_DEBUG
+        printf("scsipi_interpret_sense: Got sense for command 0x%02x\n", xs->cmd->opcode);
+        key = SSD_SENSE_KEY(sense->flags);
+        printf("  Sense Key: 0x%x, ASC: 0x%02x, ASCQ: 0x%02x\n", key, sense->asc, sense->ascq);
+        printf("  Full Sense Data:");
+        for (int i = 0; i < (ssize_t)sizeof(struct scsi_sense_data); i++) {
+                printf(" %02x", ((uint8_t *)sense)[i]);
+        }
+        printf("\n");
+
 	if (periph->periph_flags & SCSIPI_DB1) {
 	        int count, len;
 		scsipi_printaddr(periph);

@@ -1329,6 +1329,19 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     }
 #endif
     SIOP_TRACE('i',dstat,istat,(istat&SIOP_ISTAT_DIP)?rp->siop_dsps&0xff:sstat0);
+
+#ifdef DEBUG_SIOP
+    if (sstat0 & SIOP_SSTAT0_M_A) {
+            printf("SIOP_DEBUG: Phase Mismatch. dsps=%lx sbcl=%02x\n", rp->siop_dsps, rp->siop_sbcl);
+    }
+    if (sstat0 & SIOP_SSTAT0_STO) {
+            printf("SIOP_DEBUG: Select Timeout. Target did not respond.\n");
+    }
+    if (sstat0 & SIOP_SSTAT0_UDC) {
+            printf("SIOP_DEBUG: Unexpected Disconnect. dsps=%lx sbcl=%02x\n", rp->siop_dsps, rp->siop_sbcl);
+    }
+#endif
+
     if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff00) {
         /* Normal completion status, or check condition */
 #ifdef DEBUG
