@@ -1907,6 +1907,8 @@ bad_phase:
 #ifdef DEBUG
 #ifdef PORT_AMIGA
     if (siop_debug & 0x20) {
+	uint32_t dcmd_val;
+	memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
         panic("Unhandled Interrupt\n\n"
               "istat %lx dstat %lx sstat0 %lx\n"
               "dsps %lx dsa %lx sbcl %lx sfbr %lx\n"
@@ -1918,7 +1920,7 @@ bad_phase:
             rp->siop_sbcl, rp->siop_sfbr,
             sc->sc_scriptspa, acb ? (unsigned)kvtop((void *)&acb->ds) : 0,
             (unsigned)kvtop((void *)__UNVOLATILE(rp)), rp->siop_dsp,
-            *((volatile long *)&rp->siop_dcmd), target, acb,
+            dcmd_val, target, acb,
             acb ? &acb->ds : NULL, acb ? acb->stat[0] : 0,
             acb ? acb->msg[0] : 0, acb ? acb->msg[1] : 0);
     }
