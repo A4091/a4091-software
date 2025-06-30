@@ -2178,21 +2178,21 @@ siop_dump(struct siop_softc *sc)
 #endif
     printf("%s@%p regs %p istat %x\n",
         device_xname(sc->sc_dev), sc, rp, rp->siop_istat);
-    if ((acb = sc->free_list.tqh_first) > 0) {
+    if ((acb = sc->free_list.tqh_first) != NULL) {
         printf("Free list:\n");
         while (acb) {
             siop_dump_acb(acb);
             acb = acb->chain.tqe_next;
         }
     }
-    if ((acb = sc->ready_list.tqh_first) > 0) {
+    if ((acb = sc->ready_list.tqh_first) != NULL) {
         printf("Ready list:\n");
         while (acb) {
             siop_dump_acb(acb);
             acb = acb->chain.tqe_next;
         }
     }
-    if ((acb = sc->nexus_list.tqh_first) > 0) {
+    if ((acb = sc->nexus_list.tqh_first) != NULL) {
         printf("Nexus list:\n");
         while (acb) {
             siop_dump_acb(acb);
