@@ -28,6 +28,10 @@ struct MountStruct
 	// Short/Long Spinup
 	// Offset 22.
 	BOOL slowSpinup;
+	// Enahle CD Boot
+	BOOL cdBoot;
+	// Ignore RDBFF_LAST flag
+	BOOL ignoreLast;
 };
 
 APTR W_CreateIORequest(struct MsgPort *ioReplyPort, ULONG size, struct ExecBase *SysBase);
