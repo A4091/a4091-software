@@ -47,7 +47,6 @@ port. On a production image this is not required and should be turned off:
 #CFLAGS  += -DDEBUG_ATTACH      # Debug attach.c
 #CFLAGS  += -DDEBUG_DEVICE      # Debug device.c
 #CFLAGS  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
-#CFLAGS  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
 #CFLAGS  += -DDEBUG_PORT        # Debug port.c
 #CFLAGS  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
 #CFLAGS  += -DDEBUG_SCSICONF    # Debug scsiconf.c

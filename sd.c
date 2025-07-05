@@ -3,7 +3,6 @@
 #endif
 
 #include "port.h"
-#include "port_bsd.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>

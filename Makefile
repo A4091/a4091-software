@@ -47,10 +47,9 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091
 #DEBUG  += -DDEBUG_ATTACH      # Debug attach.c
 #DEBUG  += -DDEBUG_DEVICE      # Debug device.c
 #DEBUG  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
-#DEBUG  += -DDEBUG_NCR53CXXX   # Debug ncr53cxxx.c
 #DEBUG  += -DDEBUG_PORT        # Debug port.c
 #DEBUG  += -DDEBUG_SCSIPI      # Debug with SCSIPI_DEBUG_FLAGS
-#DEBUG  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
+#DEBUG  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c / scsipiconf.c
 #DEBUG  += -DDEBUG_SCSICONF    # Debug scsiconf.c
 #DEBUG  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
 #DEBUG  += -DDEBUG_SD          # Debug sd.c
@@ -148,7 +147,7 @@ $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA
 
 # XXX: Need to generate real dependency files
-$(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h port_bsd.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
+$(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
 
 $(OBJS): Makefile port.h | $(OBJDIR)
 	@echo Building $@

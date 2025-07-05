@@ -71,7 +71,6 @@
 #endif
 
 #include "port.h"
-#include "port_bsd.h"
 // #include "opt_ddb.h"
 
 #include <sys/cdefs.h>

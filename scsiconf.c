@@ -51,7 +51,6 @@
 #endif
 
 #include "port.h"
-#include "port_bsd.h"
 
 #include <string.h>
 #ifdef PORT_AMIGA

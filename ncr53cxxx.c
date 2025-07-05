@@ -27,12 +27,9 @@
 
 /*	ncr53cxxx.c	- SCSI SCRIPTS Assembler		*/
 
-#ifdef DEBUG_NCR53CXXX
-#define USE_SERIAL_OUTPUT
-#endif
-
-#include "port_bsd.h"
 #include <sys/cdefs.h>
+#undef __RCSID
+#define __RCSID(x)
 __RCSID("$NetBSD: ncr53cxxx.c,v 1.17 2022/04/21 21:31:11 andvar Exp $");
 
 #include <stdio.h>

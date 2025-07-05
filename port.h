@@ -21,6 +21,9 @@ typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 
 #define PAGE_SIZE NBPG
 
+#define __KERNEL_RCSID(x,y)
+#define UNCONF 1
+
 #define AMIGA_MAX_TRANSFER (1 << 20)  // Maximum DMA size (scatter-gather entry)
 #undef MAXPHYS
 #define MAXPHYS AMIGA_MAX_TRANSFER
