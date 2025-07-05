@@ -3,6 +3,9 @@ DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
 
+TARGET  := NCR53C710
+TARGET  := NCR53C770
+
 OBJDIR  := objs
 ROM	:= a4091.rom
 ROM_ND	:= a4091_nodriver.rom
@@ -12,8 +15,15 @@ ROM_COM	:= a4091_commodore.rom
 PROG	:= a4091.device
 PROGU	:= a4091
 PROGD	:= a4091d
-SRCS    := device.c version.c siop.c port.c attach.c cmdhandler.c printf.c
+SRCS    := device.c version.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsipiconf.c scsiconf.c scsimsg.c mounter.c bootmenu.c
+ifeq ($(TARGET),NCR53C710)
+SRCS    += siop.c
+else ifeq ($(TARGET),NCR53C770)
+SRCS    += siop2.c
+else
+$(error Unknown build target! Please set TARGET to NCR53C710 or NCR53C770.)
+endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
 SRCSU   := a4091.c
@@ -94,7 +104,12 @@ QUIET   :=
 endif
 
 SC_ASM	:= $(OBJDIR)/ncr53cxxx
+
+ifeq ($(TARGET),NCR53C710)
 SIOP_SCRIPT := $(OBJDIR)/siop_script.out
+else ifeq ($(TARGET),NCR53C770)
+SIOP_SCRIPT := $(OBJDIR)/siop2_script.out
+endif
 
 red=\033[1;31m
 green=\033[1;32m
@@ -142,8 +157,10 @@ $(foreach SRCFILE,$(SRCSU),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 $(foreach SRCFILE,$(SRCSD),$(eval $(call DEPEND_SRC,$(SRCFILE))))
 
 $(OBJDIR)/version.o: version.h $(filter-out $(OBJDIR)/version.o, $(OBJS) $(ASMOBJS))
-$(OBJDIR)/siop.o: $(SIOP_SCRIPT)
+$(OBJDIR)/siop.o: $(OBJDIR)/siop_script.out
+$(OBJDIR)/siop2.o: $(OBJDIR)/siop2_script.out
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
+$(OBJDIR)/siop2.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA
 
 # XXX: Need to generate real dependency files
@@ -171,7 +188,11 @@ $(PROGD): $(OBJSD)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSD) -o $@
 
-$(SIOP_SCRIPT): siop_script.ss $(SC_ASM)
+$(OBJDIR)/siop_script.out: siop_script.ss $(SC_ASM)
+	@echo Generating $@
+	$(QUIET)$(SC_ASM) $(filter %.ss,$^) -p $@
+
+$(OBJDIR)/siop2_script.out: siop2_script.ss $(SC_ASM)
 	@echo Generating $@
 	$(QUIET)$(SC_ASM) $(filter %.ss,$^) -p $@
 
