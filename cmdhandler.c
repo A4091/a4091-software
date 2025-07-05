@@ -74,7 +74,13 @@ static void
 irq_poll(uint got_int, struct siop_softc *sc)
 {
     if (got_int) {
+#ifdef NCR53C710
         siopintr(sc);
+#elif NCR53C770
+        siopngintr(sc);
+#else
+#error "Need to define NCR53C710 or NCR53C770"
+#endif
     } else if (sc->sc_flags & SIOP_INTSOFF) {
         /*
          * XXX: According to NCR 53C710-1 errata, polling ISTAT is not safe
@@ -95,7 +101,13 @@ irq_poll(uint got_int, struct siop_softc *sc)
             reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
             sc->sc_sstat0 = reg >> 8;
             sc->sc_dstat  = reg;
+#ifdef NCR53C710
             siopintr(sc);
+#elif NCR53C770
+            siopngintr(sc);
+#else
+#error "Need to define NCR53C710 or NCR53C770"
+#endif
         }
     }
 }

@@ -313,9 +313,9 @@ struct scsipi_channel {
 #ifndef PORT_AMIGA
 	int	chan_openings;		/* number of command openings */
 	int	chan_max_periph;	/* max openings per periph */
+#endif
 
 	int	chan_ntargets;		/* number of targets */
-#endif
 	int	chan_nluns;		/* number of luns */
 	int	chan_id;		/* adapter's ID for this channel */
 

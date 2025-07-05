@@ -67,12 +67,19 @@
  * AMIGA 53C720/770 scsi adaptor driver
  */
 
-#include "opt_ddb.h"
+
+#ifdef DEBUG_SIOP
+#define USE_SERIAL_OUTPUT
+#endif
+
+#include "port.h"
+// #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.44 2019/11/10 21:16:22 chs Exp $");
 
 #include <sys/param.h>
+#ifndef PORT_AMIGA
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
@@ -98,6 +105,22 @@ __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.44 2019/11/10 21:16:22 chs Exp $");
 
 #include <amiga/dev/siopreg.h>
 #include <amiga/dev/siopvar.h>
+#else
+#define ARCH_720
+#include "scsi_all.h"
+#include "scsipiconf.h"
+#include <string.h>
+#include <stdlib.h>
+
+#define dma_cachectl(addr, len) CacheClearE(addr, len, CACRF_ClearD)
+#define DCIAS(pa) CacheClearE((void *)(pa),1,CACRF_ClearD);
+
+#include "sys_queue.h"
+#include "siopreg.h"
+#include "siopvar.h"
+#include <stdio.h>
+#endif
+
 
 /*
  * SCSI delays
@@ -124,7 +147,11 @@ void siopng_dump_acb(struct siop_acb *);
 
 /* 53C720/770 script */
 
+#ifdef PORT_AMIGA
+#include "siop2_script.out"
+#else
 #include <amiga/dev/siop2_script.out>
+#endif
 
 /* default to not inhibit sync negotiation on any drive */
 u_char siopng_inhibit_sync[16] = {
@@ -182,6 +209,7 @@ void siopng_dump_trace(void);
 #define SIOP_TRACE(a,b,c,d)
 #endif
 
+#ifdef DEBUG_SIOP
 
 static const char *siopng_chips[] = {
 	"720", "720SE", "770", "0x3",
@@ -189,7 +217,9 @@ static const char *siopng_chips[] = {
 	"0x8", "0x9", "0xA", "0xB",
 	"0xC", "0xD", "0xE", "0xF",
 };
+#endif
 
+#ifndef PORT_AMIGA
 /*
  * default minphys routine for siopng based controllers
  */
@@ -202,6 +232,7 @@ siopng_minphys(struct buf *bp)
 	 */
 	minphys(bp);
 }
+#endif
 
 /*
  * used by specific siopng controller
@@ -236,12 +267,12 @@ siopng_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 /*			panic("siopng_scsicmd: busy");*/
 			printf("siopng_scsicmd: busy\n");
 
-		s = splbio();
+		s = bsd_splbio();
 		acb = sc->free_list.tqh_first;
 		if (acb) {
 			TAILQ_REMOVE(&sc->free_list, acb, chain);
 		}
-		splx(s);
+		bsd_splx(s);
 
 #ifdef DIAGNOSTIC
 		/*
@@ -261,13 +292,13 @@ siopng_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		acb->daddr = xs->data;
 		acb->dleft = xs->datalen;
 
-		s = splbio();
+		s = bsd_splbio();
 		TAILQ_INSERT_TAIL(&sc->ready_list, acb, chain);
 
 		if (sc->sc_nexus == NULL)
 			siopng_sched(sc);
 
-		splx(s);
+		bsd_splx(s);
 
 		if (flags & XS_CTL_POLL || siopng_no_dma)
 			siopng_poll(sc, acb);
@@ -294,7 +325,7 @@ siopng_poll(struct siop_softc *sc, struct siop_acb *acb)
 	int s;
 	int to;
 
-	s = splbio();
+	s = bsd_splbio();
 	to = xs->timeout / 1000;
 	if (sc->nexus_list.tqh_first)
 		printf("%s: siopng_poll called with disconnected device\n",
@@ -338,7 +369,7 @@ siopng_poll(struct siop_softc *sc, struct siop_acb *acb)
 		if (xs->xs_status & XS_STS_DONE)
 			break;
 	}
-	splx(s);
+	bsd_splx(s);
 }
 
 /*
@@ -486,6 +517,8 @@ siopngabort(register struct siop_softc *sc, siop_regmap_p rp, const char *where)
 #ifdef fix_this
 	int i;
 #endif
+        (void)rp;
+        (void)where;
 
 	printf ("%s: abort %s: dstat %02x, istat %02x sist %04x sien %04x sbcl %02x\n",
 	    device_xname(sc->sc_dev),
@@ -539,8 +572,10 @@ siopnginitialize(struct siop_softc *sc)
 {
 	int i;
 	u_int inhibit_sync;
+#ifndef PORT_AMIGA
 	extern u_long scsi_nosync;
 	extern int shift_nosync;
+#endif
 
 	/*
 	 * Need to check that scripts is on a long word boundary
@@ -552,9 +587,13 @@ siopnginitialize(struct siop_softc *sc)
 	/*
 	 * malloc sc_acb to ensure that DS is on a long word boundary.
 	 */
+#ifdef PORT_AMIGA
+        sc->sc_acb = AllocMem(sizeof(struct siop_acb) * SIOP_NACB, MEMF_PUBLIC);
+#else
 
 	sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB,
 		M_DEVBUF, M_WAITOK);
+#endif
 
 	sc->sc_tcp[1] = 1000 / sc->sc_clock_freq;
 	sc->sc_tcp[2] = 1500 / sc->sc_clock_freq;
@@ -577,9 +616,15 @@ siopnginitialize(struct siop_softc *sc)
 		sc->sc_tcp[0] = 3000 / sc->sc_clock_freq;
 	}
 
+#ifndef PORT_AMIGA
 	if (scsi_nosync) {
 		inhibit_sync = (scsi_nosync >> shift_nosync) & 0xffff;
 		shift_nosync += 16;		/* XXX maxtarget */
+#else
+	if (sc->sc_nosync) {
+		inhibit_sync = sc->sc_nosync & 0xffff;
+#endif
+
 #ifdef DEBUG
 		if (inhibit_sync)
 			printf("%s: Inhibiting synchronous transfer %02x\n",
@@ -592,6 +637,18 @@ siopnginitialize(struct siop_softc *sc)
 
 	siopngreset (sc);
 }
+
+#ifdef PORT_AMIGA
+void
+siopngshutdown(struct scsipi_channel *chan)
+{
+    struct siop_softc *sc = device_private(chan->chan_adapter->adapt_dev);
+
+    siopngreset(sc);
+    scsipi_free_all_xs(chan);
+    FreeMem(sc->sc_acb, sizeof(struct siop_acb) * SIOP_NACB);
+}
+#endif
 
 void
 siopng_timeout(void *arg)
@@ -607,12 +664,12 @@ siopng_timeout(void *arg)
 	scsipi_printaddr(periph);
 	printf("timed out\n");
 
-	s = splbio();
+	s = bsd_splbio();
 
 	acb->xs->error = XS_TIMEOUT;
 	siopngreset(sc);
 
-	splx(s);
+	bsd_splx(s);
 }
 
 void
@@ -630,7 +687,7 @@ siopngreset(struct siop_softc *sc)
 
 	printf("%s: ", device_xname(sc->sc_dev));		/* XXXX */
 
-	s = splbio();
+	s = bsd_splbio();
 
 	/*
 	 * Reset the chip
@@ -677,7 +734,7 @@ siopngreset(struct siop_softc *sc)
 		dummy = rp->siop_dstat;
 
 	__USE(dummy);
-	splx (s);
+	bsd_splx (s);
 
 	delay (siopng_reset_delay * 1000);
 
@@ -733,7 +790,7 @@ siopngreset(struct siop_softc *sc)
 			sc->sc_nexus->xs->error = XS_RESET;
 			siopng_scsidone(sc->sc_nexus, sc->sc_nexus->stat[0]);
 		}
-		while ((acb = sc->nexus_list.tqh_first) > 0) {
+		while ((acb = sc->nexus_list.tqh_first) != NULL) {
 			acb->xs->error = XS_RESET;
 			siopng_scsidone(acb, acb->stat[0]);
 		}
@@ -923,6 +980,7 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	dma_cachectl (cbuf, clen);
 	if (buf != NULL && len != 0)
 		dma_cachectl (buf, len);
+
 #ifdef DEBUG
 	if (siopng_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {
 		printf ("ACK! siopng was busy at start: rp %p script %p dsa %p active %ld\n",
@@ -974,6 +1032,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 	struct siop_acb *acb = sc->sc_nexus;
 	int	target = 0;
 	int	dfifo, dbc, sstat0, sstat1, sstat2;
+	(void)istat;
 
 	dfifo = rp->siop_dfifo;
 	dbc = rp->siop_dbc0;
@@ -1357,8 +1416,8 @@ siopng_dump(sc);
 			for (i = 0; i < DMAMAXIO; ++i) {
 				if (acb->ds.chain[i].datalen == 0)
 					break;
-				if (acb->iob_curbuf >= (long)acb->ds.chain[i].databuf &&
-				    acb->iob_curbuf < (long)(acb->ds.chain[i].databuf +
+				if (acb->iob_curbuf >= (unsigned long)acb->ds.chain[i].databuf &&
+				    acb->iob_curbuf < (unsigned long)(acb->ds.chain[i].databuf +
 				    acb->ds.chain[i].datalen))
 					break;
 			}
@@ -1640,11 +1699,11 @@ siopngintr(register struct siop_softc *sc)
 	u_char istat, dstat;
 	u_short sist;
 	int status;
-	int s = splbio();
+	int s = bsd_splbio();
 
 	istat = sc->sc_istat;
 	if ((istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0) {
-		splx(s);
+		bsd_splx(s);
 		return;
 	}
 
@@ -1700,7 +1759,7 @@ siopngintr(register struct siop_softc *sc)
 			    sc->sc_nexus->stat[0] : -1);
 		}
 	}
-	splx(s);
+	bsd_splx(s);
 }
 
 /*
@@ -1765,6 +1824,7 @@ scsi_period_to_siopng(struct siop_softc *sc, int target)
 void
 siopng_dump_registers(struct siop_softc *sc)
 {
+#ifdef DEBUG_SIOP
 	siop_regmap_p rp = sc->sc_siopp;
 
 	printf("  scntl0   %02x scntl1 %02x scntl2 %02x scntl3 %02x\n",
@@ -1796,6 +1856,9 @@ siopng_dump_registers(struct siop_softc *sc)
 	    rp->siop_dsa, rp->siop_temp, rp->siop_dnad);
 	printf("  scratcha %08lx scratchb %08lx adder     %08lx\n",
 	    rp->siop_scratcha, rp->siop_scratchb, rp->siop_adder);
+#else
+	(void)sc;
+#endif
 }
 
 #ifdef DEBUG
@@ -1847,7 +1910,7 @@ siopng_dump(struct siop_softc *sc)
 	int s;
 	int i;
 
-	s = splbio();
+	s = bsd_splbio();
 #if SIOP_TRACE_SIZE
 	siopng_dump_trace();
 #endif
@@ -1886,6 +1949,6 @@ siopng_dump(struct siop_softc *sc)
 			    sc->sc_tinfo[i].lubusy);
 		}
 	}
-	splx(s);
+	bsd_splx(s);
 }
 #endif

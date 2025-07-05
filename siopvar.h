@@ -70,7 +70,7 @@ struct siop_ds {
 	long	synmsglen;		/* Sync transfer request */
 	char	*synmsgbuf;
 	struct {
-		long datalen;
+		unsigned long datalen;
 		char *databuf;
 	} chain[DMAMAXIO];
 };
@@ -132,6 +132,8 @@ struct	siop_softc {
 	u_char	sc_dstat;
 #ifndef ARCH_720
 	u_char	sc_sstat0;
+#else
+	u_char	sc_sstat0;
 #endif
 	u_char	sc_sstat1;
 #ifdef ARCH_720
@@ -160,7 +162,11 @@ struct	siop_softc {
 
 	u_short	sc_clock_freq;
 	u_char	sc_dcntl;
+#ifndef ARCH_720
 	u_char	sc_ctest7;
+#else
+	u_char	sc_ctest0;
+#endif
 	u_short	sc_tcp[4];
 	u_char	sc_flags;
 	u_char	sc_dien;
@@ -247,6 +253,7 @@ void siop_dump(struct siop_softc *);
 #endif
 #endif
 void siopshutdown(struct scsipi_channel *chan);
+void siopngshutdown(struct scsipi_channel *chan);
 
 
 #endif /* _SIOPVAR_H */

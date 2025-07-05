@@ -48,7 +48,7 @@ NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 # CFLAGS for a4091.device
 #
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\" -DAMIGA_DATE=\"$(ADATE)\"
-CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091
+CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 -D$(TARGET)=1
 #DEBUG  += -DDEBUG             # Show basic debug
 #DEBUG  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
 #DEBUG  += -DDEBUG_CMD         # Show handler commands received

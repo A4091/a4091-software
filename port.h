@@ -23,12 +23,21 @@
 #include <exec/memory.h>
 #include <clib/exec_protos.h>
 
+#ifdef NCR53C770
+#define ARCH_720
+#endif
+
 typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 
 #define BIT(x)        (1 << (x))
 #define ARRAY_SIZE(x) ((sizeof (x) / sizeof ((x)[0])))
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile aliased_uint32_t *)(x)
+
+/*
+ * Reorder protection when accessing device registers.
+ */
+#define amiga_membarrier()
 
 #include <sys/param.h>
 

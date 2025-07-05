@@ -292,6 +292,10 @@ a4091_validate(uint32_t dev_base)
      * Validate device connectivity by writing the temp and scratch
      * registers.
      */
+#if defined(NCR53C770)
+#define siop_scratch siop_scratcha
+#define siop_scratch2 siop_scratcha2
+#endif
     scratch = rp->siop_scratch;
     temp    = rp->siop_temp;
     for (rot = 0; rot < 32; rot++, patt = next) {
@@ -377,7 +381,13 @@ init_chan(device_t self, UBYTE *boardnum)
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4091_OFFSET_REGISTERS);
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
+#ifdef NCR53C710
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
+#elif NCR53C770
+    sc->sc_ctest0 = SIOP_CTEST0_CDIS;  // Disable burst
+#else
+#error foo
+#endif
 #ifdef DRIVER_A4000T
     sc->sc_dcntl = SIOP_DCNTL_EA;  /* A4000T */
 #else
@@ -394,7 +404,13 @@ init_chan(device_t self, UBYTE *boardnum)
     adapt->adapt_dev = self;
     adapt->adapt_nchannels = 1;
     adapt->adapt_openings = 7;
+#ifdef NCR53C710
     adapt->adapt_request = siop_scsipi_request;
+#elif NCR53C770
+    adapt->adapt_request = siopng_scsipi_request;
+#else
+#error ""
+#endif
     adapt->adapt_asave = asave;
 
     /*
@@ -434,7 +450,13 @@ init_chan(device_t self, UBYTE *boardnum)
         return (rc);
 
     Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
+#ifdef NCR53C710
     siopinitialize(sc);
+#elif NCR53C770
+    siopnginitialize(sc);
+#else
+#error "Need to define NCR53C710 or NCR53C770"
+#endif
     return (0);
 }
 
@@ -444,7 +466,13 @@ deinit_chan(device_t self)
     struct siop_softc     *sc = device_private(self);
     struct scsipi_channel *chan = &sc->sc_channel;
 
+#ifdef NCR53C710
     siopshutdown(chan);
+#elif NCR53C770
+    siopngshutdown(chan);
+#else
+#error "Need to define NCR53C710 or NCR53C770"
+#endif
     a4091_remove_local_irq_handler();
     a4091_release((uint32_t) sc->sc_siopp - 0x00800000);
 }

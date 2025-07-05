@@ -225,6 +225,17 @@ typedef struct {
 /*5a*/	volatile unsigned short	siop_sbdl;	/* ro: SCSI Bus Data Lines */
 
 /*5c*/	volatile unsigned long	siop_scratchb;	/* rw: Scratch Register B */
+
+#ifdef PORT_AMIGA
+/* Duplicate registers for write to avoid 68030 write-allocate buf */
+/*00*/	volatile unsigned long	siop_pad1[7];   /* Shadow 0x00 - 0x1b */
+/*1c*/	volatile unsigned long	siop_temp2;	/* Shadow Temporary Stack */
+/*20*/	volatile unsigned long	siop_pad2[5];   /* Shadow 0x20 - 0x33 */
+/*34*/	volatile unsigned long	siop_scratcha2;	/* Shadow Scratch Register */
+/*38*/	volatile unsigned long	siop_pad3[2];   /* Shadow 0x38 - 0x3f */
+#endif
+
+
 #endif
 
 } siop_regmap_t;
@@ -427,6 +438,8 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #define	SIOP_CTEST0_ERF		0x04	/* Extend REQ/ACK Filtering */
 #define	SIOP_CTEST0_RES1	0x02
 #define	SIOP_CTEST0_DDIR	0x01	/* Xfer direction (1-> from SCSI bus) */
+#else
+#define SIOP_CTEST0_CDIS	0x80	/* Cache burst disable */
 #endif
 
 /* Chip test register 1 (ctest1) */
