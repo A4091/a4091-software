@@ -77,7 +77,7 @@
 __KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.71 2022/04/07 19:33:37 andvar Exp $");
 
 #include <sys/param.h>
-#if 0
+#ifndef PORT_AMIGA
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
@@ -97,6 +97,8 @@ __KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.71 2022/04/07 19:33:37 andvar Exp $");
 #endif
 
 #include <amiga/amiga/custom.h>
+#else
+#define dma_cachectl(addr, len) CacheClearE(addr, len, CACRF_ClearD)
 #endif
 
 #include "scsi_all.h"
@@ -1076,15 +1078,10 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #endif
 
     /* push data cache for all data the 53c710 needs to access */
-#ifdef PORT_AMIGA
-    CacheClearE(acb,sizeof(struct siop_acb),CACRF_ClearD);
-    CacheClearE(cbuf,clen,CACRF_ClearD);
-#else
     dma_cachectl ((void *)acb, sizeof (struct siop_acb));
     dma_cachectl (cbuf, clen);
     if (buf != NULL && len != 0)
         dma_cachectl (buf, len);
-#endif
 
 #ifndef PORT_AMIGA
 #ifdef DEBUG
@@ -1377,11 +1374,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                     acb->msg[2], acb->msg[3]);
             sc->sc_sync[target].state = NEG_DONE;
         }
-#ifdef PORT_AMIGA
-        CacheClearE(&acb->stat[0], 1, CACRF_ClearD);
-#else
         dma_cachectl(&acb->stat[0], 1);
-#endif
         *status = acb->stat[0];
 #ifdef DEBUG
         if (rp->siop_sbcl & SIOP_BSY) {
@@ -1500,11 +1493,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 }
             }
 #endif
-#ifdef PORT_AMIGA
-            CacheClearE(acb,sizeof(*acb),CACRF_ClearD);
-#else
             dma_cachectl ((void *)acb, sizeof(*acb));
-#endif
         }
 #ifdef DEBUG
         SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
@@ -1783,11 +1772,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             panic("unable to find reselecting device");
 #endif
         }
-#ifdef PORT_AMIGA
-        CacheClearE(acb, sizeof(*acb), CACRF_ClearD);
-#else
         dma_cachectl ((void *)acb, sizeof(*acb));
-#endif
         rp->siop_temp = 0;
         rp->siop_dcntl |= SIOP_DCNTL_STD;
         return (0);
@@ -1833,11 +1818,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             goto fail_return;
         }
         /* Unrecognized message in byte */
-#ifdef PORT_AMIGA
-        CacheClearE(&acb->msg[1], 1, CACRF_ClearD);
-#else
         dma_cachectl (&acb->msg[1],1);
-#endif
         printf ("%s: Unrecognized message in data sfbr %x msg %x sbcl %x\n",
             device_xname(sc->sc_dev), rp->siop_sfbr, acb->msg[1], rp->siop_sbcl);
         /* what should be done here? */
@@ -1865,13 +1846,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 device_xname(sc->sc_dev));
             goto fail_return;
         } else {
-#ifdef PORT_AMIGA
-            CacheClearE(&acb->stat[0], 1, CACRF_ClearD);
-            CacheClearE(&acb->msg[0], 1, CACRF_ClearD);
-#else
             dma_cachectl (&acb->stat[0], 1);
             dma_cachectl (&acb->msg[0], 1);
-#endif
             printf ("SIOP interrupt: %lx sts %x msg %x %x sbcl %x\n",
                 rp->siop_dsps, acb->stat[0], acb->msg[0], acb->msg[1],
                 rp->siop_sbcl);
