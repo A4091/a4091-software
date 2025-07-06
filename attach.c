@@ -185,6 +185,7 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
+#ifdef DRIVER_A4091
 /*
  * a4091_find
  * ----------
@@ -255,13 +256,31 @@ a4091_find(UBYTE *boardnum)
 
     return (as_addr);
 }
+#else
+/*
+ * a4000t_find
+ * ----------
+ * Locates the next A4091 in the system (by autoconfig order) which has
+ * not yet been claimed by a driver. If one is not found, the first
+ * device is chosen (reused).
+ */
+static uint32_t
+a4000t_find(UBYTE *boardnum)
+{
+    *boardnum=0;
+    asave->as_addr = A4000T_SCSI_BASE;
+    asave->as_cd = NULL;
+    return asave->as_addr;
+}
+#endif
 
 static void
 a4091_release(uint32_t as_addr)
 {
     if (asave->as_addr != as_addr)
         printf("Releasing wrong card.\n");
-    asave->as_cd->cd_Flags |= CDB_CONFIGME;
+    if (asave->as_cd)
+        asave->as_cd->cd_Flags |= CDB_CONFIGME;
 }
 
 static int
@@ -274,7 +293,11 @@ a4091_validate(uint32_t dev_base)
     uint     rot;
     uint     fail = 0;
 
+#ifdef DRIVER_A4091
     siop_regmap_p rp = (siop_regmap_p) (dev_base + A4091_OFFSET_REGISTERS);
+#else
+    siop_regmap_p rp = (siop_regmap_p) (dev_base + A4000T_OFFSET_REGISTERS);
+#endif
     if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000) ||
         (dev_base & 0x00ffffff)) {
         printf("Invalid device base %x\n", dev_base);
@@ -361,7 +384,11 @@ init_chan(device_t self, UBYTE *boardnum)
     uint8_t dip_switches;
     int rc;
 
+#ifdef DRIVER_A4091
     dev_base = a4091_find(boardnum);
+#else
+    dev_base = a4000t_find(boardnum);
+#endif
     if (dev_base == 0) {
         printf("A4091: board #%u not found\n",*boardnum);
         return (ERROR_NO_BOARD);
@@ -371,15 +398,22 @@ init_chan(device_t self, UBYTE *boardnum)
     if ((rc = a4091_validate(dev_base)))
         return (rc);
 
-
     memset(sc, 0, sizeof (*sc));
+#ifdef DRIVER_A4091
     dip_switches = *(uint8_t *)(dev_base + A4091_OFFSET_SWITCHES);
+#else
+    dip_switches = *(uint8_t *)(dev_base + A4000T_OFFSET_SWITCHES);
+#endif
     printf("DIP switches = %02x\n", dip_switches);
 
     Load_BattMem();
 
     sc->sc_dev = self;
+#ifdef DRIVER_A4091
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4091_OFFSET_REGISTERS);
+#else
+    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4000T_OFFSET_REGISTERS);
+#endif
     sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
 #ifdef NCR53C710
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst

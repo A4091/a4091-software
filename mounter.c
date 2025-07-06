@@ -1624,7 +1624,11 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	struct MountStruct ms;
 	ULONG unitNum[8];
 	int i, j = 1, ret = 0;
+#ifdef DRIVER_A4091
 	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4091_OFFSET_SWITCHES);
+#else
+	UBYTE dip_switches = *(UBYTE *)(cd->cd_BoardAddr + A4000T_OFFSET_SWITCHES);
+#endif
 	UBYTE hostid = dip_switches & 7;
 	(void)dev;
 
