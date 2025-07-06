@@ -18,19 +18,28 @@ jobs:
         submodules: true
 
     - name: Build a4091.device
-      run: make a4091.device
+      run: make DEVICE=A4091 a4091.device
 
     - name: Build a4091.rom
-      run: make a4091.rom
+      run: make DEVICE=A4091 a4091.rom
+
+    - name: Cleaning
+      run: make DEVICE=A4091 clean
+
+    - name: Build A4000T scsi.device
+      run: make DEVICE=A4000T scsi.device
+
+    - name: Cleaning Again
+      run: make DEVICE=A4091 clean
+
+    - name: Build A4000T scsi.device
+      run: make DEVICE=A4000T770 scsi770.device
 
     - name: Build a4091 tool
       run: make a4091
 
     - name: Build a4091d tool
       run: make a4091d
-
-    - name: Build LHA archive
-      run: make lha
 
     - name: Build ADF disk image
       run: cd disk && make
@@ -41,11 +50,11 @@ jobs:
           name: Driver (AutoBoot ROM)
           path: ${{ github.workspace }}/a4091*.rom
 
-    - name: Archive CI artifacts (LHA)
+    - name: Archive CI artifacts (DEVICES)
       uses: actions/upload-artifact@v4
       with:
-          name: Driver (LHA)
-          path: ${{ github.workspace }}/a4091_??.??.lha
+          name: Driver (Device Drivers)
+          path: ${{ github.workspace }}/*.device
 
     - name: Archive CI artifacts (ADF)
       uses: actions/upload-artifact@v4

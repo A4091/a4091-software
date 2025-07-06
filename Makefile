@@ -3,23 +3,29 @@ DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
 
-DEVICE := A4000T
+# Default to NCR53C770 driver:
+
+#DEVICE := A4000T
 #DEVICE := A4091
-#DEVICE := A4000T770
+DEVICE ?= A4000T770
 
 ifeq ($(DEVICE),A4091)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1
+TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -dNAME="a4091"
 NAME=a4091
+HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1
-NAME=a4000t
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DNAME=scsi
+NAME=scsi
+HAVE_ROM=n
 else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1
-NAME=a4000t770
-else$(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DNAME="scsi"
+NAME=scsi770
+HAVE_ROM=n
+else
+$(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
 endif
 
 OBJDIR  := objs
@@ -50,6 +56,7 @@ OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 OBJSROM := $(OBJDIR)/rom.o
+TOOLS   := $(PROGU) $(PROGD)
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -62,7 +69,7 @@ NDK_PATHS := /opt/amiga/m68k-amigaos/ndk-include
 NDK_PATHS += /opt/amiga-2021.05/m68k-amigaos/ndk-include
 NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 
-# CFLAGS for a4091.device
+# CFLAGS for device driver
 #
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\" -DAMIGA_DATE=\"$(ADATE)\"
 CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS)
@@ -137,8 +144,6 @@ ifeq (, $(shell which $(CC) 2>/dev/null ))
 $(error "No $(CC) in PATH: maybe do PATH=$$PATH:/opt/amiga/bin")
 endif
 
-all: $(PROG) $(PROG).rnc $(PROGU) $(PROGD) $(ROM) $(ROM_ND)
-
 # Handle git submodules
 GIT:=$(shell git -C "$(CURDIR)" rev-parse --git-dir 1>/dev/null 2>&1 \
         && command -v git)
@@ -146,7 +151,10 @@ ifneq ($(GIT),)
 freshsubs:=$(shell git submodule update --init $(quiet_errors))
 endif
 
-# Autodetect which CDFileSystem is available if any
+# Autodetect which CDFileSystem is available if any. This mechanism
+# lets you build with an AmigaOS CDFileSystem if you drop the file
+# into the source tree. Per default, we are building with CDVDFS.
+
 ifneq (,$(wildcard BootCDFileSystem))
 CDFS=BootCDFileSystem
 else
@@ -156,13 +164,14 @@ else
 CDFS=$(OBJDIR)/CDVDFS
 endif
 endif
-ifneq (,$(CDFS))
-all: $(ROM_CD)
+
+ifeq ($(HAVE_ROM),y)
+ROMS:=$(ROM) $(ROM_CD)
+else
+ROMS:=
 endif
 
-ifneq (,$(wildcard a3090.ld_strip))
-all: $(ROM_COM)
-endif
+all: $(PROG) $(ROMS) $(TOOLS)
 
 define DEPEND_SRC
 # The following line creates a rule for an object file to depend on a
@@ -271,21 +280,17 @@ $(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
 	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
 	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.rnc -T 0x46443031
 
-$(ROM_COM): $(ROM_ND) a3090.ld_strip $(OBJDIR)/romtool
-	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM_COM) -D a3090.ld_strip
-
 $(OBJDIR):
 	mkdir -p $@
 
 clean:
-	@echo Cleaning
+	@echo Cleaning.
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJSROM_COM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 
 distclean: clean
-	@echo $@
+	@echo Cleaning really good.
 	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM)
 	$(QUIET)rm -rf $(OBJDIR)
 
@@ -295,7 +300,7 @@ $(OBJDIR)/CDVDFS:
 
 lha:
 	$(QUIET)$(MAKE) distclean $(OBJDIR)
-	@echo Building a4091.rom Debug image
+	@echo Building $(NAME).rom Debug image
 	$(QUIET)$(MAKE) $(ROM) DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
 	$(QUIET)mv $(ROM) $(ROM_DB)
 	$(QUIET)$(MAKE) distclean

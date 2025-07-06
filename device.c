@@ -48,7 +48,7 @@
 
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
-#define DEVICE_NAME "a4091.device"
+#define DEVICE_NAME XSTR(NAME) ".device"
 
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
