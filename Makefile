@@ -3,16 +3,33 @@ DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
 
+DEVICE := A4000T
+#DEVICE := A4091
+#DEVICE := A4000T770
+
+ifeq ($(DEVICE),A4091)
 TARGET  := NCR53C710
+TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1
+NAME=a4091
+else ifeq ($(DEVICE),A4000T)
+TARGET  := NCR53C710
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1
+NAME=a4000t
+else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1
+NAME=a4000t770
+else$(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
+endif
 
 OBJDIR  := objs
-ROM	:= a4091.rom
-ROM_ND	:= a4091_nodriver.rom
-ROM_DB	:= a4091_debug.rom
-ROM_CD	:= a4091_cdfs.rom
-ROM_COM	:= a4091_commodore.rom
-PROG	:= a4091.device
+
+ROM	:= $(NAME).rom
+ROM_ND	:= $(NAME)_nodriver.rom
+ROM_DB	:= $(NAME)_debug.rom
+ROM_CD	:= $(NAME)_cdfs.rom
+ROM_COM	:= $(NAME)_commodore.rom
+PROG	:= $(NAME).device
 PROGU	:= a4091
 PROGD	:= a4091d
 SRCS    := device.c version.c port.c attach.c cmdhandler.c printf.c
@@ -48,7 +65,7 @@ NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 # CFLAGS for a4091.device
 #
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\" -DAMIGA_DATE=\"$(ADATE)\"
-CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 -D$(TARGET)=1
+CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS)
 #DEBUG  += -DDEBUG             # Show basic debug
 #DEBUG  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
 #DEBUG  += -DDEBUG_CMD         # Show handler commands received
