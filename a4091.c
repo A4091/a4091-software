@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.2 ("AMIGA_DATE") © Chris Hooper";
+const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1904,7 +1904,7 @@ decode_switches(void)
     printf(" Rear-access DIP switches\n");
 
     show_dip(switches, 7);
-    printf("SCSI LUNs %s\n", (switches & BIT(7)) ? "Enabled" : "Disabled");
+    printf("SCSI LUNs %s\n", (switches & BIT(7)) ? "Disabled" : "Enabled");
     show_dip(switches, 6);
     if (switches & BIT(6))
         printf("External Termination On\n");
@@ -4700,14 +4700,14 @@ static int
 enforcer_check(void)
 {
     Forbid();
-    if (FindTask("« Enforcer »") != NULL) {
+    if (FindTask("\xab Enforcer \xbb") != NULL) {
         /* Enforcer is running */
         Permit();
         printf("Enforcer is present.  First use \"enforcer off\" to "
                "disable enforcer.\n");
         return (1);
     }
-    if (FindTask("« MuForce »") != NULL) {
+    if (FindTask("\xab MuForce \xbb") != NULL) {
         /* MuForce is running */
         Permit();
         printf("MuForce is present.  First use \"muforce off\" to "
@@ -4978,7 +4978,7 @@ main(int argc, char **argv)
 
     if (runtime_flags & FLAG_IS_A4000T) {
         a4091_reg_base    = A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS;
-        a4091_rom_base    = 0x00f00000;  // Kickstart ROM base
+        a4091_rom_base    = 0x00f80000;  // Kickstart ROM base
         a4091_switch_base = A4000T_SCSI_BASE + A4000T_OFFSET_SWITCHES;
     } else {
         a4091_reg_base    = a4091_base + A4091_OFFSET_REGISTERS;
