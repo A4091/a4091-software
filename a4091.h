@@ -30,4 +30,23 @@
 #define A4091_INTPRI 30
 #define A4091_IRQ    3
 
+#if defined(DRIVER_A4091)
+# define HW_OFFSET_REGISTERS     A4091_OFFSET_REGISTERS
+# define HW_OFFSET_SWITCHES      A4091_OFFSET_SWITCHES
+# define HW_CLOCK_FREQ           50     /* SCSI Clock = 50 MHz */
+# define HW_IS_ZORRO3            1
+#elif defined(DRIVER_A4000T)
+# define HW_SCSI_BASE            A4000T_SCSI_BASE
+# define HW_OFFSET_REGISTERS     A4000T_OFFSET_REGISTERS
+# define HW_OFFSET_SWITCHES      A4000T_OFFSET_SWITCHES
+# define HW_CLOCK_FREQ           50     /* SCSI Clock = 50 MHz */
+# define HW_IS_ZORRO3            0
+#elif defined(DRIVER_A4000T770)
+# define HW_SCSI_BASE            A4000T_SCSI_BASE
+# define HW_OFFSET_REGISTERS     A4000T_OFFSET_REGISTERS
+# define HW_OFFSET_SWITCHES      A4000T_OFFSET_SWITCHES
+# define HW_CLOCK_FREQ           100    /* SCSI Clock = 100 MHz */
+# define HW_IS_ZORRO3            0
+#endif
+
 #endif /* __A4091_H */

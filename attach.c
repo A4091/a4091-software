@@ -268,7 +268,7 @@ static uint32_t
 a4000t_find(UBYTE *boardnum)
 {
     *boardnum=0;
-    asave->as_addr = A4000T_SCSI_BASE;
+    asave->as_addr = HW_SCSI_BASE;
     asave->as_cd = NULL;
     return asave->as_addr;
 }
@@ -279,8 +279,9 @@ a4091_release(uint32_t as_addr)
 {
     if (asave->as_addr != as_addr)
         printf("Releasing wrong card.\n");
-    if (asave->as_cd)
-        asave->as_cd->cd_Flags |= CDB_CONFIGME;
+#if HW_IS_ZORRO3
+    asave->as_cd->cd_Flags |= CDB_CONFIGME;
+#endif
 }
 
 static int
@@ -293,16 +294,14 @@ a4091_validate(uint32_t dev_base)
     uint     rot;
     uint     fail = 0;
 
-#ifdef DRIVER_A4091
-    siop_regmap_p rp = (siop_regmap_p) (dev_base + A4091_OFFSET_REGISTERS);
-#else
-    siop_regmap_p rp = (siop_regmap_p) (dev_base + A4000T_OFFSET_REGISTERS);
-#endif
+    siop_regmap_p rp = (siop_regmap_p) (dev_base + HW_OFFSET_REGISTERS);
+#if HW_IS_ZORRO3
     if ((dev_base < 0x10000000) || (dev_base >= 0xf0000000) ||
         (dev_base & 0x00ffffff)) {
         printf("Invalid device base %x\n", dev_base);
         return (ERROR_BAD_BOARD);
     }
+#endif
 
 #if 0
     rp->siop_istat |= SIOP_ISTAT_RST;       /* reset chip */
@@ -399,31 +398,23 @@ init_chan(device_t self, UBYTE *boardnum)
         return (rc);
 
     memset(sc, 0, sizeof (*sc));
-#ifdef DRIVER_A4091
-    dip_switches = *(uint8_t *)(dev_base + A4091_OFFSET_SWITCHES);
-#else
-    dip_switches = *(uint8_t *)(dev_base + A4000T_OFFSET_SWITCHES);
-#endif
+    dip_switches = *(uint8_t *)(dev_base + HW_OFFSET_SWITCHES);
     printf("DIP switches = %02x\n", dip_switches);
 
     Load_BattMem();
 
     sc->sc_dev = self;
-#ifdef DRIVER_A4091
-    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4091_OFFSET_REGISTERS);
-#else
-    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + A4000T_OFFSET_REGISTERS);
-#endif
-    sc->sc_clock_freq = 50;     /* Clock = 50 MHz */
+    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + HW_OFFSET_REGISTERS);
+    sc->sc_clock_freq = HW_CLOCK_FREQ;     /* SCSI Host Controller Clock */
 #ifdef NCR53C710
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
 #elif NCR53C770
     sc->sc_ctest0 = SIOP_CTEST0_CDIS;  // Disable burst
 #else
-#error foo
+#error "Unsupported SCSI Host Controller"
 #endif
-#ifdef DRIVER_A4000T
-    sc->sc_dcntl = SIOP_DCNTL_EA;  /* A4000T */
+#if defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
+    sc->sc_dcntl = SIOP_DCNTL_EA;  /* A4000T: Connect _SLACK/_STERM */
 #else
     sc->sc_dcntl = 0;              /* A4091 */
 #endif
