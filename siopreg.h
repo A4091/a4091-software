@@ -103,6 +103,7 @@ typedef struct {
 
 /*3c*/	volatile unsigned long	siop_adder;
 #ifdef PORT_AMIGA
+/*40*/	volatile unsigned long	siop_pad0[16];   /* NCR write offset: 0x80 */
 /* Duplicate registers for write to avoid 68030 write-allocate buf */
 /*00*/	volatile unsigned long	siop_pad1[7];   /* Shadow 0x00 - 0x1b */
 /*1c*/	volatile unsigned long	siop_temp2;	/* Shadow Temporary Stack */
@@ -225,14 +226,24 @@ typedef struct {
 /*5a*/	volatile unsigned short	siop_sbdl;	/* ro: SCSI Bus Data Lines */
 
 /*5c*/	volatile unsigned long	siop_scratchb;	/* rw: Scratch Register B */
+/*60*/	volatile unsigned long  siop_scratchc;  /* rw: Scratch Register C */
+/*64*/	volatile unsigned long  siop_scratchd;  /* rw: Scratch Register D */
+/*68*/	volatile unsigned long  siop_scratche;  /* rw: Scratch Register E */
+/*6c*/	volatile unsigned long  siop_scratchf;  /* rw: Scratch Register F */
+/*70*/	volatile unsigned long  siop_scratchg;  /* rw: Scratch Register G */
+/*74*/	volatile unsigned long  siop_scratchh;  /* rw: Scratch Register H */
+/*78*/	volatile unsigned long  siop_scratchi;  /* rw: Scratch Register I */
+/*7c*/	volatile unsigned long  siop_scratchj;  /* rw: Scratch Register J */
 
 #ifdef PORT_AMIGA
+/*80*/  volatile unsigned long  siop_pad0[96];  /* Next usable register block @0xdd0200 */
 /* Duplicate registers for write to avoid 68030 write-allocate buf */
 /*00*/	volatile unsigned long	siop_pad1[7];   /* Shadow 0x00 - 0x1b */
 /*1c*/	volatile unsigned long	siop_temp2;	/* Shadow Temporary Stack */
 /*20*/	volatile unsigned long	siop_pad2[5];   /* Shadow 0x20 - 0x33 */
 /*34*/	volatile unsigned long	siop_scratcha2;	/* Shadow Scratch Register */
 /*38*/	volatile unsigned long	siop_pad3[2];   /* Shadow 0x38 - 0x3f */
+/*40*/  volatile unsigned long  siop_pad4[16];  /* Shadow 0x40 - 0x7f */
 #endif
 
 
