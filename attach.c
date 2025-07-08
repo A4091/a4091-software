@@ -302,7 +302,9 @@ a4091_validate(uint32_t dev_base)
         return (ERROR_BAD_BOARD);
     }
 #endif
-
+#if !HW_IS_ZORRO3
+        rp->siop_dcntl = SIOP_DCNTL_EA;
+#endif
 #if 0
     rp->siop_istat |= SIOP_ISTAT_RST;       /* reset chip */
     delay(20000);
