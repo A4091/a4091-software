@@ -1890,11 +1890,12 @@ decode_switches(void)
     if (runtime_flags & FLAG_IS_A4000T) {
         addr = a4091_switch_base;
         printf("A4000T");
+        switches = *ADDR32(addr);
     } else {
         addr = a4091_switch_base;
         printf("A4091");
+        switches = *ADDR8(addr);
     }
-    switches = *ADDR8(addr);
     printf(" Rear-access DIP switches\n");
 
     show_dip(switches, 7);
