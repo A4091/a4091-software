@@ -16,12 +16,12 @@ NAME=a4091
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DNAME=scsi
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DNAME="scsi"
 NAME=scsi
 HAVE_ROM=n
 else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DNAME="scsi"
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DNAME="scsi770"
 NAME=scsi770
 HAVE_ROM=n
 else
@@ -66,7 +66,7 @@ VASM    := vasmm68k_mot
 
 # Find an appropriate set of NDK includes
 NDK_PATHS := /opt/amiga/m68k-amigaos/ndk-include
-NDK_PATHS += /opt/amiga-2021.05/m68k-amigaos/ndk-include
+NDK_PATHS += ~/local/amiga-gcc/m68k-amigaos/ndk-include
 NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 
 # CFLAGS for device driver
