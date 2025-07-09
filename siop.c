@@ -357,11 +357,13 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
             (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0) {
             if (--i <= 0) {
 #ifdef DEBUG
+                long dcmd_val;
+                memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
                 printf ("waiting: tgt %d cmd %02x sbcl %02x dsp %lx (+%lx) dcmd %lx ds %p timeout %d\n",
                     xs->xs_periph->periph_target, acb->cmd.opcode,
                     rp->siop_sbcl, rp->siop_dsp,
                     rp->siop_dsp - sc->sc_scriptspa,
-                    *((volatile long *)&rp->siop_dcmd), &acb->ds, acb->xs->timeout);
+                    dcmd_val, &acb->ds, acb->xs->timeout);
 #endif
                 i = WAIT_ITERS;
                 --to;
@@ -1497,11 +1499,14 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         }
 #ifdef DEBUG
         SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
-        if (siop_debug & 9)
+        if (siop_debug & 9) {
+	    long dcmd_val;
+	    memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
             printf ("Phase mismatch: %x dsp +%lx dcmd %lx\n",
                 rp->siop_sbcl,
                 rp->siop_dsp - sc->sc_scriptspa,
-                *((volatile long *)&rp->siop_dcmd));
+                dcmd_val);
+	}
 #endif
         if ((rp->siop_sbcl & SIOP_REQ) == 0) {
             printf ("Phase mismatch: REQ not asserted! %02x dsp %lx\n",
@@ -1871,10 +1876,12 @@ bad_phase:
      */
     printf ("siopchkintr: target %x ds %p\n", target, acb ? &acb->ds : NULL);
     if (acb != NULL) {
+        long dcmd_val;
+        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
         printf ("scripts %lx ds %x rp %x dsp %lx dcmd %lx\n",
             sc->sc_scriptspa, (unsigned)kvtop((void *)&acb->ds),
             (unsigned)kvtop((void *)__UNVOLATILE(rp)), rp->siop_dsp,
-            *((volatile long *)&rp->siop_dcmd));
+            dcmd_val);
         printf ("siopchkintr: istat %x dstat %x sstat0 %x dsps %lx dsa %lx sbcl %x sts %x msg %x %x sfbr %x\n",
             istat, dstat, sstat0, rp->siop_dsps, rp->siop_dsa,
              rp->siop_sbcl, acb->stat[0], acb->msg[0], acb->msg[1], rp->siop_sfbr);
@@ -1882,8 +1889,8 @@ bad_phase:
 #ifdef DEBUG
 #ifdef PORT_AMIGA
     if (siop_debug & 0x20) {
-	uint32_t dcmd_val;
-	memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
+        long dcmd_val;
+        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
         panic("Unhandled Interrupt\n\n"
               "istat %lx dstat %lx sstat0 %lx\n"
               "dsps %lx dsa %lx sbcl %lx sfbr %lx\n"
@@ -2042,7 +2049,7 @@ scsi_period_to_siop(struct siop_softc *sc, int target)
 {
     int period, offset, sxfer, sbcl = 0;
 #ifdef DEBUG_SYNC
-    int i;
+    size_t i;
 #endif
 
     period = sc->sc_nexus->msg[4];  /* SCSI clock period = msg[4] * 4ns */
