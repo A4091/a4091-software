@@ -252,7 +252,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     char *ret, *num="8", *hostid="Host ID: 7";
 
     if (asave) {
-        dip_switches = *(uint8_t *)((asave->as_addr) + HW_OFFSET_SWITCHES);
+        dip_switches = get_dip_switches();
         printf("addr=%x\n",asave->as_addr);
         printf("dip_switches=%x\n",dip_switches);
     } else {

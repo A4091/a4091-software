@@ -1624,7 +1624,7 @@ int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	struct MountStruct ms;
 	ULONG unitNum[8];
 	int i, j = 1, ret = 0;
-	UBYTE dip_switches = *(UBYTE *)((asave->as_addr) + HW_OFFSET_SWITCHES);
+	UBYTE dip_switches = get_dip_switches();
 	UBYTE hostid = dip_switches & 7;
 	(void)dev;
 

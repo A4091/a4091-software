@@ -274,6 +274,17 @@ a4000t_find(UBYTE *boardnum)
 }
 #endif
 
+uint8_t get_dip_switches(void)
+{
+    uint8_t switches;
+#if defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
+    switches = *(uint32_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
+#else
+    switches = *(uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
+#endif
+    return switches;
+}
+
 static void
 a4091_release(uint32_t as_addr)
 {
@@ -400,7 +411,7 @@ init_chan(device_t self, UBYTE *boardnum)
         return (rc);
 
     memset(sc, 0, sizeof (*sc));
-    dip_switches = *(uint8_t *)(dev_base + HW_OFFSET_SWITCHES);
+    dip_switches = get_dip_switches();
     printf("DIP switches = %02x\n", dip_switches);
 
     Load_BattMem();

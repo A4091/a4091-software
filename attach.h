@@ -55,5 +55,7 @@ int periph_still_attached(void);
 int init_chan(device_t self, UBYTE *boardnum);
 void deinit_chan(device_t self);
 
+uint8_t get_dip_switches(void);
+
 #endif /* _ATTACH_H */
 
