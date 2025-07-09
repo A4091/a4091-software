@@ -338,11 +338,13 @@ siopng_poll(struct siop_softc *sc, struct siop_acb *acb)
 		    (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0) {
 			if (--i <= 0) {
 #ifdef DEBUG
+                                long dcmd_val;
+                                memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
 				printf ("waiting: tgt %d cmd %02x sbcl %02x istat %02x sbdl %04x\n         dsp %lx (+%lx) dcmd %lx ds %p timeout %d\n",
 				    xs->xs_periph->periph_target, acb->cmd.opcode,
 				    rp->siop_sbcl, istat, rp->siop_sbdl, rp->siop_dsp,
 				    rp->siop_dsp - sc->sc_scriptspa,
-				    *((volatile long *)&rp->siop_dcmd), &acb->ds, acb->xs->timeout);
+				    dcmd_val, &acb->ds, acb->xs->timeout);
 #endif
 				i = 50000;
 				--to;
@@ -1032,6 +1034,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 	struct siop_acb *acb = sc->sc_nexus;
 	int	target = 0;
 	int	dfifo, dbc, sstat0, sstat1, sstat2;
+        long dcmd_val;
 	(void)istat;
 
 	dfifo = rp->siop_dfifo;
@@ -1230,6 +1233,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #endif
 		if (acb->iob_len) {
 			int adjust;
+                        long dcmd_val;
 			adjust = ((dfifo - (dbc & 0x7f)) & 0x7f);
 			if (sstat0 & SIOP_SSTAT0_OLF)	/* sstat0 SODL lsb */
 				++adjust;
@@ -1239,8 +1243,8 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 				++adjust;
 			if (sstat2 & SIOP_SSTAT2_ORF1)	/* sstat2 SODR msb */
 				++adjust;
-			acb->iob_curlen = 
-			    *((long *)__UNVOLATILE(&rp->siop_dcmd)) & 0xffffff;
+                        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+			acb->iob_curlen = dcmd_val & 0xffffff;
 			acb->iob_curlen += adjust;
 			acb->iob_curbuf = 
 			    *((long *)__UNVOLATILE(&rp->siop_dnad)) - adjust;
@@ -1262,11 +1266,14 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 		}
 #ifdef DEBUG
 		SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
-		if (siopng_debug & 9)
+		if (siopng_debug & 9) {
+                        long dcmd_val;
+                        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
 			printf ("Phase mismatch: %x dsp +%lx dcmd %lx\n",
 			    rp->siop_sbcl,
 			    rp->siop_dsp - sc->sc_scriptspa,
-			    *((volatile long *)&rp->siop_dcmd));
+			    dcmd_val);
+		}
 #endif
 		if ((rp->siop_sbcl & SIOP_REQ) == 0) {
 			printf ("Phase mismatch: REQ not asserted! %02x dsp %lx\n",
@@ -1626,11 +1633,12 @@ bad_phase:
 	 * then panics.
 	 * XXXX need to clean this up to print out the info, reset, and continue
 	 */
+        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
 	printf ("siopngchkintr: target %x ds %p\n", target, &acb->ds);
 	printf ("scripts %lx ds %x rp %x dsp %lx dcmd %lx\n",
 	    sc->sc_scriptspa, (unsigned)kvtop((void *)&acb->ds),
 	    (unsigned)kvtop((void *)__UNVOLATILE(rp)), rp->siop_dsp,
-	    *((long *)__UNVOLATILE(&rp->siop_dcmd)));
+	    dcmd_val);
 	printf ("siopngchkintr: istat %x dstat %x sist %x dsps %lx dsa %lx sbcl %x sts %x msg %x %x sfbr %x\n",
 	    istat, dstat, sist, rp->siop_dsps, rp->siop_dsa,
 	     rp->siop_sbcl, acb->stat[0], acb->msg[0], acb->msg[1], rp->siop_sfbr);
@@ -1916,21 +1924,21 @@ siopng_dump(struct siop_softc *sc)
 #endif
 	printf("%s@%p regs %p istat %x\n",
 	    device_xname(sc->sc_dev), sc, rp, rp->siop_istat);
-	if ((acb = sc->free_list.tqh_first) > 0) {
+	if ((acb = sc->free_list.tqh_first) != NULL) {
 		printf("Free list:\n");
 		while (acb) {
 			siopng_dump_acb(acb);
 			acb = acb->chain.tqe_next;
 		}
 	}
-	if ((acb = sc->ready_list.tqh_first) > 0) {
+	if ((acb = sc->ready_list.tqh_first) != NULL) {
 		printf("Ready list:\n");
 		while (acb) {
 			siopng_dump_acb(acb);
 			acb = acb->chain.tqe_next;
 		}
 	}
-	if ((acb = sc->nexus_list.tqh_first) > 0) {
+	if ((acb = sc->nexus_list.tqh_first) != NULL) {
 		printf("Nexus list:\n");
 		while (acb) {
 			siopng_dump_acb(acb);
