@@ -62,7 +62,7 @@ panic(const char *fmt, ...)
     struct EasyStruct es = {
         sizeof (es),
         0,
-        "A4091 Panic",
+        XSTR(DEVNAME)" Panic",
         (char *) fmt,
         "OK",
     };
@@ -176,7 +176,7 @@ const char *
 device_xname(void *ptr)
 {
     (void)ptr;
-    return ("A4091");
+    return (XSTR(DEVNAME));
 }
 
 #ifdef USE_BASEREL

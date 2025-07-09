@@ -34,6 +34,9 @@ typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 #define ADDR8(x)      (volatile uint8_t *)(x)
 #define ADDR32(x)     (volatile aliased_uint32_t *)(x)
 
+#define STR(s) #s      // Turn s into a string literal without macro expansion
+#define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
+
 /*
  * Reorder protection when accessing device registers.
  */

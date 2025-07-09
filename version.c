@@ -21,7 +21,7 @@ const char * const version_str =
     XSTR(DEVICE_VERSION)"."XSTR(DEVICE_REVISION)" built "BUILD_DATE" "BUILD_TIME;
 #endif
 
-#define DEVICE_ID_STRING "a4091 " XSTR(DEVICE_VERSION) "." \
+#define DEVICE_ID_STRING XSTR(DEVNAME) " " XSTR(DEVICE_VERSION) "." \
         XSTR(DEVICE_REVISION) " (" AMIGA_DATE ")\r\n"
         /* format: "name version.revision (dd.mm.yyyy)" */
 const char device_id_string[] = DEVICE_ID_STRING;

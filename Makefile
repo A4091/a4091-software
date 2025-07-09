@@ -11,18 +11,18 @@ DEVICE ?= A4000T770
 
 ifeq ($(DEVICE),A4091)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DNAME="a4091"
-NAME=a4091
+TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4091"
+DEVNAME=a4091
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DNAME="scsi710"
-NAME=scsi710
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DDEVNAME="scsi710"
+DEVNAME=scsi710
 HAVE_ROM=n
 else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DNAME="scsi770"
-NAME=scsi770
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DDEVNAME="scsi770"
+DEVNAME=scsi770
 HAVE_ROM=n
 else
 $(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
@@ -30,12 +30,12 @@ endif
 
 OBJDIR  := objs
 
-ROM	:= $(NAME).rom
-ROM_ND	:= $(NAME)_nodriver.rom
-ROM_DB	:= $(NAME)_debug.rom
-ROM_CD	:= $(NAME)_cdfs.rom
-ROM_COM	:= $(NAME)_commodore.rom
-PROG	:= $(NAME).device
+ROM	:= $(DEVNAME).rom
+ROM_ND	:= $(DEVNAME)_nodriver.rom
+ROM_DB	:= $(DEVNAME)_debug.rom
+ROM_CD	:= $(DEVNAME)_cdfs.rom
+ROM_COM	:= $(DEVNAME)_commodore.rom
+PROG	:= $(DEVNAME).device
 PROGU	:= a4091
 PROGD	:= a4091d
 SRCS    := device.c version.c port.c attach.c cmdhandler.c printf.c
@@ -300,7 +300,7 @@ $(OBJDIR)/CDVDFS:
 
 lha:
 	$(QUIET)$(MAKE) distclean $(OBJDIR)
-	@echo Building $(NAME).rom Debug image
+	@echo Building $(DEVNAME).rom Debug image
 	$(QUIET)$(MAKE) $(ROM) DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
 	$(QUIET)mv $(ROM) $(ROM_DB)
 	$(QUIET)$(MAKE) distclean

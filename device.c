@@ -43,12 +43,10 @@
 #include <clib/debug_protos.h>
 #endif
 
-#define STR(s) #s      // Turn s into a string literal without macro expansion
-#define XSTR(s) STR(s) // Turn s into a string literal after macro expansion
 
 #define DEVICE_PRIORITY 10  // Fine to leave priority as zero
 
-#define DEVICE_NAME XSTR(NAME) ".device"
+#define DEVICE_NAME XSTR(DEVNAME) ".device"
 
 struct ExecBase *SysBase;
 struct MsgPort *myPort;
@@ -175,7 +173,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     /* Start thread to manage board and process commands */
     InitSemaphore(&entry_sem);
     ObtainSemaphore(&entry_sem);
-    printf("A4091: %s %s\n", device_name, device_id_string);
+    printf(XSTR(DEVNAME)": %s %s\n", device_name, device_id_string);
     dev->lib_OpenCnt++;
 
     int board_num = 0;

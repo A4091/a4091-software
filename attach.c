@@ -278,9 +278,9 @@ uint8_t get_dip_switches(void)
 {
     uint8_t switches;
 #if defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
-    switches = *(uint32_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
+    switches = *(volatile uint32_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
 #else
-    switches = *(uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
+    switches = *(volatile uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES);
 #endif
     return switches;
 }
@@ -362,7 +362,7 @@ a4091_validate(uint32_t dev_base)
         got_temp = rp->siop_temp;
         if ((got_scratch != patt) ||
             (got_temp != next)) {
-            printf("A4091 FAIL");
+            printf(XSTR(DEVNAME)" FAIL");
             if (got_scratch != patt) {
                 printf(" scratch %08x != %08x [%08x]",
                        got_scratch, patt, got_scratch ^ patt);
@@ -402,11 +402,11 @@ init_chan(device_t self, UBYTE *boardnum)
     dev_base = a4000t_find(boardnum);
 #endif
     if (dev_base == 0) {
-        printf("A4091: board #%u not found\n",*boardnum);
+        printf(XSTR(DEVNAME)": board #%u not found\n",*boardnum);
         return (ERROR_NO_BOARD);
     }
 
-    printf("A4091: board #%u found at 0x%x\n", *boardnum, dev_base);
+    printf(XSTR(DEVNAME)": board #%u found at 0x%x\n", *boardnum, dev_base);
     if ((rc = a4091_validate(dev_base)))
         return (rc);
 
