@@ -26,13 +26,13 @@ jobs:
     - name: Cleaning
       run: make DEVICE=A4091 clean
 
-    - name: Build A4000T scsi.device
-      run: make DEVICE=A4000T scsi.device
+    - name: Build A4000T scsi710.device
+      run: make DEVICE=A4000T scsi710.device
 
     - name: Cleaning Again
       run: make DEVICE=A4091 clean
 
-    - name: Build A4000T scsi.device
+    - name: Build A4000T scsi770.device
       run: make DEVICE=A4000T770 scsi770.device
 
     - name: Build a4091 tool
