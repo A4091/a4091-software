@@ -279,10 +279,10 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, ULONG *base, UWORD *sectorSize) {
   flash_unlock_sdp();
   flash_command(CMD_ID_ENTRY);
 
-  // Read manufacturer ID from byte address 0
+  // Read manufacturer ID
   manufId = flash_read_byte(0);
-  // Read device ID from byte address 2
-  deviceId = flash_read_byte(2);
+  // Read device ID
+  deviceId = flash_read_byte(1);
 
   flash_command(CMD_CFI_ID_EXIT);
 

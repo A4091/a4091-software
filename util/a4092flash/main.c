@@ -482,7 +482,7 @@ BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG 
       lastProgress = progress;
     }
     sourcePtr = ((void *)source + i);
-    destPtr = ((void *)dest + (i << 1));
+    destPtr = ((void *)dest + (i << 2));
     if (*sourcePtr != *destPtr) {
           printf("\nVerification failed at %06x - Expected %02X but read %02X\n",(int)destPtr,*sourcePtr,*destPtr);
           return false;
