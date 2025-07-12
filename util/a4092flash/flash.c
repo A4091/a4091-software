@@ -158,6 +158,21 @@ static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device) {
     return sectorSize;
 }
 
+/** flash_readByte
+ *
+ * @brief Read a byte from Flash
+ * @param address Address to read from
+ * @return The data that was read
+ */
+UBYTE flash_readByte(ULONG address) {
+  // Mask address to ensure it is within the valid flash size.
+  address &= (FLASH_SIZE - 1);
+
+  return flash_read_byte(address);
+}
+
+
+
 /** flash_writeByte
  *
  * @brief Write a byte to the Flash

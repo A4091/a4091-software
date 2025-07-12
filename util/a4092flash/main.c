@@ -446,7 +446,7 @@ BOOL readFileToBuf(char *filename, void *buffer) {
 */
 BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG size) {
   UBYTE *sourcePtr = NULL;
-  UBYTE *destPtr   = NULL;
+  UBYTE destVal   = 0;
 
   int progress = 0;
   int lastProgress = 1;
@@ -482,9 +482,9 @@ BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG 
       lastProgress = progress;
     }
     sourcePtr = ((void *)source + i);
-    destPtr = ((void *)dest + (i << 2));
-    if (*sourcePtr != *destPtr) {
-          printf("\nVerification failed at %06x - Expected %02X but read %02X\n",(int)destPtr,*sourcePtr,*destPtr);
+    destVal = flash_readByte(i);
+    if (*sourcePtr != destVal) {
+          printf("\nVerification failed at offset %06x - Expected %02X but read %02X\n",i,*sourcePtr,destVal);
           return false;
     }
   }
