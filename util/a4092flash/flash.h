@@ -22,12 +22,12 @@
 #include <exec/types.h>
 #include <stdbool.h>
 
-void flash_unlock_sdp();
-void flash_erase_chip();
-UBYTE flash_readByte(ULONG);
-void flash_writeByte(ULONG, UBYTE);
-bool flash_init(UBYTE *, UBYTE *, ULONG *, UWORD *);
-void flash_erase_sector(ULONG);
-void flash_erase_bank(UWORD);
+void flash_unlock_sdp(void);
+void flash_erase_chip(void);
+UBYTE flash_readByte(ULONG address);
+void flash_writeByte(ULONG address, UBYTE data);
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, UWORD *sectorSize);
+void flash_erase_sector(ULONG address);
+void flash_erase_bank(UWORD sectorSize);
 
 #endif

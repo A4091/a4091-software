@@ -31,7 +31,8 @@
 #include "main.h"
 #include "config.h"
 
-#define MANUF_ID_COMMODORE 513
+#define MANUF_ID_COMMODORE_BRAUNSCHWEIG 513
+#define MANUF_ID_COMMODORE 514
 
 #define PROD_ID_A4092  84
 
@@ -49,7 +50,8 @@ bool devsInhibited = false;
  * Kickstart V36 (2.0+) and up contain a function for this
  * But for 1.3 we will need to provide our own function
  */
-static void _ColdReboot() {
+static void _ColdReboot(void)
+{
   // Copied from coldboot.asm
   // http://amigadev.elowar.com/read/ADCD_2.1/Hardware_Manual_guide/node02E3.html
   asm("move.l  4,a6               \n\t" // SysBase
@@ -73,7 +75,8 @@ static void _ColdReboot() {
  * 
  * @param inhibit (bool) True: inhibit, False: uninhibit 
  */
-bool inhibitDosDevs(bool inhibit) {
+bool inhibitDosDevs(bool inhibit)
+{
   bool success = true;
   struct MsgPort *mp = CreatePort(NULL,0);
   struct Message msg;
@@ -180,8 +183,9 @@ bool inhibitDosDevs(bool inhibit) {
  * Configure the board struct for an A4092 Board
  * @param board pointer to the board struct
  */
-static void setup_a4092_board(struct scsiBoard *board) {
-  board->flashbase = board->cd->cd_BoardAddr;
+static void setup_a4092_board(struct scsiBoard *board)
+{
+  board->flashbase = (volatile UBYTE *)board->cd->cd_BoardAddr;
 }
 
 /**
@@ -191,7 +195,8 @@ static void setup_a4092_board(struct scsiBoard *board) {
  * @param config pointer to the config struct
  * @return boolean true / false
  */
-static bool promptUser(struct Config *config) {
+static bool promptUser(struct Config *config)
+{
   int c;
   char answer = 'y'; // Default to yes
 
@@ -214,6 +219,8 @@ static bool promptUser(struct Config *config) {
   return (answer == 'y');
 }
 
+static BOOL probeFlash(ULONG romSize);
+
 int main(int argc, char *argv[])
 {
   SysBase = *((struct ExecBase **)4UL);
@@ -230,13 +237,13 @@ int main(int argc, char *argv[])
     return(rc);
   }
 
-  printf("\n==== A4092 Flash Updater ====\n");
+  printf("\n%s\n\n", VERSION);
 
   struct Task *task = FindTask(0);
   SetTaskPri(task,20);
   if ((config = configure(argc,argv)) != NULL) {
 
-    if (config->scsi_rom_filename) {
+    if (config->writeFlash && config->scsi_rom_filename) {
       romSize = getFileSize(config->scsi_rom_filename);
       if (romSize == 0) {
         rc = 5;
@@ -289,6 +296,7 @@ int main(int argc, char *argv[])
 
         switch (cd->cd_Rom.er_Manufacturer) {
           case MANUF_ID_COMMODORE:
+          case MANUF_ID_COMMODORE_BRAUNSCHWEIG:
             if (cd->cd_Rom.er_Product == PROD_ID_A4092) {
               printf("Found A4091 / A4092");
               setup_a4092_board(&board);
@@ -305,34 +313,53 @@ int main(int argc, char *argv[])
         boards_found++;
 
         // Ask the user if they wish to update this board
-        if (!promptUser(config)) continue;
+        if ((config->writeFlash || config->eraseFlash) && !promptUser(config)) continue;
 
         UBYTE manufId,devId;
         UWORD sectorSize;
+        ULONG flashSize;
 
-        if (flash_init(&manufId,&devId,board.flashbase,&sectorSize)) {
+        if (flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
           if (config->eraseFlash) {
-            printf("Erasing flash.\n");
+            printf("Erasing whole flash.\n");
             flash_erase_chip();
           }
 
-          if (config->scsi_rom_filename) {
+          if (config->writeFlash && config->scsi_rom_filename) {
             if (config->eraseFlash == false) {
               if (sectorSize > 0) {
-                printf("Erasing A4092 bank...\n");
+                printf("Erasing flash bank.\n");
                 flash_erase_bank(sectorSize);
               } else {
-                printf("Erasing A4092 flash...\n");
+                printf("Erasing whole flash.\n");
                 flash_erase_chip();
               }
             }
-            printf("Writing A4092 ROM.\n");
-            writeBufToFlash(&board,driver_buffer,board.flashbase,romSize);
+            printf("Writing A4092 ROM image to flash memory.\n");
+            writeBufToFlash(&board, driver_buffer, board.flashbase, romSize);
             printf("\n");
           }
 
+	  if (config->readFlash && config->scsi_rom_filename && flashSize) {
+            printf("Writing A4092 flash memory to file.\n");
+            if (writeFlashToFile(config->scsi_rom_filename,flashSize) == false) {
+              rc = 5;
+              goto exit;
+            }
+	  }
+
+	  if (config->probeFlash && flashSize) {
+            if (probeFlash(flashSize) == false) {
+              rc = 5;
+              goto exit;
+            }
+	  }
+
         } else {
-          printf("Error: A4092 - Unknown Flash device Manufacturer: %02X Device: %02X\n", manufId, devId);
+	  if (manufId == 0x9f && devId == 0xaf)
+            printf("This is likely an A4091. Only A4092 has flash memory.\n");
+	  else
+            printf("Error: A4092 - Unknown Flash device Manufacturer: %02X Device: %02X\n", manufId, devId);
           rc = 5;
         }
       }
@@ -377,7 +404,8 @@ exit:
  * @param filename file to check the size of
  * @returns File size in bytes
 */
-ULONG getFileSize(char *filename) {
+ULONG getFileSize(char *filename)
+{
   BPTR fileLock;
   ULONG fileSize = 0;
   struct FileInfoBlock *FIB;
@@ -408,7 +436,8 @@ ULONG getFileSize(char *filename) {
  * @param filename Name of the file to open
  * @return true on success
 */
-BOOL readFileToBuf(char *filename, void *buffer) {
+BOOL readFileToBuf(char *filename, void *buffer)
+{
   ULONG romSize = getFileSize(filename);
   BOOL ret = true;
 
@@ -435,6 +464,52 @@ BOOL readFileToBuf(char *filename, void *buffer) {
 }
 
 /**
+ * writeFlashToFile()
+ *
+ * Write the Flash content to the specified file
+ *
+ * @param filename file to write
+ * @param size number of bytes to write
+ * @returns true on success
+*/
+BOOL writeFlashToFile(char *filename, ULONG romSize)
+{
+  BOOL ret = true;
+  char * buffer;
+
+  if (romSize == 0) return false;
+  fprintf (stdout, "Flash size: %d KB\n", romSize / 1024);
+  buffer = AllocMem(romSize, 0);
+
+  BPTR fh;
+
+  if (buffer) {
+    fprintf(stdout, "Reading Flash...\n");
+    int i;
+    for (i=0; i<romSize; i++) {
+      buffer[i] = flash_readByte(i);
+    }
+    fprintf(stdout, "Writing File %s...\n", filename);
+    fh = Open(filename,MODE_NEWFILE);
+
+    if (fh) {
+      Write(fh,buffer,romSize);
+      Close(fh);
+      FreeMem(buffer, romSize);
+    } else {
+      printf("Error opening %s\n",filename);
+      FreeMem(buffer, romSize);
+      return false;
+    }
+
+  } else {
+    return false;
+  }
+
+  return ret;
+}
+
+/**
  * writeBufToFlash()
  *
  * Write the buffer to the currently selected flash bank
@@ -444,7 +519,8 @@ BOOL readFileToBuf(char *filename, void *buffer) {
  * @param size number of bytes to write
  * @returns true on success
 */
-BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG size) {
+BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *dest, ULONG size)
+{
   UBYTE *sourcePtr = NULL;
   UBYTE destVal   = 0;
 
@@ -491,4 +567,64 @@ BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG 
   fprintf(stdout,"\n");
   fflush(stdout);
   return true;
+}
+
+static int find_a409x_version(const unsigned char *buffer, ULONG romSize) {
+    const char *needle = "A4091 scsidisk";
+    size_t needle_len = strlen(needle);
+
+    // We can only search up to (romSize - needle_len)
+    for (size_t i = 0; i <= romSize - needle_len; i++) {
+        if (memcmp(buffer + i, needle, needle_len) == 0) {
+            return (int)i;
+        }
+    }
+    return -1; // Not found
+}
+
+/**
+ * probeFlash()
+ *
+ * Analyze flash content
+ *
+ * @param size number of bytes to write
+ * @returns true on success
+*/
+static BOOL probeFlash(ULONG romSize)
+{
+  BOOL ret = true;
+  char * buffer;
+
+  if (romSize == 0) return false;
+  buffer = AllocMem(romSize, 0);
+
+  if (buffer) {
+    fprintf(stdout, "Reading Flash...\n");
+    int i;
+    for (i=0; i<romSize; i++) {
+      buffer[i] = flash_readByte(i);
+    }
+    
+    ULONG magic1,magic2;
+    memcpy (&magic1, buffer+0x10000-8, 4);
+    memcpy (&magic2, buffer+0x10000-4, 4);
+    if (magic1 == 0xFFFF5352 && magic2 == 0x2F434448) {
+      printf("Found 64KB A4091/A4092 image.\n");
+    } else {
+      printf("Not a standard image.\n");
+    }
+
+    int offset = find_a409x_version(buffer, romSize);
+    if (offset > 0) {
+      printf("Version: %s\n", buffer + offset);
+    } else {
+      printf("Could not determine version.\n");
+    }
+
+    FreeMem(buffer, romSize);
+  } else {
+    ret=false;
+  }
+
+  return ret;
 }

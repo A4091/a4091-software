@@ -49,6 +49,15 @@ struct Config* configure(int argc, char *argv[]) {
         case 'W':
           if (i+1 < argc) {
             config->scsi_rom_filename = argv[i+1];
+	    config->writeFlash = true;
+            i++;
+          }
+          break;
+
+        case 'R':
+          if (i+1 < argc) {
+            config->scsi_rom_filename = argv[i+1];
+	    config->readFlash = true;
             i++;
           }
           break;
@@ -57,8 +66,12 @@ struct Config* configure(int argc, char *argv[]) {
           config->eraseFlash = true;
           break;
 
-        case 'R':
+        case 'B':
           config->rebootRequired = true;
+          break;
+
+        case 'P':
+          config->probeFlash = true;
           break;
 
         case 'Y':
@@ -69,7 +82,13 @@ struct Config* configure(int argc, char *argv[]) {
     }
   }
 
- if (config->scsi_rom_filename == NULL && config->eraseFlash == false) {
+  if (config->readFlash == false && config->writeFlash == false &&
+		 config->eraseFlash == false && config->probeFlash == false) {
+      printf("You need to specify one of -E, -R, -W, -P.\n");
+      error = true;
+  }
+  if (config->readFlash == true && config->writeFlash == true) {
+      printf("a4092flash: -R, -W are mutually exclusive.\n");
       error = true;
   }
 
@@ -84,9 +103,12 @@ struct Config* configure(int argc, char *argv[]) {
 /** usage
  * @brief Print the usage information
 */
-void usage() {
-    printf("\nUsage: a4092flash [-I <a4092.rom>]\n\n");
-    printf("       -W <a4092.rom> - Flash A4092 ROM.\n");
+void usage(void) {
+    printf("\nUsage: a4092flash [-Y] { -R <a4092.rom> | -W <a4092.rom> | -E | -P }\n\n");
+    printf("       -Y assume YES as answer to all questions\n");
+    printf("       -R <a4092.rom> - Read A4092 ROM to file\n");
+    printf("       -W <a4092.rom> - Flash A4092 ROM from file\n");
     printf("       -E Erase flash.\n");
-    printf("       -R reboot.\n");
+    printf("       -P Probe flash.\n");
+    printf("       -B Reboot.\n");
 }

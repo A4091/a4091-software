@@ -16,6 +16,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include <stdio.h>
 #include <proto/expansion.h>
 #include <exec/types.h>
 #include <stdbool.h>
@@ -23,7 +24,7 @@
 #include "flash.h"
 #include "flash_constants.h"
 
-volatile ULONG flashbase;
+static ULONG flashbase;
 
 /**
  * @brief Reads a single byte from the flash memory at the given byte address,
@@ -36,7 +37,8 @@ volatile ULONG flashbase;
  * @param byte_address The byte address (0x000000 - 0x7FFFFF) to read from.
  * @return The UBYTE value read from the flash.
  */
-static UBYTE flash_read_byte(ULONG byte_address) {
+static UBYTE flash_read_byte(ULONG byte_address)
+{
     // Calculate the physical 32-bit word address in memory.
     // Each byte address maps to a unique 32-bit word in the underlying memory.
     volatile ULONG *word_ptr = (volatile ULONG *)(flashbase + (byte_address * 4));
@@ -67,7 +69,8 @@ static UBYTE flash_read_byte(ULONG byte_address) {
  * @param byte_address The byte address (0x000000 - 0x7FFFFF) to write to.
  * @param data The UBYTE value to write to the flash.
  */
-static void flash_write_byte(ULONG byte_address, UBYTE data) {
+static void flash_write_byte(ULONG byte_address, UBYTE data)
+{
     // Calculate the physical 32-bit word address in memory.
     // Each byte address maps to a unique 32-bit word in the underlying memory.
     volatile ULONG *word_ptr = (volatile ULONG *)(flashbase + (byte_address * 4));
@@ -91,18 +94,25 @@ static void flash_write_byte(ULONG byte_address, UBYTE data) {
 static inline void flash_command(UBYTE);
 static inline void flash_poll(ULONG);
 
-static const LONG devices_supported[] = {
-    0x1F03, // AT49BV512
-    0xBFB5, // SST39SF010
-    0xBFB6, // SST39SF020
-    0xBFB7, // SST39SF040
-    0xBFD5, // SST39(L/V)F010
-    0xBFD6, // SST39(L/V)F020
-    0xBFD7, // SST39(L/V)F040
-    0xC2A4, // MX29F040C
-    0x0120, // AM29F010
-    0x01A4, // AM29F040
-    0
+struct flashchips {
+	UWORD id;
+	UWORD size;
+	const char *vendor;
+	const char *device;
+};
+
+static const struct flashchips devices_supported[] = {
+    { 0x0120, 128, "AMD",      "AM29F010"       },
+    { 0x01A4, 512, "AMD",      "AM29F040"       },
+    { 0x1F03,  64, "Atmel",    "AT49BV512"      },
+    { 0xBFB5, 128, "SST",      "SST39SF010"     },
+    { 0xBFB6, 256, "SST",      "SST39SF020"     },
+    { 0xBFB7, 512, "SST",      "SST39SF040"     },
+    { 0xBFD5, 128, "SST",      "SST39(L/V)F010" },
+    { 0xBFD6, 256, "SST",      "SST39(L/V)F020" },
+    { 0xBFD7, 512, "SST",      "SST39(L/V)F040" },
+    { 0xC2A4, 512, "Macronix", "MX29F040C"      },
+    { 0x0000,   0, NULL,       NULL             }
 };
 
 /** flash_is_supported
@@ -112,13 +122,22 @@ static const LONG devices_supported[] = {
  * @param device the device id
  * @returns boolean result
  */
-static bool flash_is_supported(UBYTE manufacturer, UBYTE device) {
+static bool flash_is_supported(UBYTE manufacturer, UBYTE device, UWORD *size)
+{
   ULONG deviceId = (manufacturer << 8) | device;
   int i = 0;
 
-  while (devices_supported[i] != 0) {
-    if (devices_supported[i] == deviceId)
+  if (size) *size = 0;
+
+  while (devices_supported[i].id != 0) {
+    if (devices_supported[i].id == deviceId) {
+      printf("Flash part: %s %s (%d KB)\n",
+		      devices_supported[i].vendor,
+		      devices_supported[i].device,
+		      devices_supported[i].size);
+      *size = devices_supported[i].size;
       return true;
+    }
 
     i++;
   }
@@ -133,7 +152,8 @@ static bool flash_is_supported(UBYTE manufacturer, UBYTE device) {
  * @param device the device id
  * @returns UWORD sector size in bytes
  */
-static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device) {
+static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
+{
     ULONG deviceId = (manufacturer << 8) | device;
     UWORD sectorSize;
 
@@ -164,7 +184,8 @@ static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device) {
  * @param address Address to read from
  * @return The data that was read
  */
-UBYTE flash_readByte(ULONG address) {
+UBYTE flash_readByte(ULONG address)
+{
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -179,7 +200,8 @@ UBYTE flash_readByte(ULONG address) {
  * @param address Address to write to
  * @param data The data to be written
  */
-void flash_writeByte(ULONG address, UBYTE data) {
+void flash_writeByte(ULONG address, UBYTE data)
+{
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -195,7 +217,8 @@ void flash_writeByte(ULONG address, UBYTE data) {
  * @brief send a command to the Flash
  * @param command The command byte to send.
  */
-static inline void flash_command(UBYTE command) {
+static inline void flash_command(UBYTE command)
+{
   // Write command byte to the specific command address
   flash_write_byte(ADDR_CMD_STEP_1, command);
   return;
@@ -205,7 +228,8 @@ static inline void flash_command(UBYTE command) {
  *
  * @brief Send the SDP command sequence
  */
-void flash_unlock_sdp() {
+void flash_unlock_sdp(void)
+{
   // Write the sequence bytes to the specific addresses
   flash_write_byte(ADDR_CMD_STEP_1, CMD_SDP_STEP_1);
   flash_write_byte(ADDR_CMD_STEP_2, CMD_SDP_STEP_2);
@@ -216,7 +240,8 @@ void flash_unlock_sdp() {
  *
  * @brief Perform a chip erase.
  */
-void flash_erase_chip() {
+void flash_erase_chip(void)
+{
   flash_unlock_sdp();
   flash_command(CMD_ERASE);
   flash_unlock_sdp();
@@ -230,7 +255,8 @@ void flash_erase_chip() {
  * Erase the currently selected 32KB bank
  *
  */
-void flash_erase_bank(UWORD sectorSize) {
+void flash_erase_bank(UWORD sectorSize)
+{
   if (sectorSize > 0) {
     int count = 32768 / sectorSize;
     for (int i = 0; i < count; i++) {
@@ -245,7 +271,8 @@ void flash_erase_bank(UWORD sectorSize) {
  * @param address Address of sector to erase
  *
  */
-void flash_erase_sector(ULONG address) {
+void flash_erase_sector(ULONG address)
+{
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -262,7 +289,8 @@ void flash_erase_sector(ULONG address) {
  * @brief Poll the status bits at address, until they indicate that the operation has completed.
  * @param address Address to poll
  */
-static inline void flash_poll(ULONG address) {
+static inline void flash_poll(ULONG address)
+{
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -283,11 +311,15 @@ static inline void flash_poll(ULONG address) {
  * @param flashbase Pointer to the Flash base address
  * @return True if the manufacturer ID matches the expected value and flashbase is valid.
  */
-bool flash_init(UBYTE *manuf, UBYTE *devid, ULONG *base, UWORD *sectorSize) {
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, UWORD *sectorSize)
+{
   bool ret = false;
   UBYTE manufId;
   UBYTE deviceId;
 
+  if (size) *size = 0;
+  if (sectorSize) *sectorSize = 0;
+ 
   // Set the global flashbase pointer.
   flashbase = (ULONG)base;
 
@@ -306,12 +338,14 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, ULONG *base, UWORD *sectorSize) {
   if (devid) *devid = deviceId;
 
   // Check if the device is supported and flashbase is valid.
-  if (flash_is_supported(manufId, deviceId) && flashbase) {
+  UWORD flash_size;
+  if (flash_is_supported(manufId, deviceId, &flash_size) && flashbase) {
+    // Update size if pointer is valid.
+    if (size) *size = flash_size * 1024;
+    // Update the sector size if pointer is valid.
+    if (sectorSize) *sectorSize = flash_get_sectorSize(manufId, deviceId);
     ret = true;
   }
-
-  // Update the sector size if pointer is valid.
-  if (sectorSize) *sectorSize = flash_get_sectorSize(manufId, deviceId);
 
   return (ret);
 }

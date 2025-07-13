@@ -20,6 +20,9 @@
 
 struct Config {
   char *scsi_rom_filename;
+  bool readFlash;
+  bool writeFlash;
+  bool probeFlash;
   bool eraseFlash;
   bool rebootRequired;
   bool assumeYes;

@@ -24,6 +24,7 @@
 #define XSTR(s) STR(s) /* Turn s into a string literal after macro-expanding it. */
 
 #define VERSION_STRING "$VER: a4092flash " XSTR(DEVICE_VERSION) "." XSTR(DEVICE_REVISION) " (" XSTR(BUILD_DATE) ") " XSTR(GIT_REF)
+#define VERSION "a4092flash " XSTR(DEVICE_VERSION) "." XSTR(DEVICE_REVISION) " (" XSTR(BUILD_DATE) ") " XSTR(GIT_REF)
 
 #undef FindConfigDev
 // NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
@@ -31,7 +32,7 @@ struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
 
 // NDK 1.3 includes lacks these, so define them here
 #ifdef __KICK13__
-void ColdReboot();
+void ColdReboot(void);
 struct DosList *LockDosList(ULONG);
 struct DosList *NextDosEntry(struct DosList *, ULONG);
 void *UnLockDosList(ULONG);
@@ -39,7 +40,7 @@ void *UnLockDosList(ULONG);
 
 struct scsiBoard {
   struct ConfigDev *cd;
-  void * volatile flashbase;
+  volatile UBYTE *flashbase;
 };
 
 struct dosDev {
@@ -50,6 +51,7 @@ struct dosDev {
 
 ULONG getFileSize(char *);
 BOOL readFileToBuf(char *, void *);
-BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, UBYTE *dest, ULONG size);
+BOOL writeFlashToFile(char *filename, ULONG romSize);
+BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *dest, ULONG size);
 
 #endif
