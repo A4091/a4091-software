@@ -75,9 +75,10 @@ void dump_resident(char *addr, int i)
 			ntohl(res->rt_EndSkip),
 			ntohl(res->rt_EndSkip) + offset - i);
 	printf("  0a rt_Flags     = %02x\n", res->rt_Flags);
-	printf("  0b rt_Version   = %02x\n", res->rt_Type);
-	printf("  0c rt_Pri       = %d\n", res->rt_Pri);
-	printf("  0d rt_Name      = %08x : %s\n",
+	printf("  0b rt_Version   = %02x\n", res->rt_Version);
+	printf("  0c rt_Type   = %02x\n", res->rt_Type);
+	printf("  0d rt_Pri       = %d\n", res->rt_Pri);
+	printf("  0e rt_Name      = %08x : %s\n",
 			ntohl(res->rt_Name),
 			addr + (ntohl(res->rt_Name) + offset));
 	printf("  12 rt_IdString  = %08x : %s",
