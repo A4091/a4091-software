@@ -34,7 +34,6 @@ ROM	:= $(DEVNAME).rom
 ROM_ND	:= $(DEVNAME)_nodriver.rom
 ROM_DB	:= $(DEVNAME)_debug.rom
 ROM_CD	:= $(DEVNAME)_cdfs.rom
-ROM_COM	:= $(DEVNAME)_commodore.rom
 PROG	:= $(DEVNAME).device
 PROGU	:= a4091
 PROGD	:= a4091d
@@ -238,13 +237,13 @@ $(OBJDIR)/%.o: %.S
 	$(QUIET)$(OBJDIR)/rnc p $< $@ -m 1 >/dev/null
 	@printf "`wc -c < $<` -> `wc -c < $@` bytes${end}\n"
 
-$(OBJDIR)/rom.o $(OBJDIR)/rom_nd.o $(OBJDIR)/rom_com.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
+$(OBJDIR)/rom.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(ROMDRIVER)
 
 $(OBJDIR)/assets.o: assets.S $(PROG) Makefile
 	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) $(ROMDRIVER)
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
 $(OBJDIR)/reloctest.o: reloctest.c
 	@echo Building $@
@@ -285,13 +284,13 @@ $(OBJDIR):
 
 clean:
 	@echo Cleaning.
-	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJSROM_COM) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD) $(ROM_COM)
+	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD)
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
