@@ -61,6 +61,8 @@
 #include "device.h"
 #include "a4091.h"
 #include "attach.h"
+#endif
+#ifdef DISKLABELS
 #include "legacy.h"
 #endif
 
