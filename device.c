@@ -384,3 +384,22 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 
     return mydev;
 }
+
+#if HAVE_ROM == 0
+asm(
+"    .globl _bootblock, _bootblock_end          \n"
+"    .globl _entrypoint, _entrypoint_end        \n"
+"    _entrypoint     = 0xdd0000                 \n"
+"    _entrypoint_end = 0xdd4000                 \n"
+"_bootblock: lea     _dosname(pc),a1            \n"
+"            jsr     -96(a6) /* FindResident */ \n"
+"            tst.l   d0                         \n"
+"            beq.s   fail                       \n"
+"            move.l  d0,a0                      \n"
+"            move.l  22(a0),a0 /* RT_INIT */    \n"
+"            jsr     (a0)                       \n"
+"fail:       rts                                \n"
+"_dosname: .asciz \"dos.library\"               \n"
+"_bootblock_end:                                \n"
+);
+#endif

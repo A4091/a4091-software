@@ -11,17 +11,20 @@ DEVICE ?= A4000T770
 
 ifeq ($(DEVICE),A4091)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4091"
+TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4091" -DNO_CONFIGDEV=0
+TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=a4091
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DDEVNAME="scsi710"
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DDEVNAME="scsi710" -DNO_CONFIGDEV=1
+TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=scsi710
 HAVE_ROM=n
 else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DDEVNAME="scsi770"
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C770=1 -DDEVNAME="scsi770" -DNO_CONFIGDEV=1
+TARGETAFLAGS := -DNCR53C770=1
 DEVNAME=scsi770
 HAVE_ROM=n
 else
@@ -34,6 +37,7 @@ ROM	:= $(DEVNAME).rom
 ROM_ND	:= $(DEVNAME)_nodriver.rom
 ROM_DB	:= $(DEVNAME)_debug.rom
 ROM_CD	:= $(DEVNAME)_cdfs.rom
+KICK    := $(DEVNAME).kick
 PROG	:= $(DEVNAME).device
 PROGU	:= a4091
 PROGD	:= a4091d
@@ -167,7 +171,8 @@ endif
 ifeq ($(HAVE_ROM),y)
 ROMS:=$(ROM) $(ROM_CD)
 else
-ROMS:=
+# Build relocatable kickstart module if we don't have to build a ROM image
+ROMS:=$(KICK)
 endif
 
 all: $(PROG) $(ROMS) $(TOOLS)
@@ -279,6 +284,10 @@ $(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
 	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
 	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.rnc -T 0x46443031
 
+$(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).rnc
+	@echo Building $@
+	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(NDK_PATH) $(TARGETAFLAGS)
+
 $(OBJDIR):
 	mkdir -p $@
 
@@ -290,7 +299,7 @@ clean:
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_ND) $(ROM_CD)
+	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.rom *.kick
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
