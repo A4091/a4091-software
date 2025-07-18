@@ -151,6 +151,7 @@ DiagEntry
         ; is a nodevice rom
         ;----------------------------------------------------------
         move.l  #(_device-RomStart),d0
+        link    a4,#FP_SIZE     ; Allocate ReadHandle frame pointer
         bsr InitHandle
 
         move.l #(65536-4),d0
@@ -179,6 +180,7 @@ DiagEntry
         bne .gorelocate
 
 .no_resident
+        unlk    a4      ; deallocate ReadHandle
         ; destroy memory romtag
         lea.l   Romtag(pc),a4
         move.l  #0,(a4)
@@ -188,6 +190,7 @@ DiagEntry
 .gorelocate
 	;----------------------------------------------------------
 
+        unlk    a4      ; deallocate ReadHandle
 	; a0 - base of your board = RomStart?
         move.l  #(_device-RomStart),d0
         bsr     _relocate
