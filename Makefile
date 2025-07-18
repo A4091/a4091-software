@@ -306,6 +306,9 @@ $(OBJDIR)/CDVDFS:
 	$(QUIET)$(MAKE) -s -C 3rdparty/CDVDFS/src
 	$(QUIET)cp 3rdparty/CDVDFS/src/cdrom-handler $@
 
+kickstart:
+	$(QUIET)kick/build_rom.sh $(PROG)
+
 lha:
 	$(QUIET)$(MAKE) distclean $(OBJDIR)
 	@echo Building $(DEVNAME).rom Debug image
