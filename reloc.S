@@ -177,6 +177,10 @@ _relocate
         beq     .HunkSymbol
         cmp.l   #HUNK_RELRELOC32,d0
         beq     .HunkRelReloc32
+        cmp.l   #HUNK_NAME,d0
+        beq     .HunkName
+        cmp.l   #HUNK_DEBUG,d0
+        beq     .HunkDebug
         cmp.l   #HUNK_END,d0
         beq     .HunkEnd
 
@@ -334,6 +338,19 @@ _relocate
         move.l  d3,(a1)
         dbra    d1,.RelRelocDo
         bra     .HunkRelReloc32
+
+; ---------------------
+
+.HunkDebug
+.HunkName
+        bsr     RomFetch32 ; d0 = n longs
+        tst.l   d0
+        beq     .HunkLoop
+        subq.l  #1,d0
+.HunkDebugLoop
+        bsr     RomFetch32
+        dbra    d0,.HunkDebugLoop
+        bra     .HunkLoop
 
 ; ---------------------
 
