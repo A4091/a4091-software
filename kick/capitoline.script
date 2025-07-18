@@ -1,0 +1,116 @@
+#####################################################################################
+# Creates a 1Mb A4000T 3.2.3 ROM with workbench and icon libraries for the A4000T   #
+# The A4000 can't use 1Mb ROMs without additional hardware, such as ROMY            #
+#####################################################################################
+
+#########################################################################
+# Scan the ROMs directory, this is so we can use the CRC32 of the files #
+# you need and you don't need to know the filename or path (which might #
+# be different on different computers.                                  #
+#########################################################################
+auditfiles ROMs
+
+# Find the kickstart "A4000T.47.115.rom"
+var SOURCEROM "$0xb6a4698e"
+
+# Scan the ADFs directory instead of the ROMs directory
+auditfiles ADFs
+
+# Find the ADF disk ModulesA4000T_3.2.3.adf
+var ADF "$0x3c68d88a"
+
+# Create the 0xF8 kickstart ROM (255 is the "padding" byte for unused space 0xFF)
+newrom 512k 255
+rombase 0xF80000
+
+# Add the exec library from the original ROM
+add "$SOURCEROM" exec.library
+
+# Add the 1Mb SCANTABLE
+add Components/BinaryChunks/1Mb_Scantable.3.2.bin
+
+# The original SCANTABLE uses ENDSKIP to speed up booting
+var ENDSKIP romdata $exec.library.(ROMTAG.ENDSKIP) 4
+var ENDSKIP mid 2
+# Patch our new SCANTABLE to include the original ENDSKIP
+patch $1Mb_Scantable.3.2.bin.(START) 0x00F80000$ENDSKIP
+var STSTART $1Mb_Scantable.3.2.bin.(START)
+var STSTART add $ROMBASE
+
+# Find the original SCANTABLE
+find $exec.library 0x00F80000$ENDSKIP00F800000100000000F0000000F80000FFFFFFFF
+var FIND add $ROMBASE
+
+# Find the reference to the original SCANTABLE
+find $exec.library $FIND
+
+# Patch the reference to the original SCANTABLE with the address of the new SCANTABLE
+patch $FIND $STSTART
+
+# Add all the remaining (original) modules
+add "$SOURCEROM" expansion.library
+add "$SOURCEROM" "A4000 bonus"
+add "$SOURCEROM" mathieeesingbas.library
+add "$SOURCEROM" scsi.device
+#add "$SOURCEROM" "NCR scsi.device"
+add "$SOURCEROM" audio.device
+add "$SOURCEROM" battclock.resource
+add "$SOURCEROM" battmem.resource
+add "$SOURCEROM" bootmenu
+add "$SOURCEROM" syscheck
+add "$SOURCEROM" cia.resource
+add "$SOURCEROM" con-handler
+add "$SOURCEROM" console.device
+add "$SOURCEROM" disk.resource
+add "$SOURCEROM" dos.library
+add "$SOURCEROM" FileSystem.resource
+add "$SOURCEROM" filesystem
+add "$SOURCEROM" graphics.library
+add "$SOURCEROM" keymap.library
+add "$SOURCEROM" layers.library
+add "$SOURCEROM" mathffp.library
+add "$SOURCEROM" misc.resource
+add "$SOURCEROM" potgo.resource
+add "$SOURCEROM" ram-handler
+add "$SOURCEROM" ramdrive.device
+add "$SOURCEROM" ramlib
+add "$SOURCEROM" input.device
+add "$SOURCEROM" keyboard.device
+add "$SOURCEROM" gameport.device
+add "$SOURCEROM" shell
+add "$SOURCEROM" romboot
+add "$SOURCEROM" timer.device
+add "$SOURCEROM" trackdisk.device
+add "$SOURCEROM" utility.library
+add "$SOURCEROM" intuition.library
+add "$SOURCEROM" gadtools.library
+add "$SOURCEROM" syslog
+add "$SOURCEROM" system-startup
+add "$SOURCEROM" workbench.task
+# Add standard components at the end of the ROM
+add checksum
+add size
+add vectors
+# Now we have finished adding things, lets checksum the ROM
+checksum
+
+# Save the finished 0xF8 ROM
+saverom ROMs/A4000T.F8
+
+# Create the new extended (0xE0) ROM
+newrom 512k
+rombase 0xE00000
+add "Components/BinaryChunks/ROMHeader_E0"
+loadadf "$ADF"
+add ADF:/LIBS/workbench.library
+add ADF:/LIBS/icon.library
+add DEVICE
+add checksum
+add size
+add vectors
+checksum
+
+# Save the finished 0xE0 ROM
+saverom ROMs/A4000T.E0
+
+exit
