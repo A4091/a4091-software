@@ -25,6 +25,25 @@
 #include "version.h"
 #include "romfile.h"
 
+static void add_fs_from_kickstart(void)
+{
+    struct Resident *r = NULL;
+
+    printf("CDFS in Kickstart... ");
+    r=FindResident("cdfs");
+    printf("%sfound.\n", r?"":"not ");
+
+    if (r != NULL) {
+        if (r && r->rt_Init) {
+            printf("Initializing CDFS @%p... ", r);
+            InitResident(r, 0);
+            printf("done.\n");
+        } else
+            printf("No rt_Init.\n");
+    }
+}
+
+#if HAVE_ROM
 extern const char cdfs_id_string[];
 
 typedef struct {
@@ -92,24 +111,6 @@ static void parse_romfiles(romfiles_t *rom)
         }
     } else
         printf("  Driver not found. Huh?\n");
-}
-
-static void add_fs_from_kickstart(void)
-{
-    struct Resident *r = NULL;
-
-    printf("CDFS in Kickstart... ");
-    r=FindResident("cdfs");
-    printf("%sfound.\n", r?"":"not ");
-
-    if (r != NULL) {
-        if (r && r->rt_Init) {
-            printf("Initializing CDFS @%p... ", r);
-            InitResident(r, 0);
-            printf("done.\n");
-        } else
-            printf("No rt_Init.\n");
-    }
 }
 
 static int add_romfilesystem(romfiles_t *rom, int slot)
@@ -182,13 +183,16 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
     Permit();
     return (fse!=NULL);
 }
+#endif
 
 void init_romfiles(void)
 {
+	add_fs_from_kickstart();
+#if HAVE_ROM
 	romfiles_t rom;
 
 	parse_romfiles(&rom);
-	add_fs_from_kickstart();
 	add_romfilesystem(&rom, 1);
 	add_romfilesystem(&rom, 2);
+#endif
 }
