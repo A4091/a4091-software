@@ -53,6 +53,14 @@
 #include "mounter.h" // for Port/IOReq wrappers
 #include "a4091.h"
 
+#ifdef DRIVER_A4091
+#define BOOTMENU_NAME "A4091"
+#elif defined(DRIVER_A4000T) && defined(NCR53C710)
+#define BOOTMENU_NAME "NCR53C710"
+#elif defined(DRIVER_A4000T) && defined(NCR53C770)
+#define BOOTMENU_NAME "NCR53C770"
+#endif
+
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *IntuitionBase;
@@ -188,7 +196,11 @@ static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
 
     if (welcome) {
         SetAPen(rp,1);
+#ifdef DRIVER_A4091
         Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,32,TRUE);
+#else
+        Print(" Welcome to Amiga 4000(T) SCSI Configuration & Diagnostics",0,32,TRUE);
+#endif
         Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,42,TRUE);
     }
 }
@@ -295,7 +307,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
 static void dipswitch_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "A4091 Diagnostics - DIP switches", TRUE);
+    page_header(&ng, BOOTMENU_NAME " Diagnostics - DIP switches", TRUE);
 
     SetRGB4(&screen->ViewPort,3,11,8,8);
 
@@ -319,11 +331,20 @@ static void dipswitch_page(void)
 static void about_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "About A4091", TRUE);
+    page_header(&ng, "About " BOOTMENU_NAME, TRUE);
     SetAPen(&screen->RastPort, 1);
+#if defined(DRIVER_A4091)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
     Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
+#elif defined(DRIVER_A4000T)
+    Print("Thank you to the Amiga engineers for a wonderful", 118,68,FALSE);
+    Print("machine that passed the test of time. Driver",118,76,FALSE);
+#endif
+#if defined(NCR53C710)
     Print("based on the NetBSD/Amiga SCSI subsystem and 53C710",118,84,FALSE);
+#elif defined(NCR53C770)
+    Print("based on the NetBSD/Amiga SCSI subsystem and 53C770",118,84,FALSE);
+#endif
     Print("code by many fine contributors over the years.",118,92,FALSE);
     Print("Original RDB mounter by Toni Wilen.",118,100,FALSE);
     Print("Only Amiga makes it possible.", 204,122,FALSE);
@@ -540,7 +561,7 @@ static void disks_page(void)
     struct NewGadget ng;
     int i;
     ULONG tag;
-    page_header(&ng, "A4091 Diagnostics - Disks", FALSE);
+    page_header(&ng, BOOTMENU_NAME " Diagnostics - Disks", FALSE);
 
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
@@ -575,7 +596,7 @@ static void disks_page(void)
 static void debug_page(void)
 {
     struct NewGadget ng;
-    page_header(&ng, "A4091 Diagnostics - Debug", TRUE);
+    page_header(&ng, BOOTMENU_NAME " Diagnostics - Debug", TRUE);
 
     BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
     BOOL ignore_last = asave->ignore_last ? TRUE : FALSE;
@@ -623,6 +644,7 @@ struct drawing {
     SHORT x, y, w, h;
 };
 
+#ifdef DRIVER_A4091
 static const struct drawing card[] = {
     { 1, 3,   0,   0, 436, 146 }, // card
     { 1, 3,  57, 146, 163,  10 }, // zslot
@@ -696,13 +718,16 @@ static void draw_card(const struct drawing c[], int length)
         }
     }
 }
+#else
+#define draw_card(x,y)
+#endif
 
 static void main_page(void)
 {
     struct NewGadget ng;
 
     SetRGB4(&screen->ViewPort,3,6,8,11);
-    page_header(&ng, "A4091 Early Startup Menu", TRUE);
+    page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
     draw_card(card, ARRAY_LENGTH(card));
 
