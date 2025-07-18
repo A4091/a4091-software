@@ -55,7 +55,7 @@ _relocate
         bsr RomFetch32
         ; d0 = original length
         move.l  d0,d3
-        moveq.l #MEMF_PUBLIC,d1
+        moveq   #MEMF_PUBLIC,d1
         move.l  4,a6 ; execbase
         jsr     _LVOAllocMem(a6)
         move.l  d0,d2
@@ -64,9 +64,9 @@ _relocate
         bsr RomFetch32
         add.l   #18,d0 ; magic 18 bytes at the beginning
         move.l  d0,d5
-        addq.l  #3,d0  ; padding
+        addq    #3,d0  ; padding
         and.b   #-4,d0 ; align
-        moveq.l #MEMF_PUBLIC,d1
+        moveq   #MEMF_PUBLIC,d1
         jsr     _LVOAllocMem(a6)
         move.l  d0,d4
         ; d4 / d5 = Compressed Ptr/Size
@@ -85,12 +85,12 @@ _relocate
         ; Copy compressed file to ram.
         move.l  d4,a0
         move.l  d5,d1
-        subq.l  #1,d1 ; round down
+        subq    #1,d1 ; round down
         lsr.l   #2,d1
 .Copy
         bsr     RomFetch32
         move.l  d0,(a0)
-        addq.l  #4,a0
+        addq    #4,a0
         dbra    d1,.Copy
 
         move.l  d4,a0
@@ -99,7 +99,7 @@ _relocate
 
         move.l  d4,a1
         move.l  d5,d0
-        addq.l  #3,d0  ; padding
+        addq    #3,d0  ; padding
         and.b   #-4,d0 ; align
         jsr     _LVOFreeMem(a6)
 
@@ -129,7 +129,7 @@ _relocate
         bne     .RelocateFail
 
         ; Allocate pHunks array
-        moveq.l #(8*NUM_ENTRIES),d0
+        moveq   #(8*NUM_ENTRIES),d0
         move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
         jsr     _LVOAllocMem(a6)
         move.l  d0,PHUNKS(a4)
@@ -138,7 +138,7 @@ _relocate
         bsr     RomFetch32
         bsr     RomFetch32
         move.l  d0,d7 ; table size
-        subq.l  #1,d7
+        subq    #1,d7
         move.l  d7,d6 ; for HUNK_END
         bsr     RomFetch32
         bsr     RomFetch32
@@ -149,15 +149,15 @@ _relocate
         move.l  PHUNKS(a4),a2   ; segment pointers
         lea.l   4*NUM_ENTRIES(a2),a3        ; segment lengths
 .AllocateLoop
-        moveq.l #MEMF_PUBLIC,d1
+        moveq   #MEMF_PUBLIC,d1
         bsr     RomFetch32
         lsl.l   #2,d0
         move.l  d0,(a3)+         ; segment length
-        addq.l  #8,d0            ; Add 8 for seglist overhead
+        addq    #8,d0            ; Add 8 for seglist overhead
         jsr     _LVOAllocMem(a6)
         tst.l   d0
         beq.s   .RelocateFail
-        addq.l  #8,d0            ; Skip seglist overhead
+        addq    #8,d0            ; Skip seglist overhead
         move.l  d0,(a2)+         ; segment pointer
         dbra    d7,.AllocateLoop
 
@@ -199,7 +199,7 @@ _relocate
         ; We don't know this hunk
 .RelocateFail
         bsr     .RelocateCleanup
-        moveq.l #0,d0 ; NULL = Failure
+        moveq   #0,d0 ; NULL = Failure
         movem.l (sp)+,d1-d7/a0-a6
         rts
 
