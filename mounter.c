@@ -778,7 +778,7 @@ static void CreateFakeConfigDev(struct MountData *md)
 			diagArea->da_BootPoint = sizeof(struct DiagArea);
 			diagArea->da_Size = (UWORD)daSize;
 			copymem(diagArea + 1, &bootblock, bbSize);
-			*((ULONG*)&configDev->cd_Rom.er_Reserved0c) = (ULONG)diagArea;
+			memcpy(&configDev->cd_Rom.er_Reserved0c, &diagArea, sizeof(ULONG));
 			cacheclear(md);
 		}
 		md->configDev = configDev;
