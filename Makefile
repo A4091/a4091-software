@@ -235,7 +235,7 @@ $(OBJDIR)/version.i: version.h
 
 $(OBJDIR)/%.o: %.S
 	@echo Building $@
-	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH) -DHAVE_ERRNO
+	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
 %.rnc: % $(OBJDIR)/rnc
 	@printf "Compressing $< ... "

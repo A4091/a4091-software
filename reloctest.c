@@ -22,7 +22,6 @@
 
 #include <clib/exec_protos.h>
 uint32_t relocate(ULONG offset asm("d0"), uint8_t *program asm("a0"));
-extern uint32_t rErrno;
 extern uint8_t  device[];
 
 static void hexdump(unsigned char *data, size_t size)
@@ -65,7 +64,7 @@ int main(int argc, char *argv[])
 
 	printf("Calling relocate()\n");
 	ret=relocate(0, device);
-	printf("... relocate returned %x (rErrno=0x%x)\n", ret, rErrno);
+	printf("... relocate returned %x\n", ret);
 
 	seg=(uint32_t *)ret;
 

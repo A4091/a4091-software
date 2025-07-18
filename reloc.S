@@ -15,13 +15,25 @@ READHANDLE_TYPE    EQU -12
 READHANDLE_CURRENT EQU -16
 FP_SIZE            EQU READHANDLE_CURRENT
 
-        ; API:
-        ; Z3 ROM access:
-        ;   a0: rombase
-        ;   d0: offset
-        ; Memory (RAM) access:
-        ;   a0: pointer to binary
-        ;   d0: 0
+        ; ----------------------------------------------------------------------
+        ; _relocate
+        ; Entry point for relocating a hunk binary loaded from Zorro III ROM or
+        ; memory. This dispatcher initializes the read handle and processes
+        ; decompression if needed.
+        ;
+        ; Inputs:
+        ;   a0 - ROM base address (Zorro III) or pointer to hunk binary (RAM)
+        ;   d0 - ROM offset (Zorro III) or zero (RAM)
+        ;   a4 - Used as frame pointer; points to local storage for:
+        ;        - READHANDLE_{BASE,TYPE,CURRENT}
+        ;        - PHUNKS (temporary hunk pointer table)
+        ;
+        ; Output:
+        ;   d0 - pointer to relocated segment list or 0 on failure
+        ;
+        ; Trashes:
+        ;   d0-d1/a0/a1
+        ; ----------------------------------------------------------------------
         public  _relocate
 _relocate
         link    a4,#FP_SIZE     ; Allocate Frame pointer
@@ -186,11 +198,6 @@ _relocate
 
         ; We don't know this hunk
 .RelocateFail
-        IFD HAVE_ERRNO
-        ; Save hunk number in rErrno as error code
-        lea     _rErrno(pc),a0
-        move.l  d0,(a0)
-        ENDIF
         bsr     .RelocateCleanup
         moveq.l #0,d0 ; NULL = Failure
         movem.l (sp)+,d1-d7/a0-a6
@@ -353,10 +360,6 @@ _relocate
 .HunkEnd
         addq.l  #4,a5
         dbra    d6,.HunkLoop
-        IFD HAVE_ERRNO
-        lea     _rErrno(pc),a0
-        move.l  #0,(a0)
-        ENDIF
 
         bsr.s   CreateSegList
 
@@ -375,8 +378,11 @@ _relocate
         jsr     _LVOFreeMem(a6)
         rts
 
-; ---------------------
-
+; ----------------------------------------------------------------------
+; CreateSegList
+; Finalizes the seglist data structures (seg headers) in place at
+; beginning of each allocated segment.
+;
 ; +--------------------+
 ; | seg length (longs) | <-- = pHunks[x+NUM_ENTRIES]
 ; +--------------------+ <-- seglist returned
@@ -415,7 +421,21 @@ CreateSegList:
         move.l  d0,-4(a1)   ; terminate seglist
         rts
 
-; ---------------------
+; ----------------------------------------------------------------------
+; RomFetch32, RomFetch16, RomFetch32At
+; Fetch 32-bit or 16-bit values from READHANDLE_CURRENT and advance
+; the pointer. Supports RAM and nibble-packed Zorro III access.
+;
+; Inputs:
+;   a4 - Frame pointer with READHANDLE state
+;   For RomFetch32At: d0 = offset (in longs)
+;
+; Output:
+;   d0 - fetched value
+;
+; Trashes:
+;   d1/a0-a1
+; ----------------------------------------------------------------------
 
 ; data = RomFetch32At(offset)
 ; d0                  d0
@@ -473,6 +493,22 @@ RomFetch
         movem.l (sp)+,a0-a1/d1-d3
         rts
 
+; ----------------------------------------------------------------------
+; InitHandle
+; Initializes READHANDLE based on Zorro III ROM or RAM access
+;
+; Inputs:
+;   a0 - ROM base address or pointer to memory
+;   d0 - ROM offset (multiplied by 4); if 0, indicates RAM access
+;   a4 - Frame pointer
+;
+; Output:
+;   none
+;
+; Trashes:
+;   a0-a1
+; ----------------------------------------------------------------------
+
 InitHandle
         ; initialize readhandle to beginning of device driver
         ; ROM_OFFSET needs to be multiplied by 4 because of the
@@ -490,10 +526,7 @@ InitHandle
         movem.l (sp)+,a0-a1
         rts
 
-        IFD HAVE_ERRNO
-        public _rErrno
-_rErrno
-        dc.l    0
-        ENDIF
+; ----------------------------------------------------------------------
+
         INCLUDE "rnc.S"
         CODE

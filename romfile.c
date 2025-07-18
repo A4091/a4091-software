@@ -127,7 +127,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
         fs_seglist = relocate(rom->romfile[slot], (uint32_t)asave->as_addr);
 
     printf("%sfound.\n", fs_seglist?"":"not ");
-    // baserel does not like rErrno
+
     if (fs_seglist == 0)
         return 0;
 
