@@ -237,21 +237,19 @@ _relocate
 ; ---------------------
 
 .HunkReloc32
-        bsr     RomFetch32
-
-        tst.l   d0     ; if len is zero the reloc32 block is done
+        bsr     RomFetch32    ; offset count
+        tst.l   d0            ; if len is zero the reloc32 block is done
         beq     .HunkLoop
 
-        move.l  d0,d1 ; len ; number of offsets for a given hunk
-        subq.l  #1,d1 ; for dbra
+        move.l  d0,d1         ; len, number of offsets for a given hunk
+        subq.l  #1,d1         ; for dbra
 
-        bsr     RomFetch32
-        move.l  d0,d2 ; num ; number of the hunk the offsets are to point into
-
-        lsl.l   #2,d2 ; *4 ; offset from Hunks
+        bsr     RomFetch32    ; target hunk index
+        move.l  d0,d2         ; num, number of the hunk the offsets are to point into
+        lsl.l   #2,d2         ; *4, offset from Hunks
         move.l  PHUNKS(a4),a2
-        add.l   d2,a2 ; hunk number num
-        move.l  (a2),d3 ; base address of hunk
+        add.l   d2,a2         ; hunk number num
+        move.l  (a2),d3       ; base address of hunk
 
 .Reloc32Tight
         bsr     RomFetch32
@@ -267,20 +265,18 @@ _relocate
 .HunkDRel32
 .HunkReloc32Short
         bsr     RomFetch16
-
-        tst.l   d0     ; if len is zero the reloc32 block is done
+        tst.l   d0            ; if len is zero the reloc32 block is done
         beq     .HunkLoopPrep
 
-        move.l  d0,d1 ; len ; number of offsets for a given hunk
-        subq.l  #1,d1 ; for dbra
+        move.l  d0,d1         ; len, number of offsets for a given hunk
+        subq.l  #1,d1         ; for dbra
 
         bsr     RomFetch16
-        move.l  d0,d2 ; num ; number of the hunk the offsets are to point into
-
-        lsl.l   #2,d2 ; *4 ; offset from Hunks
+        move.l  d0,d2         ; num, number of the hunk the offsets are to point into
+        lsl.l   #2,d2         ; *4, offset from Hunks
         move.l  PHUNKS(a4),a2
-        add.l   d2,a2 ; hunk number num
-        move.l  (a2),d3 ; base address of hunk
+        add.l   d2,a2         ; hunk number num
+        move.l  (a2),d3       ; base address of hunk
 
 .Reloc32ShortTight
         bsr     RomFetch16
