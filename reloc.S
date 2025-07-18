@@ -1,5 +1,6 @@
         INCLUDE "exec/memory.i"
         INCLUDE "lvo/exec_lib.i"
+        INCLUDE "dos/doshunks.i"
 
         IFND ROM
         section .text,code
@@ -112,7 +113,7 @@ _relocate
 .real_relocate
         movem.l d1-d7/a0-a6,-(sp)
 
-        cmp.l   #$3f3,d0 ; We only know hunk_hdr
+        cmp.l   #HUNK_HEADER,d0 ; We only know hunk_hdr
         bne     .RelocateFail
 
         ; Allocate pHunks array
@@ -148,26 +149,35 @@ _relocate
         move.l  d0,(a2)+         ; segment pointer
         dbra    d7,.AllocateLoop
 
+
+        ; a5: pointer to the pHunks table
+        ; a0: set to pHunks[x] (segment pointer for current hunk)
+        ; d0: contains hunk type
+        ; d6: outer loop counter
+        ; pHunks and pHunks[x+NUM] hold pointer + length
+
         move.l  PHUNKS(a4),a5
 .HunkLoop
         move.l  (a5),a0 ; current hunk
         bsr     RomFetch32
 
-        cmp.l   #$3e9,d0
+        cmp.l   #HUNK_CODE,d0
         beq     .HunkCode
-        cmp.l   #$3ea,d0
+        cmp.l   #HUNK_DATA,d0
         beq     .HunkData
-        cmp.l   #$3eb,d0
+        cmp.l   #HUNK_BSS,d0
         beq     .HunkBSS
-        cmp.l   #$3ec,d0
+        cmp.l   #HUNK_RELOC32,d0
         beq     .HunkReloc32
-        cmp.l   #$3fc,d0
+        cmp.l   #HUNK_RELOC32SHORT,d0
         beq     .HunkReloc32Short
-        cmp.l   #$3f7,d0
+        cmp.l   #HUNK_DREL32,d0
         beq     .HunkDRel32
-        cmp.l   #$3f0,d0
+        cmp.l   #HUNK_SYMBOL,d0
         beq     .HunkSymbol
-        cmp.l   #$3f2,d0
+        cmp.l   #HUNK_RELRELOC32,d0
+        beq     .HunkRelReloc32
+        cmp.l   #HUNK_END,d0
         beq     .HunkEnd
 
         ; We don't know this hunk
@@ -181,6 +191,18 @@ _relocate
         moveq.l #0,d0 ; NULL = Failure
         movem.l (sp)+,d1-d7/a0-a6
         rts
+
+; -----------------------------------------------------
+; The following functions parse the various hunk types
+;
+; Inputs:
+;  a0: destination address
+;  d0: hunk type
+; Must not corrupt:
+;  d6: .HunkLoop Counter
+;  a5: pointer to current segment entry in table
+;  a6: ExecBase
+; -----------------------------------------------------
 
 ; ---------------------
 
@@ -282,6 +304,36 @@ _relocate
         bsr     RomFetch32
         dbra    d7,.SkipSymbol
         bra     .HunkSymbol
+
+; ---------------------
+.HunkRelReloc32
+        bsr     RomFetch32    ; d0 = number of relocations
+        tst.l   d0
+        beq     .HunkLoop     ; done
+
+        move.l  d0,d1         ; relocation count
+        subq.l  #1,d1         ; for dbra
+
+        bsr     RomFetch32    ; target hunk index
+        move.l  d0,d2
+        lsl.l   #2,d2         ; word offset to entry
+        move.l  PHUNKS(a4),a2
+        add.l   d2,a2
+        move.l  (a2),a3
+
+        move.l  a0,a2
+
+.RelRelocDo
+        bsr     RomFetch32
+        move.l  a2,a1
+        add.l   d0,a1
+        move.l  (a1),d3
+        sub.l   a2,d3
+        sub.l   d0,d3
+        add.l   a3,d3
+        move.l  d3,(a1)
+        dbra    d1,.RelRelocDo
+        bra     .HunkRelReloc32
 
 ; ---------------------
 
