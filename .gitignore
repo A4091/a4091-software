@@ -11,7 +11,11 @@ a4091d
 reloctest
 TODO
 *CDFileSystem
-kick*.rom
+*.rom
 *.adf
 *.rnc
+*.kick
+*.device
+*.log
 a4091_4?.??.lha
+
