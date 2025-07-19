@@ -47,8 +47,6 @@ ifeq ($(TARGET),NCR53C710)
 SRCS    += siop.c
 else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
-else
-$(error Unknown build target! Please set TARGET to NCR53C710 or NCR53C770.)
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
@@ -299,7 +297,7 @@ clean:
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.rom *.kick
+	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.rnc *.rom *.kick
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
