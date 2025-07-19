@@ -55,9 +55,9 @@
 
 #ifdef DRIVER_A4091
 #define BOOTMENU_NAME "A4091"
-#elif defined(DRIVER_A4000T) && defined(NCR53C710)
+#elif defined(DRIVER_A4000T)
 #define BOOTMENU_NAME "NCR53C710"
-#elif defined(DRIVER_A4000T) && defined(NCR53C770)
+#elif defined(DRIVER_A4000T770)
 #define BOOTMENU_NAME "NCR53C770"
 #endif
 
@@ -336,7 +336,7 @@ static void about_page(void)
 #if defined(DRIVER_A4091)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
     Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
-#elif defined(DRIVER_A4000T)
+#elif defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
     Print("Thank you to the Amiga engineers for a wonderful", 118,68,FALSE);
     Print("machine that passed the test of time. Driver",118,76,FALSE);
 #endif
