@@ -11,7 +11,7 @@
 auditfiles ROMs
 
 # Find the kickstart "A4000T.47.115.rom"
-var SOURCEROM "$0xb6a4698e"
+var SOURCEROM "$0x588a5e6d"
 
 # Scan the ADFs directory instead of the ROMs directory
 auditfiles ADFs
@@ -48,7 +48,9 @@ find $exec.library $FIND
 patch $FIND $STSTART
 
 # Add all the remaining (original) modules
+#add "$SOURCEROM" alert.hook
 add "$SOURCEROM" expansion.library
+#add "$SOURCEROM" "diag init"
 add "$SOURCEROM" "A4000 bonus"
 add "$SOURCEROM" mathieeesingbas.library
 add "$SOURCEROM" scsi.device
@@ -79,14 +81,17 @@ add "$SOURCEROM" keyboard.device
 add "$SOURCEROM" gameport.device
 add "$SOURCEROM" shell
 add "$SOURCEROM" romboot
+#add "$SOURCEROM" strap
 add "$SOURCEROM" timer.device
 add "$SOURCEROM" trackdisk.device
 add "$SOURCEROM" utility.library
 add "$SOURCEROM" intuition.library
 add "$SOURCEROM" gadtools.library
-add "$SOURCEROM" syslog
 add "$SOURCEROM" system-startup
+#add "$SOURCEROM" workbench.library
 add "$SOURCEROM" workbench.task
+#add "$SOURCEROM" icon.library
+add "$SOURCEROM" syslog
 # Add standard components at the end of the ROM
 add checksum
 add size

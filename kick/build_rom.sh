@@ -20,16 +20,20 @@ SCSIDEV=$1
 
 CURRWD=$PWD
 KICKDIR="$CURRWD/kick"
-KICK_LHA="$KICKDIR/AmigaOS-3.2.3.lha"
-CAP_ZIP_URL="http://capitoline.twocatsblack.com/wp-content/uploads/2025/04/Capitoline.Release.2025.04.05.zip"
-CAP_ZIP_FILE="$KICKDIR/Capitoline.Release.2025.04.05.zip"
+OS_NAME="AmigaOS-3.2.3.lha"
+KICK_LHA="$KICKDIR/$OS_NAME"
+ROM_NAME="A4000T.47.115.rom"
+CAP_NAME="Capitoline.Release.2025.04.05.zip"
+CAP_ZIP_URL="http://capitoline.twocatsblack.com/wp-content/uploads/2025/04/$CAP_NAME"
+CAP_ZIP_FILE="$KICKDIR/$CAP_NAME"
 CAP_DIR="$KICKDIR/Capitoline"
-ROM_PATH="$CAP_DIR/ROMs/A4000.47.115.rom"
-ADF_PATH="$CAP_DIR/ADFs/ModulesA4000T_3.2.3.adf"
+ROM_PATH="$CAP_DIR/ROMs/$ROM_NAME"
+ADF_NAME="ModulesA4000T_3.2.3.adf"
+ADF_PATH="$CAP_DIR/ADFs/$ADF_NAME"
 
 
 if [ ! -f "$KICK_LHA" ]; then
-  echo "❌ No AmigaOS-3.2.3.lha found in kick/."
+  echo "❌ No $OS_NAME found in kick/."
   exit 1;
 fi
 
@@ -53,11 +57,11 @@ fi
 
 ### 3A. Extract ADF if missing ################################################
 if [ ! -f "$ADF_PATH" ]; then
-  echo "→ ADF file missing. Extracting from AmigaOS-3.2.3.lha…"
+  echo "→ ADF file missing. Extracting from $OS_NAME…"
   (
     cd "$KICKDIR" 
-    lha xi AmigaOS-3.2.3.lha Update3.2.3/ADFs/ModulesA4000T_3.2.3.adf
-    mv "$KICKDIR/ModulesA4000T_3.2.3.adf" "$CAP_DIR/ADFs/"
+    lha xi $OS_NAME Update3.2.3/ADFs/$ADF_NAME
+    mv "$KICKDIR/$ADF_NAME" "$CAP_DIR/ADFs/"
   )
   echo "✓   ADF extraction complete."
 else
@@ -66,11 +70,11 @@ fi
 
 ### 3B. Extract ROM if missing ################################################
 if [ ! -f "$ROM_PATH" ]; then
-  echo "→ ROM file missing. Extracting from AmigaOS-3.2.3.lha…"
+  echo "→ ROM file missing. Extracting from $OS_NAME…"
   (
     cd "$KICKDIR"
-    lha xi AmigaOS-3.2.3.lha Update3.2.3/ROMs/A4000.47.115.rom
-    mv "A4000.47.115.rom" "$CAP_DIR/ROMs/"
+    lha xi $OS_NAME Update3.2.3/ROMs/$ROM_NAME
+    mv "$ROM_NAME" "$CAP_DIR/ROMs/"
   )
   echo "✓   ROM extraction complete."
 else
