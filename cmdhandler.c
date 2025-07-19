@@ -690,7 +690,8 @@ cmd_handler(void)
     task = (struct Task *) FindTask((char *)NULL);
 
     msgport = CreatePort(NULL, 0);
-    while ((msg = (start_msg_t *)(task->tc_UserData)) == NULL) {
+    while ((msg = (start_msg_t *)*((volatile APTR *)&task->tc_UserData)) == NULL) {
+
         printf(".");
     }
 
