@@ -314,14 +314,14 @@ _relocate
 
 ; ---------------------
 .HunkRelReloc32
-        bsr     RomFetch32    ; d0 = number of relocations
+        bsr     RomFetch16    ; d0 = number of relocations
         tst.l   d0
         beq     .HunkLoop     ; done
 
         move.l  d0,d1         ; relocation count
         subq.l  #1,d1         ; for dbra
 
-        bsr     RomFetch32    ; target hunk index
+        bsr     RomFetch16    ; target hunk index
         move.l  d0,d2
         lsl.l   #2,d2         ; word offset to entry
         move.l  PHUNKS(a4),a2
@@ -331,7 +331,7 @@ _relocate
         move.l  a0,a2
 
 .RelRelocDo
-        bsr     RomFetch32
+        bsr     RomFetch16
         move.l  a2,a1
         add.l   d0,a1
         move.l  (a1),d3
