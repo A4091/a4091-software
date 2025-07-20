@@ -329,16 +329,24 @@ a4091_validate(uint32_t dev_base)
      */
 #if defined(NCR53C770)
 #define siop_scratch siop_scratcha
-#define siop_scratch2 siop_scratcha2
 #endif
+    /* Create write pointer offset for 68030 cache write-allocate workaround */
+#if defined(DRIVER_A4091)
+    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x40);
+#elif defined(DRIVER_A4000T)
+    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
+#elif defined(DRIVER_A4000T770)
+    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x200);
+#endif
+
     scratch = rp->siop_scratch;
     temp    = rp->siop_temp;
     for (rot = 0; rot < 32; rot++, patt = next) {
         uint32_t got_scratch;
         uint32_t got_temp;
         next = ((patt & 0x7fffffff) << 1) | (patt >> 31);
-        rp->siop_scratch2 = patt;
-        rp->siop_temp2 = next;
+        rp_write->siop_scratch = patt;
+        rp_write->siop_temp = next;
 
         /*
          * The cache line flushes below serve two purposes:
@@ -380,8 +388,8 @@ a4091_validate(uint32_t dev_base)
             break;
         }
     }
-    rp->siop_scratch2 = scratch;
-    rp->siop_temp2    = temp;
+    rp_write->siop_scratch = scratch;
+    rp_write->siop_temp    = temp;
 
     return (fail ? ERROR_BAD_BOARD : 0);
 }
