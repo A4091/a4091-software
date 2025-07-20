@@ -6,13 +6,12 @@
         section .text,code
         ENDIF
 
-NUM_ENTRIES EQU 5
-
 ; Frame pointer offsets
 PHUNKS             EQU -4
-READHANDLE_BASE    EQU -8
-READHANDLE_TYPE    EQU -12
-READHANDLE_CURRENT EQU -16
+NUM_HUNKS          EQU -8
+READHANDLE_BASE    EQU -12
+READHANDLE_TYPE    EQU -16
+READHANDLE_CURRENT EQU -20
 FP_SIZE            EQU READHANDLE_CURRENT
 
         ; ----------------------------------------------------------------------
@@ -128,18 +127,23 @@ _relocate
         cmp.l   #HUNK_HEADER,d0 ; We only know hunk_hdr
         bne     .RelocateFail
 
-        ; Allocate pHunks array
-        moveq   #(8*NUM_ENTRIES),d0
-        move.l  #MEMF_PUBLIC|MEMF_CLEAR,d1
-        jsr     _LVOAllocMem(a6)
-        move.l  d0,PHUNKS(a4)
-
         ; consume the header and remember number of hunks
         bsr     RomFetch32
         bsr     RomFetch32
-        move.l  d0,d7 ; table size
+        move.l  d0,d7           ; table size
+
+        ; Now allocate the pHunks table
+        add.l   #1,d0                   ; Add a slot for the list terminator
+        move.l  d0,NUM_HUNKS(a4)
+        lsl.l   #1,d0                   ; 2 Longwords per slot
+        sub.l   #1,d0                   ; Setup loop condition
+.alloc:
+        clr.l   -(sp)                   ; Clear the pHunk table (important!)
+        dbra    d0,.alloc
+        move.l  sp,PHUNKS(a4)
+
         subq    #1,d7
-        move.l  d7,d6 ; for HUNK_END
+        move.l  d7,d6           ; for HUNK_END
         bsr     RomFetch32
         bsr     RomFetch32
 
@@ -147,7 +151,9 @@ _relocate
         move.l  4,a6 ; execbase
 
         move.l  PHUNKS(a4),a2   ; segment pointers
-        lea.l   4*NUM_ENTRIES(a2),a3        ; segment lengths
+        move.l  NUM_HUNKS(a4),d0
+        lsl.l   #2,d0
+        lea.l   (a2,d0),a3        ; segment lengths
 .AllocateLoop
         moveq   #MEMF_PUBLIC,d1
         bsr     RomFetch32
@@ -198,7 +204,14 @@ _relocate
 
         ; We don't know this hunk
 .RelocateFail
-        bsr     .RelocateCleanup
+        tst.l   NUM_HUNKS(a4)
+        beq     .NopHunks
+        ; Unstack pHunks array
+        move.l  NUM_HUNKS(a4),d0
+        lsl.l   #3,d0
+        add.l   d0,sp
+
+.NopHunks
         moveq   #0,d0 ; NULL = Failure
         movem.l (sp)+,d1-d7/a0-a6
         rts
@@ -367,15 +380,13 @@ _relocate
         move.l  (a0),d2
         subq.l  #4,d2
 
-        bsr.s   .RelocateCleanup
+        ; Unstack pHunks array
+        move.l  NUM_HUNKS(a4),d0
+        lsl.l   #3,d0
+        add.l   d0,sp
+
         move.l  d2,d0
         movem.l (sp)+,d1-d7/a0-a6
-        rts
-
-.RelocateCleanup
-        move.l  PHUNKS(a4),a1
-        moveq.l #(8*NUM_ENTRIES),d0
-        jsr     _LVOFreeMem(a6)
         rts
 
 ; ----------------------------------------------------------------------
@@ -401,8 +412,9 @@ CreateSegList:
 
 .NextSeg
         move.l  (a0),a1     ; Hunks[x]
-
-        move.l  4*NUM_ENTRIES(a0),d0  ; length of current hunk
+        move.l  NUM_HUNKS(a4),d0
+        lsl.l   #2,d0
+        move.l  (a0,d0),d0  ; length of current hunk
         addq.l  #8,d0       ; add header size
         lsr.l   #2,d0       ; MKBADDR
         move.l  d0,-8(a1)   ; write seg size
@@ -522,6 +534,8 @@ InitHandle
         add.l   d0,a0
         move.l  a0,READHANDLE_CURRENT(a4)   ; memory location passed in a0
         move.l  d0,READHANDLE_TYPE(a4) ; Set access type: 0 = memory, Z3 otherwise
+
+        clr.l   NUM_HUNKS(a4)
 
         movem.l (sp)+,a0-a1
         rts
