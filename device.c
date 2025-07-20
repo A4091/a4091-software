@@ -29,6 +29,7 @@
 #include <utility/tagitem.h>
 #include <clib/alib_protos.h>
 #include <devices/scsidisk.h>
+#include <resources/filesysres.h>
 #include <string.h>
 
 #include "device.h"
@@ -358,6 +359,86 @@ static const ULONG device_vectors[] =
     -1   // function table end marker
 };
 
+static void list_filesystems(void)
+{
+#ifdef DEBUG_DEVICE
+	struct FileSysResource *FileSysResBase = NULL;
+	struct FileSysEntry *fse;
+
+	if (!(FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME))) {
+		printf("Cannot open %s\n", FSRNAME);
+		return;
+	}
+
+	printf("DosType Version   Creator\n");
+	printf("---------------------------------------------------------------------------\n");
+	for (fse = (struct FileSysEntry *)FileSysResBase->fsr_FileSysEntries.lh_Head;
+		  fse->fse_Node.ln_Succ;
+		  fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+		int x;
+		for (x=24; x>=8; x-=8)
+			putchar((fse->fse_DosType >> x) & 0xFF);
+
+		putchar((fse->fse_DosType & 0xFF) < 0x30
+						? (fse->fse_DosType & 0xFF) + 0x30
+						: (fse->fse_DosType & 0xFF));
+		printf("    %3d.%-3d", (fse->fse_Version >> 16), (fse->fse_Version & 0xFFFF));
+		if(fse->fse_Node.ln_Name[0]) {
+			char term;
+			int name_len = strlen(fse->fse_Node.ln_Name);
+
+			printf("  %.55s", fse->fse_Node.ln_Name);
+			if (name_len >= 55) {
+				printf("...");
+				name_len = 55;
+			}
+			term = fse->fse_Node.ln_Name[name_len-1];
+			if (term != 10 && term != 13)
+				printf("\n");
+		} else {
+			printf("  N/A\n");
+		}
+	}
+#endif
+}
+
+static int mount_drives(struct ConfigDev *cd, struct Library *dev)
+{
+	extern char real_device_name[];
+	struct MountStruct ms;
+	ULONG unitNum[8];
+	int i, j = 1, ret = 0;
+	UBYTE dip_switches = get_dip_switches();
+	UBYTE hostid = dip_switches & 7;
+	(void)dev;
+
+	/* Produce unitNum at runtime */
+	unitNum[0] = 7;
+	for (i=0; i<8; i++)
+		if (hostid != i)
+			unitNum[j++] = i;
+
+	printf("Mounter:\n");
+	ms.deviceName = real_device_name;
+	ms.unitNum = unitNum;
+	ms.creatorName = NULL;
+	ms.configDev = cd;
+	ms.SysBase = SysBase;
+	ms.luns = !(dip_switches & BIT(7));        // 1: LUNs enabled 0: LUNs disabled
+	ms.slowSpinup = !(dip_switches & BIT(4));  // 0: Short Spinup 1: Long Spinup
+	ms.cdBoot = asave->cdrom_boot;
+	ms.ignoreLast = asave->ignore_last;
+
+	ret = MountDrive(&ms);
+
+	printf("ret = %x\nunitNum = { ", ret);
+	for (i=0; i<8; i++)
+		printf("%x%s", unitNum[i], i<7?", ":" }\n");
+
+	list_filesystems();
+	return ret;
+}
+
 static struct Library __used __saveds *
 init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
@@ -384,6 +465,7 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 
     return mydev;
 }
+
 
 #if HAVE_ROM == 0
 asm(
