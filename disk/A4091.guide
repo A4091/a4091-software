@@ -23,7 +23,7 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.2                               a4091.device Version 42.31
+Guide Version 1.2                               a4091.device Version 42.32
 
 
      @{"License      : Legal restrictions                                  " link License}
@@ -398,6 +398,14 @@ Super Buster    :       The custom chip that handles translation between
 @{B}Version History@{UB}
 
 Full history available at https://github.com/A4091/a4091-software/commits/main
+
+Release v42.32:
+
+a4091.rom
+ o) Massive mounter rework
+ o) Fix Acard based optical drives (and probably many others)
+ o) Fix all Coverity issues
+ o) Reduce differences with upstream BSD driver
 
 Release v42.31:
 

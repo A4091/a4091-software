@@ -2,310 +2,251 @@
 
 [![Coverity](https://img.shields.io/coverity/scan/29390.svg)](https://scan.coverity.com/projects/a4091-a4091-software)
 
-This package contains source code to build an Open Source version of the AmigaOS
-driver, ROM image, test utility, and driver debug utility for the A4091 Zorro III
-Advanced SCSI disk controller.
 
-## A4091 AutoConfig(tm) ROM
+## 📚 Table of Contents
 
-On the A4091 the ROM contains both the autoconfig data needed to probe the
-device, and the device driver (`a4091.device` or `2nd.scsi.device`). On the
-original A4091, the ROM is a 32KB 8 bit ROM. On A4091 REV B boards it is
-possible to use either a 32K or 64K ROM using `J100` to switch.
+- [How to Use This Driver](#-how-to-use-this-driver)
+- [Architectural Overview](#-architectural-overview)
+- [Configuration and Debugging](#-configuration-and-debugging)
+- [Advanced ROM Customization](#advanced-rom-customization)
+- [Internals](#internals)
+- [Contributing and Support](#contributing-and-support)
 
-On the ReA4091 it is recommended to use Winbond W27C512 EEPROMs because
-UV erasing EPROMs is somewhat cumbersome. Also, the additional 32KB
-ROM can be used to store a CDFileSystem to boot from CD-ROM.
 
-## How to build
+This package contains the open-source firmware for the (Re)A4091 Zorro III Advanced SCSI-2 disk controller. This includes the AmigaOS device driver, the AutoConfig™ ROM, a command-line test utility, and a driver debug tool.
 
-### Prerequisites
+---
 
-You should install the latest version of [Bebbo's amiga-gcc](https://github.com/bebbo/amiga-gcc) to compile this code. We have previously used this setup on a Linux (Ubuntu) machine as well as a MacBook. On the latter you will need XCode and [HomeBrew](https://brew.sh) installed.
+## How to Use This Driver
 
-After checking out the source code, you will have to update all the git
-submodules used by this package. To do so, please run
+This section provides instructions for users who want to build and install the A4091 driver.
 
-```
-$ cd a4091-software
-$ git submodule update --init
-```
+### 💾 Downloading a Release
 
-### Compile Time Configuration
+Pre-built releases of the driver, ROM images, and tools are available from the project's GitHub page: [https://github.com/A4091/a4091-software/releases](https://github.com/A4091/a4091-software/releases)
 
-There are a few knobs to configure the ROM image you are building.
+### 🛠️ Building From Source
 
-Most prominently, you can enable debugging output through your Amiga's serial
-port. On a production image this is not required and should be turned off:
+Building the software is a straightforward process. You will need a modern `m68k-amigaos-gcc` cross-compiler toolchain, such as [Bebbo's amiga-gcc](https://github.com/amiga-gcc/amiga-gcc).
 
-```
-#CFLAGS  += -DDEBUG             # Show basic debug
-#CFLAGS  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
-#CFLAGS  += -DDEBUG_CMD         # Show handler commands received
-#CFLAGS  += -DDEBUG_CALLOUT     # Show callout (timeout abort) services
-# Per file debugging
-#CFLAGS  += -DDEBUG_ATTACH      # Debug attach.c
-#CFLAGS  += -DDEBUG_DEVICE      # Debug device.c
-#CFLAGS  += -DDEBUG_CMDHANDLER  # Debug cmdhandler.c
-#CFLAGS  += -DDEBUG_PORT        # Debug port.c
-#CFLAGS  += -DDEBUG_SCSIPI_BASE # Debug scsipi_base.c
-#CFLAGS  += -DDEBUG_SCSICONF    # Debug scsiconf.c
-#CFLAGS  += -DDEBUG_SCSIMSG     # Debug scsimsg.c
-#CFLAGS  += -DDEBUG_SD          # Debug sd.c
-#CFLAGS  += -DDEBUG_SIOP        # Debug siop.c
-#CFLAGS  += -DDEBUG_MOUNTER     # Debug mounter.c
-#CFLAGS  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
-#CFLAGS  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
+**Compile the Software**
+
+Simply run the `make` command from the root of the repository:
+
+```bash
+make
 ```
 
-### Compiling
+The build process is fully automated. The first time you run `make`, it will automatically download and initialize the necessary code libraries (git submodules) before compiling the project.
 
-Type `make` to compile the driver or `make verbose` to also see all the
-compiler invocations.
+To see the full compiler output, which can be useful for troubleshooting, run `make verbose`.
 
-```
-mkdir -p objs
-Building objs/device.o
-Building objs/ncr53cxxx
-Generating objs/siop_script.out
-Building objs/siop.o
-Building objs/port.o
-Building objs/attach.o
-Building objs/cmdhandler.o
-Building objs/printf.o
-Building objs/sd.o
-Building objs/scsipi_base.o
-Building objs/scsiconf.o
-Building objs/scsimsg.o
-Building objs/mounter.o
-Building objs/bootmenu.o
-Building objs/romfile.o
-Building objs/battmem.o
-Building objs/reloc.o
-Building objs/version.o
-Building a4091.device
-a4091.device is 46384 bytes
-Building objs/rnc
-Compressing a4091.device ... 46384 -> 29321 bytes
-Building objs/a4091.o
-Building a4091
-Building objs/a4091d.o
-Building a4091d
-Building objs/rom.o
-Building a4091_nodriver.rom
-ROM a4091_nodriver.rom fits in 64k
-Building objs/romtool
-Building a4091.rom
-a4091.rom: 64kB A4091 ROM image. Signature: OK
+This will produce several files:
 
- ROM header:   offset = 0x000000 length = 0x0006b0
- a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
- CDFileSystem: offset = 0x000000 length = 0x000000
+| File                 | Description                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `a4091.device`       | The AmigaOS device driver, which can be loaded from disk.                              |
+| `a4091.rom`          | The AutoConfig™ ROM image to be written to an EPROM or EEPROM. This includes the driver. |
+| `a4091_cdfs.rom`     | A ROM image with added CD-ROM boot support.                                          |
+| `a4091_nodriver.rom` | A ROM image without the driver, useful for diagnostics or loading the driver from disk. |
+| `a4091`              | A command-line utility to probe and test the A4091 card.                               |
+| `a4091d`             | A debugging tool to inspect the internal state of the running driver.                  |
 
- 34472 bytes free (52.60%)
+**Creating a Floppy Disk Image**
 
-Compressing BootCDFileSystem ... 19248 -> 12274 bytes
-Building a4091_cdfs.rom
-a4091_cdfs.rom: 64kB A4091 ROM image. Signature: OK
+An Amiga Disk File (ADF) containing the driver and tools can be created from the `disk` directory:
 
- ROM header:   offset = 0x000000 length = 0x0006b0
- a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
- CDFileSystem: offset = 0x007940 length = 0x003000 compressed (4b30 uncompressed)
-
- 22184 bytes free (33.85%)
-
-$
+```bash
+cd disk
+make
 ```
 
-This will generate the following files:
+This will generate a bootable `.adf` file that can be written to a floppy disk. It contains some documentation and tools useful for your A4091.
+
+### ⚡ Flashing the ROM
+
+The A4091 ROM can be written to a 32KB or 64KB EPROM or EEPROM. For the ReA4091, a **Winbond W27C512 EEPROM** is recommended. The 64KB size allows for the inclusion of a CDFileSystem for CD-ROM booting.
+
+Use a standard EPROM programmer to write the `.rom` file to the chip.
+
+---
+
+## 🏛️ Architectural Overview
+
+The A4091 firmware is a sophisticated piece of software designed to bridge the Amiga's operating system with the SCSI hardware. It involves a multi-stage process that begins at the earliest stages of the Amiga's boot sequence.
+
+### The AutoConfig™ ROM and Boot Process
+
+The journey begins with `rom.S`, a critical piece of assembly code that lives in the A4091's EEPROM. This file serves two primary purposes:
+
+1.  **AutoConfig™ Data**: It contains the necessary identification data that AmigaOS uses to recognize the A4091 card on the Zorro III bus during the initial boot-up. This allows the system to "autoconfigure" the card and make it available.
+2.  **Driver Loading**: Because the Amiga 3000 and 4000 read from the Zorro III ROM in nibbles (4-bit chunks), it's not possible to execute code directly from the EEPROM. Instead, `rom.S` acts as a bootloader. It finds the main driver (`a4091.device`), which is also stored in the ROM, and copies it into the Amiga's main RAM.
+
+This loading process involves two key components, also written in assembly:
+
+* **Relocator**: Once in RAM, the driver's code needs to be adjusted so that all its internal memory references point to the correct locations in RAM. The relocator code handles this task, making the driver executable.
+* **RNC Decompressor**: To save precious space in the 64KB ROM, the `a4091.device` driver is compressed using the **RNC Pro-Pack** algorithm. A small, fast RNC decompressor, written in hand-optimized 68k assembly, is included to unpack the driver into its final, executable form in RAM.
+
+### ROM Access Internals
+
+The A4091 uses an 8-bit wide ROM. On Zorro III systems like the Amiga 3000 and 4000, ROM access is limited to nibble-wide reads during the AutoConfig™ phase. Because of this limitation, it is not possible to execute driver code in place from ROM.
+
+To address this, the ROM code relocates the compressed driver image into main RAM, decompresses it using the built-in RNC decompressor, and then performs relocation on code and data pointers. This approach results in a boot process that is both compatible with the hardware and faster due to RAM execution speed.
+
+This relocation and decompression is handled by hand-optimized assembly routines in `rom.S`, `reloc.S`, and `rnc.S`, and is a core component of the early boot logic.
+
+### Boot Menu
+
+The A4091 ROM includes an optional boot-time diagnostic and configuration menu. You can access it by holding down the **right mouse button** during power-up or reset.
+
+The boot menu allows configuration of firmware features and diagnostics. It includes:
+
+- ✔️ **CD-ROM Boot Enable/Disable**: Controls whether the controller attempts to boot from a CD.  
+- ✔️ **Ignore `RDBFF_LAST`**: Allows the system to scan all drives even if one RDB flags it as final. Useful if a misconfigured or defective drive prevents other drives from being detected.
+- 📜 **SCSI Device Summary**: Displays all detected SCSI targets, gathered by the driver.
+- 🎛️ **DIP Switch Viewer**: Shows the current DIP switch configuration for the controller.
+
+⚙️ These firmware options can be saved across reboots using the Amiga's **battery-backed memory (battmem)**.
+
+![Boot Menu](bootmenu.png)
+
+The menu is implemented in `bootmenu.c` and invoked automatically if a right-click is detected during early boot.
 
 
-| File               |   Description                              |
-|--------------------|--------------------------------------------|
-| a4091.device       | device driver (i.e. for loading from disk) |
-| a4091.rom          | ROM driver to be written to a W27C512      |
-| a4091_cdfs.rom     | ROM driver with CD boot support            |
-| a4091_nodriver.rom | ROM image with no driver (for dev/test)    |
-| a4091              | Command line utility to probe the board    |
-| a4091d             | Debugging daemon to attach to the driver   |
+### Source Code Origins
 
+The A4091 driver is a hybrid, combining a robust, battle-tested SCSI core with Amiga-specific code.
 
-In addition to the ROM image a4091.rom, you will notice `a4091_nodriver.rom`
-was built above. This image may be useful if you want to load the driver
-off a floppy disk but still want a ROM image so that the A4091 card shows
-up during AutoConfig(tm). It's also useful if you want to use `a4091 -t`
-to run diagnostics on a card, since that utility will operate in conflict
-with a driver.
+* **From NetBSD**: The core of the driver, responsible for handling the low-level SCSI protocol and managing the **NCR 53c710** controller chip, is derived from the NetBSD open-source operating system. These files provide a solid foundation for SCSI communication:
+    * `ncr53cxxx.*`
+    * `siop.*`
+    * `scsipi*.*`
+* **Unique to A4091**: The following files are custom-written for this project and handle the integration with AmigaOS, the AutoConfig process, and the user-facing tools:
+    * `rom.S`: The aforementioned ROM bootloader.
+    * `device.c`: The main entry point and interface for the AmigaOS device driver.
+    * `attach.c`: Code to handle attaching the driver to the system.
+    * `cmdhandler.c`: Manages the command queue for the driver.
+    * `a4091.c` and `a4091d.c`: The source for the `a4091` test utility and `a4091d` debug tool.
+    * `mounter.c`: Code to automatically mount filesystems from the ROM.
 
-For test purposes it is possible to build a ROM using the original
-`2nd.scsi.device` driver. To do that, you will need the extracted driver
-in your build directory named `a3090.ld_strip`. The Makefile will detect
-this file and automatically build a `a4091_commodore.rom` in addition to
-the standard open source ROM.
+### The Mounter
 
+A key component for ease of use is the **mounter**. It is included in the ROM and is responsible for mounting hard drives at boot time, using the filesystems stored in Kickstart or the ROM (like `CDVDFS` or `fat95`).
 
-## CDROM Boot Support
+After the main driver is running, the mounter scans the A4091 ROM for any embedded filesystem drivers. When it finds one, it automatically performs the necessary steps to mount it, so the user doesn't have to manually run any commands. This is what allows for seamless booting from a CD or automatic access to FAT-formatted drives.
 
-This A4091 driver supports booting from CDROM. In order to achieve that,
-you will need a supported CDFileSystem in your ROM.
+The mounter is developed as a separate project that is used by other projects (like **[lide.device](https://github.com/LIV2/lide.device)**). You can find its source code and more details on its own GitHub repository: **[github.com/A4091/mounter](https://github.com/A4091/mounter)**.
 
-The smallest working CDFileSystem is `BootCDFileSystem` from your Amiga
-Forever CD or the AmigaOS 4.x Boot Floppy. Place that file in your source
-directory, and the Makefile will then also build a `a4091_cdfs.rom` ROM
-image.
+---
 
-| Origin            | Version                        | Works    |
-|-------------------|--------------------------------|----------|
+## 🔧 Configuration and Debugging
 
-| BootCDFileSystem  | CDFileSystem 50.21 (30.8.2003) | YES      |
-| AmigaOS 3.2       | CDFileSystem 47.26             | YES      |
-| AmigaOS 3.2.2     | CDFileSystem 47.28             | YES      |
-| Aminet amicdfs240 | AmiCDFS 2.40 (14.12.97)        | YES *    |
+### Using the `a4091` Test Utility
 
-*) Shows requester to insert CD01 during boot but seems to boot fine
+The `a4091` utility is a powerful command-line tool for testing and diagnosing the A4091 SCSI controller, especially for verifying a newly built card. To perform a comprehensive hardware test, run this from the Amiga Shell:
 
-You can add another CDFileSystem to a ROM using romtool:
-
-```
-$ objs/rnc p CDFileSystem CDFileSystem.rnc -m 1
--= RNC ProPackED v1.8 [by Lab 313] (01/26/2021) =-
------------------------------
-File successfully packed!
-Original/new size: 33016/21396 bytes
-$ objs/romtool a4091_cdfs.rom -F CDFileSystem.rnc
-a4091_cdfs.rom: 64kB A4091 ROM image. Signature: OK
-
- ROM header:   offset = 0x000000 length = 0x0006b0
- a4091.device: offset = 0x0006b0 length = 0x007290 compressed (b530 uncompressed)
- CDFileSystem: offset = 0x007940 length = 0x0053a0 compressed (80f8 uncompressed)
-
- 13064 bytes free (19.93%)
-
-$
-```
-
-
-## Flashing / Programming the ROM
-
-If your ROM file fits in 32k you can use a 27C256 EPROM. If the ROM is 64k,
-use a W27C512 EEPROM (or EPROM).
-
-We have used a [Galep 5](http://www.conitec.net/english/galep5.php)
-but a Super MiniPRO TL866II Plus or any other EPROM programmer will
-probably work as well.
-
-## Creating the floppy disk
-
-You can create a floppy disk for your A4091. Unlike the original it will not
-contain an updated version of `68040.library` and `SetPatch`, but some
-documentation and debug tools useful for your A4091. To create an ADF file that
-you can write to a floppy, please use
-
-```
-$ cd disk
-$ make disk
-./createdisk.sh
-Looking for submodules...
-Building devtest...
-Building objs/devtest.o
-Building devtest
-Extracting rdb...
-Creating disk...
-Cleaning up...
-Done. Please verify disk contents of A4091_4227.adf below:
-------------------------------------------------------------------------------------------
-Amiga4091                                        VOLUME  --------  05.11.2023 15:38:16.00  DOS0:ofs #512
-  A4091.guide                                     15328  ----rwed  05.11.2023 15:38:16.00
-  A4091.guide.info                                  523  ----rwed  05.11.2023 15:38:16.00
-  Disk.info                                         364  ----rwed  05.11.2023 15:38:16.00
-  Devs                                              DIR  ----rwed  05.11.2023 15:38:16.00
-    a4091.device                                  46384  ----rwed  05.11.2023 15:38:16.00
-  S                                                 DIR  ----rwed  05.11.2023 15:38:16.00
-    Startup-Sequence                               1009  ----rwed  05.11.2023 15:38:16.00
-  Tools                                             DIR  ----rwed  05.11.2023 15:38:15.00
-    a4091                                         66524  ----rwed  05.11.2023 15:38:15.00
-    a4091d                                        47824  ----rwed  05.11.2023 15:38:15.00
-    devtest                                       65412  ----rwed  05.11.2023 15:38:15.00
-    rdb                                           26816  ----rwed  05.11.2023 15:38:15.00
-    RDBFlags                                       2208  ----rwed  05.11.2023 15:38:15.00
-sum:           582  291Ki        297984
-data:          564  282Ki        288768  96.91%
-fs:             18  9.0Ki          9216   3.09%
-------------------------------------------------------------------------------------------
-Created A4091_4227.adf
-$
+```bash
+a4091 -t
 ```
 
-## Internals
+This will test the card's registers, data/address pins, interrupts, and SCSI pins. A successful run is a good sign that the hardware is working correctly.
 
-### ROM access
+Additional options:
 
-The A4091 uses an 8bit ROM and with AutoConfig implementations on the A3000 and
-A4000 it can only be accessed nibble wide. Hence, the A4091 ROM will relocate
-the driver to RAM because it is not possible to execute in place. This has a
-positive speed impact but makes the ROM startup code a little bit more
-cumbersome.
+```bash
+a4091 -t -L
+```
 
-### a4091.device
+Runs all tests in a continuous loop, counting how many passes have completed. This is useful for burn-in testing—500+ passes are recommended for validating new builds.
 
-The device driver is based off the NetBSD NCR53c710 driver and has been adapted
-to AmigaOS.
+```bash
+a4091 -t56
+```
 
-### Boot menu
+Runs only test numbers 5 and 6. You may specify any subset of test numbers 0 through 8 after `-t`. **Note:** Skipping a failing test may cause subsequent tests to behave unpredictably.
 
-The ROM contains a diagnostic menu that you can reach by holding down the right
-mouse button during boot. The menu can show you dip switch settings and also
-attached SCSI devices. There is also an option in the menu to enable or
-disable CD-ROM boot.
+### Using the `a4091d` Debug Utility
 
-### a4091 tool
+The `a4091d` utility provides a "behind-the-scenes" look at the internal state of the `a4091.device` driver. Run it from the Shell to get a snapshot of the driver's status.
 
-The `a4091` tool can be used to probe the board and detect possible hardware
-issues.
+```bash
+a4091d
+```
 
-`a4091 -t` runs all tests once. If the A4091 is functioning properly, every test will pass.
+You can specify what information to display:
 
-`a4091 -t -L` will run all tests in a continuous loop while counting passes. If you built a board yourself, doing at least 500 passes is recommended. You can skip to individual test(s) by appending one or more numbers between `0` and `8` to `-t`, e.g., `a4091 -t56` will only run tests number 5 and 6. **Note:** If you skip **failing** tests, consecutive tests may produce unexpected results.
+* `d`: Show device information.
+* `u`: Show unit (SCSI device) information.
+* `o`: Show open information.
+* `c`: Show command information.
+* `a`: Show all information (default).
 
-### Source files
+Example to show only unit and command info:
 
-Files will be documented here in an order to help understand code flow.
+```bash
+a4091d uc
+```
 
-`rom.S` contains initialization code called during OS startup. It loads the rest of the driver from the A4091 ROM. `reloc.S` is called to do runtime relocation of the loaded driver's code and data.
+### Enabling Debug Output
 
-`device.c` implements startup and has standard trackdisk entry points. If started from ROM, it calls out to drive mounting and the boot menu. During normal operation, it calls into cmdhandler.c for I/O operations.
+For advanced debugging, you can enable serial output by uncommenting various `-DDEBUG_...` flags in the `Makefile`. These messages are sent to the Amiga's serial port (9600 baud, 8-N-1).
 
-`mounter.c` probes for drives, finds partitions, and mounts them.
+---
 
-`bootmenu.c` provides the optional diagnostic menu at boot time.
+## Advanced ROM Customization
 
-`cmdhandler.c` implements the task which fields all incoming I/O requests, calling into attach.c for mounting drives, and sd.c for various SCSI I/O operations.
+### Using a Different CD-ROM Filesystem (AmigaOS `CDFileSystem`)
 
-`attach.c` probes a specified SCSI target and creates data structures needed by the NetBSD SCSI code for managing that device.
+By default, the ROM is built with the **CDVDFS** filesystem from AROS. You can replace it with the official `CDFileSystem` from AmigaOS 3.2 (or other versions).
 
-`sd.c` creates SCSI requests (xs data structure) and calls into the NetBSD scsipi_base.c for queuing and processing. It also implements callbacks for I/O complete. The callbacks, such as `sd_complete()` call back into cmd_complete() in cmdhandler.c. That function replies to the AmigaOS task which made the initial request.
+**Step 1: Extract `CDFileSystem` from the AmigaOS Install Disk**
 
-`scsi`* files are NetBSD's core SCSI stack. We've tried to keep all modifications to this code within `#ifdef PORT_AMIGA` in order to make it easier to apply updates.
+Use `xdftool` (from `amitools`) to extract the filesystem from your AmigaOS Install ADF:
 
-`siop.c` is the NetBSD driver for the 53C710 SCSI controller on the A4091. We've also tried to keep all modifications to this code within `#ifdef PORT_AMIGA` in order to make it easier to apply updates. Probably not as well as the `scsi`* files above. The driver uses an internal structure, the acb, to maintain the queue of SCSI requests (both queued and issued) to the 53C710. The callback into the higher level stack is `scsipi_done()` for operations which have completed or failed.
+```bash
+xdftool AmigaOS-3.2-Install.adf unadf L/CDFileSystem
+```
 
-`printf.c` contains code which, when the driver is compiled for debug, can emit output on the Amiga serial port (9600 8 N 1). Driver code which calls printf() will use this code. When no Makefile DEBUG flag is specified, calls to printf() do not add any size to the executable.
+**Step 2: Replace the Filesystem in the ROM**
 
-`version.h` is manually updated to change the compiled-in driver version number.
+Use the `romtool` utility (built with the project) to replace the first filesystem in the ROM. The filesystem type for `CDFileSystem` is `CD01` (hex `0x43443031`).
 
-`port.c` contains miscellaneous functions to support the port from NetBSD to AmigaOS.
+```bash
+./romtool a4091.rom -o a4091_custom.rom -F CDFileSystem -T 0x43443031
+```
 
-`siop_script.ss` contains the SCRIPTS processor source code. It is taken unmodified from the NetBSD driver, and is compiled by `ncr53cxxx` into C source which is then built as part of the driver.
+The resulting `a4091_custom.rom` can be flashed to your EEPROM.
 
-`ncr53cxxx.c` is the source to the NetBSD SCRIPTS compiler, with minor fixes.
+### 💾 Adding FAT32/MS-DOS Filesystem Support (`fat95`)
 
-`rom.ld` is the linker directive file which tells how to assemble the ROM image.
+You can add support for reading PC-formatted FAT16/FAT32 drives by adding the `fat95` filesystem to the ROM.
 
-`rnc.S` is a small RNC ProPack decompressor that is used to maximize rom space.
+**Step 1: Download the `fat95` Filesystem**
 
-`romfile.c` handles "files" in the ROM and is used to find the CDFileSystem at
-boot.
+Download the `fat95` archive from **[Aminet](https://aminet.net/package/disk/misc/fat95)** and extract the `fat95` file from the `l/` directory of the archive.
 
-`romtool.c` is a utility to manipulate A4091 rom images. It lets you remove/add
-device drivers and filesystems.
+**Step 2: Compile the ROM with Disk Label Support**
 
+To use a second filesystem, you must compile the ROM with the `-DDISKLABEL` flag.
+
+```bash
+make CFLAGS=-DDISKLABEL
+```
+
+**Step 3: Add `fat95` to the ROM's Second Slot**
+
+Use `romtool` to add `fat95` to the second filesystem slot (`-F2`). The filesystem type for `fat95` is `FAT` (hex `0x46415420`).
+
+```bash
+./romtool a4091.rom -o a4091_fat95.rom -F2 fat95 -T2 0x46415420
+```
+
+This universal ROM will use the default CD-ROM driver for CDs and automatically use `fat95` to mount any hard drive or Zip disk with a FAT partition. This can even enable booting from a FAT-formatted drive.
+
+---
+
+## 🤝 Contributing and Support
+
+Feedback, pull requests, and issue reports are welcome at [github.com/A4091/a4091-software](https://github.com/A4091/a4091-software). If you're unsure where to start, browse the open issues or join the discussion on the project's GitHub page.
+
+If you are using the A4091 and find a bug, please include as much detail as possible — including ROM version, Kickstart version, and any SCSI devices connected.
