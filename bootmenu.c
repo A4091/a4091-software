@@ -1,5 +1,5 @@
 //
-// Copyright 2022-2023 Stefan Reinauer & Chris Hooper
+// Copyright 2022-2025 Stefan Reinauer & Chris Hooper
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
