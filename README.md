@@ -63,6 +63,25 @@ make
 
 This will generate a bootable `.adf` file that can be written to a floppy disk. It contains some documentation and tools useful for your A4091.
 
+### 💾 What's on the Disk
+
+The A4091 floppy disk is bootable and contains several useful tools and documentation:
+
+| File              | Description                                                                    |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `A4091.guide`     | Comprehensive AmigaGuide documentation covering installation, configuration, and usage |
+| `a4091.device`    | The AmigaOS device driver that can be loaded from disk if not using ROM version |
+| `a4091`           | Command-line utility for testing and diagnosing the A4091 hardware           |
+| `a4091d`          | Debug tool to inspect the internal state of the running a4091.device driver  |
+| `devtest`         | Storage device benchmark and testing tool for any Amiga device               |
+| `rdb`             | Utility for modifying Rigid Disk Block (RDB) settings on hard drives        |
+| `RDBFlags`        | Tool to easily toggle the LastDisk flag in the RDB                           |
+| `scsifix`         | Tool to redirect `2nd.scsi.device` calls to `a4091.device` for compatibility |
+
+![A4091 Floppy Disk](docs/disk.png)
+
+The disk boots automatically and displays a welcome screen with available tools. All utilities can be run from the shell and include built-in help via the `-h` or `?` options.
+
 ### ⚡ Flashing the ROM
 
 The A4091 ROM can be written to a 32KB or 64KB EPROM or EEPROM. For the ReA4091, a **Winbond W27C512 EEPROM** is recommended. The 64KB size allows for the inclusion of a CDFileSystem for CD-ROM booting.
@@ -108,7 +127,7 @@ The boot menu allows configuration of firmware features and diagnostics. It incl
 
 ⚙️ These firmware options can be saved across reboots using the Amiga's **battery-backed memory (battmem)**.
 
-![Boot Menu](bootmenu.png)
+![Boot Menu](docs/bootmenu.png)
 
 The menu is implemented in `bootmenu.c` and invoked automatically if a right-click is detected during early boot.
 
