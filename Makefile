@@ -6,8 +6,8 @@ ADATE   := $(shell date '+%-d.%-m.%Y')
 # Default to NCR53C770 driver:
 
 #DEVICE := A4000T
-#DEVICE := A4091
-DEVICE ?= A4000T770
+#DEVICE := A4000T770
+DEVICE ?= A4091
 
 ifeq ($(DEVICE),A4091)
 TARGET  := NCR53C710
