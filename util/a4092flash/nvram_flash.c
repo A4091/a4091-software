@@ -1,3 +1,4 @@
+#include "flash.h"
 #include "nvram_flash.h"
 #include <string.h> // For memcpy
 

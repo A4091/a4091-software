@@ -26,6 +26,8 @@ struct Config {
   bool eraseFlash;
   bool rebootRequired;
   bool assumeYes;
+  bool nvramFlash;
+  char *nvramCommand;
 };
 
 struct Config* configure(int, char* []);

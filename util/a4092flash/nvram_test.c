@@ -4,7 +4,10 @@
 #include "nvram_flash.h"
 #include "nvram_flash.c"
 
-
+// --- Flash API ---
+UBYTE flash_readByte(ULONG address);
+void flash_writeByte(ULONG address, UBYTE data);
+void flash_erase_sector(ULONG address);
 
 // --- Stub Flash Implementation ---
 #define FLASH_SECTOR_SIZE (4 * 1024)
@@ -16,7 +19,7 @@ static UBYTE flash_memory_stub[FLASH_TOTAL_SIZE];
 void flash_erase_sector(ULONG offset)
 {
     ULONG sector_start_offset = (offset / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE;
-    printf("STUB: Erasing sector at physical address %p (offset 0x%X)\n", flash_memory_stub + sector_start_offset, sector_start_offset);
+    printf("STUB: Erasing sector at offset 0x%X\n", sector_start_offset);
     memset(flash_memory_stub + sector_start_offset, 0xFF, FLASH_SECTOR_SIZE);
 }
 
@@ -33,7 +36,7 @@ UBYTE flash_readByte(ULONG offset)
 // --- Unit Test ---
 void print_test_result(const char* test_name, bool pass)
 {
-    printf("TEST: %-40s [%s%s%s]\n", test_name, 
+    printf("TEST: %-44s [%s%s%s]\n", test_name, 
            pass ? "\033[32m" : "\033[31m",  // Green for PASS, Red for FAIL
            pass ? "PASS" : "FAIL",
            "\033[0m");  // Reset color

@@ -19,9 +19,11 @@
 #include <stdbool.h>
 #include <proto/exec.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "main.h"
 #include "config.h"
+#include "nvram_flash.h"
 
 /** configure
  *
@@ -42,6 +44,8 @@ struct Config* configure(int argc, char *argv[]) {
   config->eraseFlash       = false;
   config->rebootRequired   = false;
   config->assumeYes        = false;
+  config->nvramFlash       = false;
+  config->nvramCommand     = NULL;
 
   for (int i=1; i<argc; i++) {
     if (argv[i][0] == '-') {
@@ -78,13 +82,22 @@ struct Config* configure(int argc, char *argv[]) {
           config->assumeYes = true;
           break;
 
+        case 'F':
+          if (i+1 < argc) {
+            config->nvramCommand = argv[i+1];
+            config->nvramFlash = true;
+            i++;
+          }
+          break;
+
       }
     }
   }
 
   if (config->readFlash == false && config->writeFlash == false &&
-		 config->eraseFlash == false && config->probeFlash == false) {
-      printf("You need to specify one of -E, -R, -W, -P.\n");
+		 config->eraseFlash == false && config->probeFlash == false &&
+		 config->nvramFlash == false) {
+      printf("You need to specify one of -E, -R, -W, -P, -F.\n");
       error = true;
   }
   if (config->readFlash == true && config->writeFlash == true) {
@@ -104,11 +117,21 @@ struct Config* configure(int argc, char *argv[]) {
  * @brief Print the usage information
 */
 void usage(void) {
-    printf("\nUsage: a4092flash [-Y] { -R <a4092.rom> | -W <a4092.rom> | -E | -P }\n\n");
+    printf("\nUsage: a4092flash [-Y] { -R <a4092.rom> | -W <a4092.rom> | -E | -P | -F <nvram_cmd> }\n\n");
     printf("       -Y assume YES as answer to all questions\n");
     printf("       -R <a4092.rom> - Read A4092 ROM to file\n");
     printf("       -W <a4092.rom> - Flash A4092 ROM from file\n");
     printf("       -E Erase flash.\n");
     printf("       -P Probe flash.\n");
     printf("       -B Reboot.\n");
+    printf("       -F <nvram_cmd> - NVRAM operations (comma-separated):\n");
+    printf("           init - Initialize NVRAM partition\n");
+    printf("           osflags - Read os_flags from last entry\n");
+    printf("           switchflags - Read switch_flags from last entry\n");
+    printf("           osflags=<hex> - Write os_flags\n");
+    printf("           switchflags=<hex> - Write switch_flags\n");
+    printf("       Examples:\n");
+    printf("           -F osflags,switchflags - Read both flags\n");
+    printf("           -F osflags=ff,switchflags=00 - Write both flags\n");
+    printf("           -F init,osflags=ff - Initialize and write osflags\n");
 }

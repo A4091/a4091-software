@@ -19,7 +19,9 @@
 #ifndef FLASH_H
 #define FLASH_H
 
+#ifdef __AMIGA__
 #include <exec/types.h>
+#endif
 #include <stdbool.h>
 
 void flash_unlock_sdp(void);

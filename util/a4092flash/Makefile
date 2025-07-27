@@ -1,5 +1,6 @@
 PROJECT=a4092flash
 CC=m68k-amigaos-gcc
+HOSTCC=gcc
 CFLAGS=-lamiga -mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
 .PHONY:	clean all
 
@@ -18,13 +19,18 @@ all:	$(PROJECT)
 
 OBJ =   flash.o \
 	config.o \
-	main.o
+	main.o \
+	nvram_flash.o
 
 SRCS = $(OBJ:%.o=%.c)
 
 
 a4092flash: $(SRCS) *.h
-	${CC} -o $@ $(CFLAGS) $(SRCS)
+	$(CC) -o $@ $(CFLAGS) $(SRCS)
+
+test:
+	$(HOSTCC) -o nvram_test nvram_test.c
+	./nvram_test
 
 clean:
-	-rm -rf $(PROJECT)
+	-rm -rf $(PROJECT) nvram_test
