@@ -206,12 +206,6 @@ extern struct ExecBase *SysBase;
 #define DMA_LEN_BIT  12 // 4K DMA
 #define DMA_COPY_LEN BIT(DMA_LEN_BIT)
 
-/* Modern stdint types */
-typedef unsigned char      uint8_t;
-typedef unsigned short     uint16_t;
-typedef unsigned int       uint32_t;
-typedef unsigned long long uint64_t;
-
 typedef volatile APTR VAPTR;
 typedef unsigned int   uint;
 
