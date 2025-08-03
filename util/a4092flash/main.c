@@ -40,7 +40,9 @@
 const char ver[] = VERSION_STRING;
 
 struct Library *DosBase;
+#if __GNUC__ < 11
 struct ExecBase *SysBase;
+#endif
 struct ExpansionBase *ExpansionBase = NULL;
 struct Config *config;
 bool devsInhibited = false;
