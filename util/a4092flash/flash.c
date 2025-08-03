@@ -104,13 +104,9 @@ struct flashchips {
 static const struct flashchips devices_supported[] = {
     { 0x0120, 128, "AMD",      "AM29F010"       },
     { 0x01A4, 512, "AMD",      "AM29F040"       },
-    { 0x1F03,  64, "Atmel",    "AT49BV512"      },
     { 0xBFB5, 128, "SST",      "SST39SF010"     },
     { 0xBFB6, 256, "SST",      "SST39SF020"     },
     { 0xBFB7, 512, "SST",      "SST39SF040"     },
-    { 0xBFD5, 128, "SST",      "SST39(L/V)F010" },
-    { 0xBFD6, 256, "SST",      "SST39(L/V)F020" },
-    { 0xBFD7, 512, "SST",      "SST39(L/V)F040" },
     { 0xC2A4, 512, "Macronix", "MX29F040C"      },
     { 0x0000,   0, NULL,       NULL             }
 };
@@ -161,9 +157,6 @@ static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
       case 0xBFB5: // SST39SF010
       case 0xBFB6: // SST39SF020
       case 0xBFB7: // SST39SF040
-      case 0xBFD5: // SST39(L/V)F010
-      case 0xBFD6: // SST39(L/V)F020
-      case 0xBFD7: // SST39(L/V)F040
         sectorSize = 4096;
         break;
       case 0x0120: // AM29F010
