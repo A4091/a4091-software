@@ -45,7 +45,9 @@ struct ExecBase *SysBase;
 #endif
 struct ExpansionBase *ExpansionBase = NULL;
 struct Config *config;
+#ifdef SHARED_REGISTERS
 bool devsInhibited = false;
+#endif
 
 /**
  * _ColdReboot()
@@ -70,6 +72,7 @@ static void _ColdReboot(void)
       "jmp     (a0)");
 }
 
+#if SHARED_REGISTERS
 /**
  * inhibitDosDevs
  * 
@@ -179,6 +182,7 @@ bool inhibitDosDevs(bool inhibit)
 
   return success;
 }
+#endif
 
 /**
  * setup_a4092_board
@@ -285,6 +289,7 @@ int main(int argc, char *argv[])
       }
     }
    
+#if SHARED_REGISTERS
     if (!inhibitDosDevs(true)) {
       printf("Failed to inhibit AmigaDOS volumes, wait for disk activity to stop and try again.\n");
       rc = 5;
@@ -293,6 +298,7 @@ int main(int argc, char *argv[])
     };
 
     devsInhibited = true;
+#endif
 
     if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library",0)) != NULL) {
 
@@ -391,8 +397,10 @@ int main(int argc, char *argv[])
       }
     }
 
+#if SHARED_REGISTERS
     if (devsInhibited)
       inhibitDosDevs(false);
+#endif
 
   } else {
     usage();
