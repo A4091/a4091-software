@@ -269,7 +269,7 @@ int main(int argc, char *argv[])
         goto exit;
       }
 
-      if (romSize < 64*1024) {
+      if (romSize < 32*1024) {
         printf("ROM file too small.\n");
         rc = 5;
         goto exit;
