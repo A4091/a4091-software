@@ -231,7 +231,10 @@ static void handle_nvram_commands(struct Config* config);
 
 int main(int argc, char *argv[])
 {
-  SysBase = *((struct ExecBase **)4UL);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds="
+  SysBase = *(struct ExecBase **)4UL;
+#pragma GCC diagnostic pop
   DosBase = OpenLibrary("dos.library",0);
 
   int rc = 0;
