@@ -270,6 +270,10 @@ void flash_erase_bank(ULONG sectorSize, ULONG bankSize)
  */
 void flash_erase_sector(ULONG address, ULONG sectorSize)
 {
+  bool failed = false;
+  int i;
+  UBYTE d;
+
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -279,6 +283,16 @@ void flash_erase_sector(ULONG address, ULONG sectorSize)
   // Write erase sector command to the specific sector address
   flash_write_byte(address, CMD_ERASE_SECTOR);
   flash_poll(address);
+
+  // Verify
+  for (i=address; i<address + sectorSize; i++) {
+    if ((d=flash_read_byte(i)) != 0xff) {
+      failed = true;
+      printf("Sector 0x%lx+0x%x 0x%02x != 0xff\n", address, i, d);
+    }
+  }
+  if (failed)
+    printf("SECTOR ERASE FAILED for sector 0x%lx\n", address);
 }
 
 /** flash_poll
