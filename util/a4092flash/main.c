@@ -331,10 +331,11 @@ int main(int argc, char *argv[])
         if ((config->writeFlash || config->eraseFlash) && !promptUser(config)) continue;
 
         UBYTE manufId,devId;
-        UWORD sectorSize;
+        ULONG sectorSize;
         ULONG flashSize;
 
         if (flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
+          ULONG bankSize = 65536; // hardcode A4091/A4092 image size for now
           if (config->eraseFlash) {
             printf("Erasing whole flash.\n");
             flash_erase_chip();
@@ -344,7 +345,7 @@ int main(int argc, char *argv[])
             if (config->eraseFlash == false) {
               if (sectorSize > 0) {
                 printf("Erasing flash bank.\n");
-                flash_erase_bank(sectorSize);
+                flash_erase_bank(sectorSize, bankSize);
               } else {
                 printf("Erasing whole flash.\n");
                 flash_erase_chip();
@@ -495,7 +496,7 @@ BOOL writeFlashToFile(char *filename, ULONG romSize)
   char * buffer;
 
   if (romSize == 0) return false;
-  fprintf (stdout, "Flash size: %d KB\n", romSize / 1024);
+  fprintf (stdout, "Flash size: %d KB\n", (unsigned int)(romSize / 1024));
   buffer = AllocMem(romSize, 0);
 
   BPTR fh;

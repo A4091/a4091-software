@@ -66,7 +66,7 @@ int flash_format_nvram_partition(ULONG partition_address, ULONG size)
         return NVRAM_ERR_INVALID_ARG;
     }
 
-    flash_erase_sector(partition_address);
+    flash_erase_sector(partition_address,size);
 
     for (ULONG i = 0; i < size; ++i) {
         if (flash_readByte(partition_address + i) != 0xFF) {

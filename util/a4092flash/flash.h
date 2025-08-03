@@ -28,8 +28,8 @@ void flash_unlock_sdp(void);
 void flash_erase_chip(void);
 UBYTE flash_readByte(ULONG address);
 void flash_writeByte(ULONG address, UBYTE data);
-bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, UWORD *sectorSize);
-void flash_erase_sector(ULONG address);
-void flash_erase_bank(UWORD sectorSize);
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
+void flash_erase_sector(ULONG address, ULONG sectorSize);
+void flash_erase_bank(ULONG sectorSize, ULONG bankSize);
 
 #endif

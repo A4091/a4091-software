@@ -146,12 +146,12 @@ static bool flash_is_supported(UBYTE manufacturer, UBYTE device, UWORD *size)
  * @brief return the sector size for this device type if known
  * @param manufacturer the manufacturer ID
  * @param device the device id
- * @returns UWORD sector size in bytes
+ * @returns ULONG sector size in bytes
  */
-static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
+static ULONG flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
 {
     ULONG deviceId = (manufacturer << 8) | device;
-    UWORD sectorSize;
+    ULONG sectorSize;
 
     switch (deviceId) {
       case 0xBFB5: // SST39SF010
@@ -162,9 +162,13 @@ static UWORD flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
       case 0x0120: // AM29F010
         sectorSize = 16384;
         break;
+      case 0x01A4: // AM29F040
+      case 0xC2A4: // MX29F040C
+        sectorSize = 65536;
+	break;
       default:
         // Unknown/Unsupported/Too large
-        // If the device's sectorSize is greater than 32K don't bother
+        // If the device's sectorSize is greater than 64K don't bother
         sectorSize = 0;
     }
 
@@ -248,12 +252,12 @@ void flash_erase_chip(void)
  * Erase the currently selected 32KB bank
  *
  */
-void flash_erase_bank(UWORD sectorSize)
+void flash_erase_bank(ULONG sectorSize, ULONG bankSize)
 {
   if (sectorSize > 0) {
-    int count = 32768 / sectorSize;
+    int count = bankSize / sectorSize;
     for (int i = 0; i < count; i++) {
-      flash_erase_sector(i * sectorSize);
+      flash_erase_sector(i * sectorSize, sectorSize);
     }
   }
 }
@@ -264,7 +268,7 @@ void flash_erase_bank(UWORD sectorSize)
  * @param address Address of sector to erase
  *
  */
-void flash_erase_sector(ULONG address)
+void flash_erase_sector(ULONG address, ULONG sectorSize)
 {
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
@@ -304,7 +308,7 @@ static inline void flash_poll(ULONG address)
  * @param flashbase Pointer to the Flash base address
  * @return True if the manufacturer ID matches the expected value and flashbase is valid.
  */
-bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, UWORD *sectorSize)
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize)
 {
   bool ret = false;
   UBYTE manufId;
