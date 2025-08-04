@@ -16,3 +16,6 @@
 [submodule "3rdparty/libcodesets"]
 	path = 3rdparty/libcodesets
 	url = ../../reinauer/libcodesets
+[submodule "3rdparty/mounter"]
+	path = 3rdparty/mounter
+	url = ../mounter

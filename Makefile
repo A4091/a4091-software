@@ -42,7 +42,7 @@ PROG	:= $(DEVNAME).device
 PROGU	:= a4091
 PROGD	:= a4091d
 SRCS    := device.c version.c port.c attach.c cmdhandler.c printf.c
-SRCS    += sd.c scsipi_base.c scsipiconf.c scsiconf.c scsimsg.c mounter.c bootmenu.c
+SRCS    += sd.c scsipi_base.c scsipiconf.c scsiconf.c scsimsg.c 3rdparty/mounter/mounter.c bootmenu.c
 ifeq ($(TARGET),NCR53C710)
 SRCS    += siop.c
 else ifeq ($(TARGET),NCR53C770)
@@ -73,7 +73,7 @@ NDK_PATH  := $(firstword $(wildcard $(NDK_PATHS)))
 # CFLAGS for device driver
 #
 CFLAGS  := -DBUILD_DATE=\"$(DATE)\" -DBUILD_TIME=\"$(TIME)\" -DAMIGA_DATE=\"$(ADATE)\"
-CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS)
+CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS) -I. -I3rdparty/mounter
 #DEBUG  += -DDEBUG             # Show basic debug
 #DEBUG  += -DDEBUG_SYNC        # Show Synchronous SCSI debug
 #DEBUG  += -DDEBUG_CMD         # Show handler commands received
@@ -288,6 +288,7 @@ $(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).rnc
 
 $(OBJDIR):
 	mkdir -p $@
+	mkdir -p $@/3rdparty/mounter
 
 clean:
 	@echo Cleaning.
