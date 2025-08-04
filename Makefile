@@ -325,4 +325,15 @@ lha:
 	rm -rf a4091_$$VER
 	rm $(ROM_DB)
 
+all-targets:
+	make DEVICE=A4091 a4091.device
+	make DEVICE=A4091 a4091.rom
+	make DEVICE=A4091 clean
+	make DEVICE=A4000T scsi710.device
+	make DEVICE=A4091 clean
+	make DEVICE=A4000T770 scsi770.device
+	make a4091
+	make a4091d
+	cd disk && make
+
 .PHONY: verbose all $(OBJDIR)/CDVDFS

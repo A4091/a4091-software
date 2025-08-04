@@ -17,32 +17,8 @@ jobs:
       with:
         submodules: true
 
-    - name: Build a4091.device
-      run: make DEVICE=A4091 a4091.device
-
-    - name: Build a4091.rom
-      run: make DEVICE=A4091 a4091.rom
-
-    - name: Cleaning
-      run: make DEVICE=A4091 clean
-
-    - name: Build A4000T scsi710.device
-      run: make DEVICE=A4000T scsi710.device
-
-    - name: Cleaning Again
-      run: make DEVICE=A4091 clean
-
-    - name: Build A4000T scsi770.device
-      run: make DEVICE=A4000T770 scsi770.device
-
-    - name: Build a4091 tool
-      run: make a4091
-
-    - name: Build a4091d tool
-      run: make a4091d
-
-    - name: Build ADF disk image
-      run: cd disk && make
+    - name: Building all targets
+      run: make all-targets
 
     - name: Archive CI artifacts (ROM)
       uses: actions/upload-artifact@v4
