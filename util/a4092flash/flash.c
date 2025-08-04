@@ -288,11 +288,11 @@ void flash_erase_sector(ULONG address, ULONG sectorSize)
   for (i=address; i<address + sectorSize; i++) {
     if ((d=flash_read_byte(i)) != 0xff) {
       failed = true;
-      printf("Sector 0x%lx+0x%x 0x%02x != 0xff\n", address, i, d);
+      printf("Sector 0x%lx+0x%x 0x%02x != 0xff\n", (unsigned long)address, i, d);
     }
   }
   if (failed)
-    printf("SECTOR ERASE FAILED for sector 0x%lx\n", address);
+    printf("SECTOR ERASE FAILED for sector 0x%lx\n", (unsigned long)address);
 }
 
 /** flash_poll

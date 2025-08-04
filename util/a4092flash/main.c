@@ -45,6 +45,7 @@ struct ExecBase *SysBase;
 #endif
 struct ExpansionBase *ExpansionBase = NULL;
 struct Config *config;
+struct nvramParams nvramParams;
 #ifdef SHARED_REGISTERS
 bool devsInhibited = false;
 #endif
@@ -227,7 +228,8 @@ static bool promptUser(struct Config *config)
 }
 
 static BOOL probeFlash(ULONG romSize);
-static void handle_nvram_commands(struct Config* config);
+static BOOL parse_nvram_params(struct Config* config);
+static void execute_nvram_operations(struct scsiBoard* board);
 
 int main(int argc, char *argv[])
 {
@@ -255,8 +257,10 @@ int main(int argc, char *argv[])
   if ((config = configure(argc,argv)) != NULL) {
 
     if (config->nvramFlash) {
-      handle_nvram_commands(config);
-      goto exit;
+      if (!parse_nvram_params(config)) {
+        rc = 5;
+        goto exit;
+      }
     }
 
     if (config->writeFlash && config->scsi_rom_filename) {
@@ -372,6 +376,10 @@ int main(int argc, char *argv[])
               rc = 5;
               goto exit;
             }
+	  }
+
+	  if (config->nvramFlash) {
+            execute_nvram_operations(&board);
 	  }
 
         } else {
@@ -653,40 +661,32 @@ static BOOL probeFlash(ULONG romSize)
 #define NVRAM_OFFSET 65536
 #define NVRAM_SIZE 4096
 
-static void handle_nvram_commands(struct Config* config) {
-    if (!config->nvramCommand) return;
+static BOOL parse_nvram_params(struct Config* config) {
+    if (!config->nvramCommand) return FALSE;
+
+    memset(&nvramParams, 0, sizeof(nvramParams));
     
     char *cmd_copy = AllocMem(strlen(config->nvramCommand) + 1, MEMF_ANY);
     if (!cmd_copy) {
         printf("Memory allocation failed\n");
-        return;
+        return FALSE;
     }
     strcpy(cmd_copy, config->nvramCommand);
-    
-    bool need_init = false;
-    bool need_read = false;
-    bool need_write = false;
-    bool read_osflags = false;
-    bool read_switchflags = false;
-    uint8_t write_osflags = 0;
-    uint8_t write_switchflags = 0;
-    bool write_osflags_set = false;
-    bool write_switchflags_set = false;
     
     char *token = strtok(cmd_copy, ",");
     while (token != NULL) {
         char *equals_pos = strchr(token, '=');
         
         if (strcmp(token, "init") == 0) {
-            need_init = true;
+            nvramParams.need_init = true;
         }
         else if (strcmp(token, "osflags") == 0) {
-            need_read = true;
-            read_osflags = true;
+            nvramParams.need_read = true;
+            nvramParams.read_osflags = true;
         }
         else if (strcmp(token, "switchflags") == 0) {
-            need_read = true;
-            read_switchflags = true;
+            nvramParams.need_read = true;
+            nvramParams.read_switchflags = true;
         }
         else if (equals_pos != NULL) {
             *equals_pos = '\0';
@@ -697,43 +697,46 @@ static void handle_nvram_commands(struct Config* config) {
                 if (sscanf(value_str, "%x", &value) != 1 || value > 0xFF) {
                     printf("Invalid hex value for osflags: %s\n", value_str);
                     FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-                    return;
+                    return FALSE;
                 }
-                need_write = true;
-                write_osflags = (uint8_t)value;
-                write_osflags_set = true;
+                nvramParams.need_write = true;
+                nvramParams.write_osflags = (uint8_t)value;
+                nvramParams.write_osflags_set = true;
             }
             else if (strcmp(token, "switchflags") == 0) {
                 unsigned int value;
                 if (sscanf(value_str, "%x", &value) != 1 || value > 0xFF) {
                     printf("Invalid hex value for switchflags: %s\n", value_str);
                     FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-                    return;
+                    return FALSE;
                 }
-                need_write = true;
-                write_switchflags = (uint8_t)value;
-                write_switchflags_set = true;
+                nvramParams.need_write = true;
+                nvramParams.write_switchflags = (uint8_t)value;
+                nvramParams.write_switchflags_set = true;
             }
             else {
                 printf("Unknown NVRAM command: %s\n", token);
                 FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-                return;
+                return FALSE;
             }
         }
         else {
             printf("Unknown NVRAM command: %s\n", token);
             FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-            return;
+            return FALSE;
         }
         
         token = strtok(NULL, ",");
     }
     
     FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-    
-    if (need_init) {
+    return TRUE;
+}
+
+static void execute_nvram_operations(struct scsiBoard* board) {
+    if (nvramParams.need_init) {
         printf("Initializing NVRAM partition at offset 0x%x...\n", NVRAM_OFFSET);
-        int result = flash_format_nvram_partition(NVRAM_OFFSET, NVRAM_SIZE);
+        int result = flash_format_nvram_partition((uintptr_t)board->flashbase + NVRAM_OFFSET, NVRAM_SIZE);
         if (result == NVRAM_OK) {
             printf("NVRAM partition initialized successfully.\n");
         } else {
@@ -742,9 +745,9 @@ static void handle_nvram_commands(struct Config* config) {
         }
     }
     
-    if (need_read) {
+    if (nvramParams.need_read) {
         struct nvram_t entry;
-        int result = flash_read_nvram(NVRAM_OFFSET, &entry);
+        int result = flash_read_nvram((uintptr_t)board->flashbase + NVRAM_OFFSET, &entry);
         
         if (result == NVRAM_ERR_BAD_MAGIC) {
             printf("No NVRAM partition. Please run a4092flash -F init\n");
@@ -755,38 +758,38 @@ static void handle_nvram_commands(struct Config* config) {
             return;
         }
         
-        if (read_osflags && read_switchflags) {
+        if (nvramParams.read_osflags && nvramParams.read_switchflags) {
             printf("osflags=0x%02x,switchflags=0x%02x\n", 
                    entry.settings.os_flags, entry.settings.switch_flags);
-        } else if (read_osflags) {
+        } else if (nvramParams.read_osflags) {
             printf("0x%02x\n", entry.settings.os_flags);
-        } else if (read_switchflags) {
+        } else if (nvramParams.read_switchflags) {
             printf("0x%02x\n", entry.settings.switch_flags);
         }
     }
     
-    if (need_write) {
+    if (nvramParams.need_write) {
         struct nvram_t entry = {0};
-        int read_result = flash_read_nvram(NVRAM_OFFSET, &entry);
+        int read_result = flash_read_nvram((uintptr_t)board->flashbase + NVRAM_OFFSET, &entry);
         
-        if (read_result == NVRAM_ERR_BAD_MAGIC && !need_init) {
+        if (read_result == NVRAM_ERR_BAD_MAGIC && !nvramParams.need_init) {
             printf("No NVRAM partition. Please run a4092flash -F init\n");
             return;
         }
         
-        if (read_result != NVRAM_OK && read_result != NVRAM_ERR_NO_ENTRIES && !need_init) {
+        if (read_result != NVRAM_OK && read_result != NVRAM_ERR_NO_ENTRIES && !nvramParams.need_init) {
             printf("Error reading NVRAM: %d\n", read_result);
             return;
         }
         
-        if (write_osflags_set) {
-            entry.settings.os_flags = write_osflags;
+        if (nvramParams.write_osflags_set) {
+            entry.settings.os_flags = nvramParams.write_osflags;
         }
-        if (write_switchflags_set) {
-            entry.settings.switch_flags = write_switchflags;
+        if (nvramParams.write_switchflags_set) {
+            entry.settings.switch_flags = nvramParams.write_switchflags;
         }
         
-        int write_result = flash_write_nvram(NVRAM_OFFSET, &entry);
+        int write_result = flash_write_nvram((uintptr_t)board->flashbase + NVRAM_OFFSET, &entry);
         if (write_result == NVRAM_OK) {
             printf("NVRAM entry written successfully.\n");
         } else {

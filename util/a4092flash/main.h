@@ -49,6 +49,18 @@ struct dosDev {
   char *name;
 };
 
+struct nvramParams {
+  bool need_init;
+  bool need_read;
+  bool need_write;
+  bool read_osflags;
+  bool read_switchflags;
+  uint8_t write_osflags;
+  uint8_t write_switchflags;
+  bool write_osflags_set;
+  bool write_switchflags_set;
+};
+
 ULONG getFileSize(char *);
 BOOL readFileToBuf(char *, void *);
 BOOL writeFlashToFile(char *filename, ULONG romSize);
