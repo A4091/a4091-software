@@ -179,6 +179,6 @@ struct scsipi_inquiry_data {
 /*58*/	u_int8_t reserved;
 /*59*/	char    version_descriptor[8][2];
 #define	SCSIPI_INQUIRY_LENGTH_SCSI3	74
-} __packed; /* 74 Bytes */
+} __packed __aligned(2); /* 74 Bytes */
 
 #endif /* _DEV_SCSIPI_SCSIPI_ALL_H_ */
