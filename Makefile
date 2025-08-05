@@ -189,7 +189,8 @@ $(OBJDIR)/siop.o: $(OBJDIR)/siop_script.out
 $(OBJDIR)/siop2.o: $(OBJDIR)/siop2_script.out
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/siop2.o:: CFLAGS += -I$(OBJDIR)
-$(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA
+$(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA -Wno-format
+$(OBJDIR)/a4091.o:: CFLAGS_TOOLS += -Wno-format
 
 # XXX: Need to generate real dependency files
 $(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
