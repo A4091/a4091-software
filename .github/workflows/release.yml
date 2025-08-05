@@ -1,0 +1,58 @@
+name: A4091 Draft Release
+
+on:
+  push:
+    tags:
+      - "release_*"
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed for creating GitHub releases
+
+jobs:
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    container: stefanreinauer/amiga-gcc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Build all artifacts
+        run: make all-targets
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            a4091*.rom
+            *.device
+            disk/a4091_??.??.adf
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Draft Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout (required by gh-release)
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: artifacts
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: |
+            artifacts/*.rom
+            artifacts/*.device
+            artifacts/**/*.adf
