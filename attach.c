@@ -162,7 +162,10 @@ a4091_add_local_irq_handler(void)
     asave->as_isr->is_Node.ln_Pri  = A4091_INTPRI;
     asave->as_isr->is_Node.ln_Name = real_device_name; // a4091.device
     asave->as_isr->is_Data         = asave;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
     asave->as_isr->is_Code         = (void (*)()) irq_handler;
+#pragma GCC diagnostic pop
 
     printf("Add IRQ=%d pri=%d isr=%p asave=%p\n",
            A4091_IRQ, A4091_INTPRI, &asave->as_isr, asave);
