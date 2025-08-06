@@ -148,7 +148,7 @@ static void cleanup_bootmenu(void)
     close_libraries();
 }
 
-static struct Gadget *create_gadget_custom(UWORD kind, ULONG tag1, ...)
+static struct Gadget * __attribute__((noinline)) create_gadget_custom(UWORD kind, ULONG tag1, ...)
 {
     return(CreateGadgetA(kind,LastAdded,NewGadget,(struct TagItem *)&tag1));
 }
