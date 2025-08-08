@@ -16,6 +16,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#ifdef _KERNEL
+#ifdef DEBUG_ATTACH
+#define USE_SERIAL_OUTPUT
+#endif
+#include "port.h"
+#include "printf.h"
+#endif
 #include <stdio.h>
 #include <proto/expansion.h>
 #include <exec/types.h>
@@ -271,7 +278,7 @@ void flash_erase_bank(ULONG sectorSize, ULONG bankSize)
 void flash_erase_sector(ULONG address, ULONG sectorSize)
 {
   bool failed = false;
-  int i;
+  ULONG i;
   UBYTE d;
 
   // Mask address to ensure it is within the valid flash size.
@@ -288,7 +295,7 @@ void flash_erase_sector(ULONG address, ULONG sectorSize)
   for (i=address; i<address + sectorSize; i++) {
     if ((d=flash_read_byte(i)) != 0xff) {
       failed = true;
-      printf("Sector 0x%lx+0x%x 0x%02x != 0xff\n", (unsigned long)address, i, d);
+      printf("Sector 0x%lx+0x%lx 0x%02x != 0xff\n", (unsigned long)address, (unsigned long)i, d);
     }
   }
   if (failed)

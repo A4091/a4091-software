@@ -13,6 +13,8 @@ typedef uint32_t ULONG;
 // --- NVRAM Configuration ---
 #define NVRAM_MAGIC 0x4E56524D // 'NVRM' in ASCII
 #define MIN_ENTRIES 16
+#define NVRAM_OFFSET 65536
+#define NVRAM_SIZE 4096
 
 // --- Error Codes ---
 #define NVRAM_OK                    (0)

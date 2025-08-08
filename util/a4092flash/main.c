@@ -658,9 +658,6 @@ static BOOL probeFlash(ULONG romSize)
   return ret;
 }
 
-#define NVRAM_OFFSET 65536
-#define NVRAM_SIZE 4096
-
 static BOOL parse_nvram_params(struct Config* config) {
     if (!config->nvramCommand) return FALSE;
 
