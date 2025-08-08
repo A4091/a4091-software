@@ -7,6 +7,7 @@ ADATE   := $(shell date '+%-d.%-m.%Y')
 
 #DEVICE := A4000T
 #DEVICE := A4000T770
+#DEVICE := A4092
 DEVICE ?= A4091
 
 ifeq ($(DEVICE),A4091)
@@ -14,6 +15,12 @@ TARGET  := NCR53C710
 TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4091" -DNO_CONFIGDEV=0
 TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=a4091
+HAVE_ROM=y
+else ifeq ($(DEVICE),A4092)
+TARGET  := NCR53C710
+TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4092" -DNO_CONFIGDEV=0 -DDRIVER_A4092
+TARGETAFLAGS := -DNCR53C710=1
+DEVNAME=a4092
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
@@ -47,6 +54,9 @@ ifeq ($(TARGET),NCR53C710)
 SRCS    += siop.c
 else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
+endif
+ifeq ($(DEVNAME),a4092)
+SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
@@ -290,6 +300,7 @@ $(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).rnc
 $(OBJDIR):
 	mkdir -p $@
 	mkdir -p $@/3rdparty/mounter
+	mkdir -p $@/util/a4092flash
 
 clean:
 	@echo Cleaning.

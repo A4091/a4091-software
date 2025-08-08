@@ -49,6 +49,8 @@
 #include "ndkcompat.h"
 
 #include "a4091.h"
+#include "util/a4092flash/flash.h"
+#include "util/a4092flash/nvram_flash.h"
 
 /*
  * NewMinList
@@ -251,6 +253,20 @@ a4091_find(UBYTE *boardnum)
             }
         }
     }
+
+#if DRIVER_A4092
+    UBYTE manufId,devId;
+    ULONG sectorSize;
+    ULONG flashSize;
+    struct nvram_t nvram;
+
+    if (flash_init(&manufId,&devId,(void *)as_addr,&flashSize,&sectorSize)) {
+        if(!flash_read_nvram(NVRAM_OFFSET, &nvram)) {
+            *(volatile uint8_t *)(as_addr + HW_OFFSET_SWITCHES) =
+		    nvram.settings.switch_flags;
+	}
+    }
+#endif
 
     CloseLibrary((struct Library *)ExpansionBase);
 
