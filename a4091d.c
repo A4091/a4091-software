@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include <sys/param.h>
 #include <libraries/expansionbase.h>
 #include <devices/trackdisk.h>
@@ -1365,7 +1366,7 @@ decode_scsi_sense(const char *indent, struct scsi_sense_data *ssd)
             printf("%s  extra ", indent);
             // Point to the beginning of the "additional sense information" block
             // which starts with the 'csi' field.
-            uint8_t *p_asb = (uint8_t *)&ssd->csi[0];
+            const uint8_t *p_asb = (const uint8_t *)ssd + offsetof(struct scsi_sense_data, csi);
             for (count = 0; count < len; count++) {
                 printf(" 0x%x", p_asb[count]);
             }
