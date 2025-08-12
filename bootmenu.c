@@ -409,6 +409,9 @@ static int scan_disks(void)
     struct MsgPort *port = NULL;
     struct IOExtTD *request = NULL;
     struct RastPort *rp = &screen->RastPort;
+    UBYTE dip_switches;
+    UBYTE hostid;
+    int max_targets;
 
     int x,y;
     printf("Looking for disks!\n");
@@ -426,7 +429,27 @@ static int scan_disks(void)
         return 0;
     }
 
-    for (i=0; i<7; i++) { // FIXME LUNs?
+    // Get host controller ID from DIP switches and determine max targets
+    if (asave) {
+        dip_switches = get_dip_switches();
+        hostid = dip_switches & 7;
+#ifdef NCR53C770
+        // NCR53C770 can support up to 16 targets (0-15)
+        max_targets = 16;
+#else
+        // NCR53C710 and A4091 support 8 targets (0-7)
+        max_targets = 8;
+#endif
+    } else {
+        // Default when not initialized - assume host at ID 7, 8 targets max
+        hostid = 7;
+        max_targets = 8;
+    }
+
+    for (i=0; i<max_targets; i++) {
+        // Skip the host controller ID
+        if (i == hostid)
+            continue;
         ULONG lun = 0;
 next_lun:
         x=52;
