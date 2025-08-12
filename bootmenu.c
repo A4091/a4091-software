@@ -148,14 +148,10 @@ static void cleanup_bootmenu(void)
     close_libraries();
 }
 
-static struct Gadget * __attribute__((noinline)) create_gadget_custom(UWORD kind, ULONG tag1, ...)
-{
-    return(CreateGadgetA(kind,LastAdded,NewGadget,(struct TagItem *)&tag1));
-}
-
 static struct Gadget *create_gadget(UWORD kind)
 {
-    return(create_gadget_custom(kind,TAG_DONE));
+    const struct TagItem done = { TAG_DONE, 0 };
+    return(CreateGadgetA(kind,LastAdded,NewGadget,&done));
 }
 
 static void Print(STRPTR text, UWORD x, UWORD y, int center)
@@ -619,9 +615,8 @@ static void debug_page(void)
     ng.ng_TopEdge    = 92;
     ng.ng_GadgetText = "Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
-    LastAdded = create_gadget_custom(CHECKBOX_KIND,
-                                     GA_Disabled, TRUE,
-                                     TAG_DONE);
+    LastAdded = create_gadget(CHECKBOX_KIND);
+    GT_SetGadgetAttrs(LastAdded, NULL, NULL, GA_Disabled, TRUE, TAG_DONE);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -752,9 +747,7 @@ static void main_page(void)
     ng.ng_TopEdge= 170;
     ng.ng_GadgetText = "Debug";
     ng.ng_GadgetID   = MAIN_DEBUG_ID;
-    LastAdded = create_gadget_custom(BUTTON_KIND,
-                                     // GA_Disabled, TRUE,
-                                     TAG_DONE);
+    LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 200;
     if (GfxBase->DisplayFlags & NTSC) {
