@@ -412,6 +412,7 @@ static int scan_disks(void)
     UBYTE dip_switches;
     UBYTE hostid;
     int max_targets;
+    int max_luns;
 
     int x,y;
     printf("Looking for disks!\n");
@@ -429,10 +430,13 @@ static int scan_disks(void)
         return 0;
     }
 
-    // Get host controller ID from DIP switches and determine max targets
+    // Get host controller ID from DIP switches and determine max targets and LUNs
     if (asave) {
         dip_switches = get_dip_switches();
         hostid = dip_switches & 7;
+        // Check DIP switch 8 (bit 7): if SET, LUNs are disabled (only LUN 0)
+        // if CLEAR, LUNs are enabled (LUNs 0-7)
+        max_luns = (dip_switches & BIT(7)) ? 1 : 8;
 #ifdef NCR53C770
         // NCR53C770 can support up to 16 targets (0-15)
         max_targets = 16;
@@ -441,114 +445,120 @@ static int scan_disks(void)
         max_targets = 8;
 #endif
     } else {
-        // Default when not initialized - assume host at ID 7, 8 targets max
+        // Default when not initialized - assume host at ID 7, 8 targets max, LUNs disabled
         hostid = 7;
         max_targets = 8;
+        max_luns = 1;
     }
 
     for (i=0; i<max_targets; i++) {
         // Skip the host controller ID
         if (i == hostid)
             continue;
-        ULONG lun = 0;
-next_lun:
-        x=52;
-        y=52+(cnt*10);
+        
+        int lun;
+        for (lun = 0; lun < max_luns; lun++) {
+            // Stop if we've filled the display (14 lines max)
+            if (cnt >= 14)
+                break;
+                
+            x=52;
+            y=52+(cnt*10);
 
-        ULONG unitNum = i + lun * 10;
-        printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
-        UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
-        if (err == 0) {
-            scsi_inquiry_data_t inq_res;
-
-            err = dev_scsi_inquiry(request, unitNum, &inq_res);
-
-            trim_spaces(inq_res.vendor, sizeof (inq_res.vendor));
-            trim_spaces(inq_res.product, sizeof (inq_res.product));
-            trim_spaces(inq_res.revision, sizeof (inq_res.revision));
-
+            ULONG unitNum = i + lun * 10;
+            printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
+            UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
             if (err == 0) {
-                unsigned int t_len;
-                char unit_str[]="0.0";
-                unit_str[0]='0'+(unitNum % 10);
-                unit_str[2]='0'+(unitNum / 10);
-                Move(rp,x,y);
-                Text(rp, (char *)unit_str, 3);
-                x+=48;
-                Move(rp,x,y);
-                t_len = strlen(inq_res.vendor);
-                if (t_len > sizeof(inq_res.vendor))
-                        t_len=sizeof(inq_res.vendor);
-                Text(rp, inq_res.vendor, t_len);
-                x+=96;
-                Move(rp,x,y);
-                t_len = strlen(inq_res.product);
-                if (t_len > sizeof(inq_res.product))
-                        t_len=sizeof(inq_res.product);
-                Text(rp, inq_res.product, t_len);
-                x+=176;
-                Move(rp,x,y);
-                t_len = strlen(inq_res.revision);
-                if (t_len > sizeof(inq_res.revision))
-                        t_len=sizeof(inq_res.revision);
-                Text(rp, inq_res.revision, t_len);
-                x+=48;
-                Move(rp,x,y);
-                const char *dtype=devtype_str(inq_res.device & SID_TYPE);
-                Text(rp,dtype,strlen(dtype));
-                printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
-                       sizeof (inq_res.vendor), sizeof (inq_res.vendor),
-                       inq_res.vendor,
-                       sizeof (inq_res.product), sizeof (inq_res.product),
-                       inq_res.product,
-                       sizeof (inq_res.revision), sizeof (inq_res.revision),
-                       inq_res.revision,
-                       devtype_str(inq_res.device & SID_TYPE));
-            }
+                scsi_inquiry_data_t inq_res;
 
-            struct DriveGeometry geom;
-            if (dev_scsi_get_drivegeometry(request, &geom) == 0) {
-                uint ssize = geom.dg_SectorSize;
-                uint cap   = geom.dg_TotalSectors / 1000;
-                uint cap_c = 0;  // KMGTPEZY
-                if (cap > 100000) {
-                    cap /= 1000;
-                    cap_c++;
+                err = dev_scsi_inquiry(request, unitNum, &inq_res);
+
+                trim_spaces(inq_res.vendor, sizeof (inq_res.vendor));
+                trim_spaces(inq_res.product, sizeof (inq_res.product));
+                trim_spaces(inq_res.revision, sizeof (inq_res.revision));
+
+                if (err == 0) {
+                    unsigned int t_len;
+                    char unit_str[]="0.0";
+                    unit_str[0]='0'+(unitNum % 10);
+                    unit_str[2]='0'+(unitNum / 10);
+                    Move(rp,x,y);
+                    Text(rp, (char *)unit_str, 3);
+                    x+=48;
+                    Move(rp,x,y);
+                    t_len = strlen(inq_res.vendor);
+                    if (t_len > sizeof(inq_res.vendor))
+                            t_len=sizeof(inq_res.vendor);
+                    Text(rp, inq_res.vendor, t_len);
+                    x+=96;
+                    Move(rp,x,y);
+                    t_len = strlen(inq_res.product);
+                    if (t_len > sizeof(inq_res.product))
+                            t_len=sizeof(inq_res.product);
+                    Text(rp, inq_res.product, t_len);
+                    x+=176;
+                    Move(rp,x,y);
+                    t_len = strlen(inq_res.revision);
+                    if (t_len > sizeof(inq_res.revision))
+                            t_len=sizeof(inq_res.revision);
+                    Text(rp, inq_res.revision, t_len);
+                    x+=48;
+                    Move(rp,x,y);
+                    const char *dtype=devtype_str(inq_res.device & SID_TYPE);
+                    Text(rp,dtype,strlen(dtype));
+                    printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
+                           sizeof (inq_res.vendor), sizeof (inq_res.vendor),
+                           inq_res.vendor,
+                           sizeof (inq_res.product), sizeof (inq_res.product),
+                           inq_res.product,
+                           sizeof (inq_res.revision), sizeof (inq_res.revision),
+                           inq_res.revision,
+                           devtype_str(inq_res.device & SID_TYPE));
                 }
-                cap *= ssize;
-                while (cap > 9999) {
-                    cap /= 1000;
-                    cap_c++;
+
+                struct DriveGeometry geom;
+                if (dev_scsi_get_drivegeometry(request, &geom) == 0) {
+                    uint ssize = geom.dg_SectorSize;
+                    uint cap   = geom.dg_TotalSectors / 1000;
+                    uint cap_c = 0;  // KMGTPEZY
+                    if (cap > 100000) {
+                        cap /= 1000;
+                        cap_c++;
+                    }
+                    cap *= ssize;
+                    while (cap > 9999) {
+                        cap /= 1000;
+                        cap_c++;
+                    }
+                    printf("%5u %5u %cB\n", ssize, cap, "KMGTPEZY"[cap_c]);
+
+                    x+=76;
+                    Move(rp,x,y);
+                    if (ssize<1000)
+                        Text(rp," ",1);
+                    itoa(ssize,_itoabuf,10);
+                    Text(rp,_itoabuf,strlen(_itoabuf));
+
+                    x+=48;
+                    Move(rp,x,y);
+                    if(cap<1000)
+                        Text(rp," ",1);
+                    if(cap<100)
+                        Text(rp," ",1);
+                    itoa(cap,_itoabuf,10);
+                    Text(rp,_itoabuf,strlen(_itoabuf));
+                    const char caps[]="KMGTPEZY";
+                    Text(rp,&caps[cap_c],1);
+                    Text(rp,"B",1);
                 }
-                printf("%5u %5u %cB\n", ssize, cap, "KMGTPEZY"[cap_c]);
-
-                x+=76;
-                Move(rp,x,y);
-                if (ssize<1000)
-                    Text(rp," ",1);
-                itoa(ssize,_itoabuf,10);
-                Text(rp,_itoabuf,strlen(_itoabuf));
-
-                x+=48;
-                Move(rp,x,y);
-                if(cap<1000)
-                    Text(rp," ",1);
-                if(cap<100)
-                    Text(rp," ",1);
-                itoa(cap,_itoabuf,10);
-                Text(rp,_itoabuf,strlen(_itoabuf));
-                const char caps[]="KMGTPEZY";
-                Text(rp,&caps[cap_c],1);
-                Text(rp,"B",1);
-            }
-            CloseDevice((struct IORequest*)request);
-            cnt++;
-            if ((lun < 15) && (cnt < 14)) {
-                lun++;
-                goto next_lun;
+                CloseDevice((struct IORequest*)request);
+                cnt++;
             }
         }
-
+        
+        // Stop if we've filled the display
+        if (cnt >= 14)
+            break;
     }
 
     W_DeleteIORequest(request, SysBase);
