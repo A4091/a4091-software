@@ -252,7 +252,9 @@ drv_open(struct Library *dev asm("a6"), struct IORequest *ioreq asm("a1"),
     dev->lib_OpenCnt++;
 
     if ((rc = open_unit(scsi_unit, (void **) &ioreq->io_Unit, flags)) != 0) {
-        printf("Open fail %d.%d\n", scsi_unit % 10, scsi_unit / 10);
+        int target, lun;
+        decode_unit_number(scsi_unit, &target, &lun);
+        printf("Open fail %d.%d\n", target, lun);
         dev->lib_OpenCnt--;
         ioreq->io_Error = rc;
         ReleaseSemaphore(&entry_sem);
@@ -428,6 +430,7 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.slowSpinup = !(dip_switches & BIT(4));  // 0: Short Spinup 1: Long Spinup
 	ms.cdBoot = asave->cdrom_boot;
 	ms.ignoreLast = asave->ignore_last;
+	ms.hostId = hostid;
 
 	ret = MountDrive(&ms);
 

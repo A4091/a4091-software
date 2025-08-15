@@ -56,6 +56,7 @@ int init_chan(device_t self, UBYTE *boardnum);
 void deinit_chan(device_t self);
 
 uint8_t get_dip_switches(void);
+void decode_unit_number(ULONG unit_num, int *target, int *lun);
 
 #endif /* _ATTACH_H */
 

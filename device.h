@@ -35,6 +35,8 @@
 
 #define TDF_DEBUG_OPEN    (1<<7)  // Open unit in debug mode (no I/O)
 
+#define HD_WIDESCSI       8       // Wide SCSI detection bit
+
 /*
  * Unfortunately many of the above overlap with Unix-style error codes
  * (ENOMEM for example).

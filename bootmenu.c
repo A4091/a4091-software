@@ -465,7 +465,14 @@ static int scan_disks(void)
             x=52;
             y=52+(cnt*10);
 
-            ULONG unitNum = i + lun * 10;
+            ULONG unitNum;
+            if (i > 7 || lun > 7) {
+                // Phase V wide SCSI scheme for IDs/LUNs > 7
+                unitNum = lun * 10 * 1000 + i * 10 + HD_WIDESCSI;
+            } else {
+                // Traditional scheme for IDs/LUNs <= 7
+                unitNum = i + lun * 10;
+            }
             printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
             UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
             if (err == 0) {

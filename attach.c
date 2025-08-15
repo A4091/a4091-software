@@ -586,13 +586,15 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     struct siop_softc     *sc = device_private(self);
     struct scsipi_channel *chan = &sc->sc_channel;
     struct scsipi_periph  *periph;
-    int target = scsi_target % 10;
-    int lun    = (scsi_target / 10) % 10;
+    int target, lun;
     int rc;
     int failed = 0;
     (void)flags;
 
-    if (scsi_target >= 100)
+    decode_unit_number(scsi_target, &target, &lun);
+
+    // Check for NCR53c770 wide SCSI limits: 16 targets (0-15), 8 LUNs (0-7)
+    if (target >= 16 || lun >= 8)
         return (ERROR_OPEN_FAIL);
 
     if (target == chan->chan_id)
@@ -637,11 +639,37 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     return (0);
 }
 
+static ULONG
+calculate_unit_number(int target, int lun)
+{
+    if (target > 7 || lun > 7) {
+        // Phase V wide SCSI scheme for IDs/LUNs > 7
+        return lun * 10 * 1000 + target * 10 + HD_WIDESCSI;
+    } else {
+        // Traditional scheme for IDs/LUNs <= 7
+        return target + lun * 10;
+    }
+}
+
+void
+decode_unit_number(ULONG unit_num, int *target, int *lun)
+{
+    if ((unit_num & HD_WIDESCSI) == HD_WIDESCSI) {
+        // Phase V wide SCSI scheme
+        *target = (unit_num / 10) % 1000;
+        *lun = (unit_num / (10 * 1000)) % 1000;
+    } else {
+        // Traditional scheme
+        *target = unit_num % 10;
+        *lun = unit_num / 10;
+    }
+}
+
 void
 detach(struct scsipi_periph *periph)
 {
     printf("detach(%p, %d)\n",
-           periph, periph->periph_target + periph->periph_lun * 10);
+           periph, calculate_unit_number(periph->periph_target, periph->periph_lun));
 
     if (periph != NULL) {
         int timeout = 6;  // Seconds
