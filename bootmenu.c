@@ -71,6 +71,7 @@ static struct Gadget *gadgets;
 static struct Gadget *DisplayTypeGad;
 static struct Gadget *LastAdded;
 static struct NewGadget *NewGadget;
+static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 
 #define DISKS_BACK_ID      1
 #define DIPSWITCH_BACK_ID  2
@@ -124,7 +125,7 @@ static void init_bootmenu(void)
         TAG_DONE);
 
     window = OpenWindowTags(NULL,
-        WA_IDCMP,         (IDCMP_RAWKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
+        WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
         WA_CustomScreen,  screen,
         WA_Flags,         (WFLG_NOCAREREFRESH | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP),
         TAG_DONE);
@@ -150,8 +151,11 @@ static void cleanup_bootmenu(void)
 
 static struct Gadget *create_gadget(UWORD kind)
 {
-    const struct TagItem done = { TAG_DONE, 0 };
-    return(CreateGadgetA(kind,LastAdded,NewGadget,&done));
+    const struct TagItem tags[] = {
+        { GT_Underscore, '~' },
+        { TAG_DONE, 0 }
+    };
+    return(CreateGadgetA(kind,LastAdded,NewGadget,tags));
 }
 
 static void Print(STRPTR text, UWORD x, UWORD y, int center)
@@ -303,6 +307,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
 static void dipswitch_page(void)
 {
     struct NewGadget ng;
+    current_page = 2;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - DIP switches", TRUE);
 
     SetRGB4(&screen->ViewPort,3,11,8,8);
@@ -310,7 +315,7 @@ static void dipswitch_page(void)
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
     ng.ng_Width      = 120;
-    ng.ng_GadgetText = "Back";
+    ng.ng_GadgetText = "~Back";
     ng.ng_GadgetID   = DIPSWITCH_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -327,6 +332,7 @@ static void dipswitch_page(void)
 static void about_page(void)
 {
     struct NewGadget ng;
+    current_page = 3;
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
     SetAPen(&screen->RastPort, 1);
 #if defined(DRIVER_A4091)
@@ -349,7 +355,7 @@ static void about_page(void)
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
     ng.ng_Width      = 120;
-    ng.ng_GadgetText = "Back";
+    ng.ng_GadgetText = "~Back";
     ng.ng_GadgetID   = ABOUT_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -597,6 +603,7 @@ static void disks_page(void)
     struct NewGadget ng;
     int i;
     ULONG tag;
+    current_page = 1;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - Disks", FALSE);
 
     SetRGB4(&screen->ViewPort,3,6,8,11);
@@ -608,7 +615,7 @@ static void disks_page(void)
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 185;
     ng.ng_Width      = 120;
-    ng.ng_GadgetText = "Back";
+    ng.ng_GadgetText = "~Back";
     ng.ng_GadgetID   = DISKS_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -632,6 +639,7 @@ static void disks_page(void)
 static void debug_page(void)
 {
     struct NewGadget ng;
+    current_page = 4;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - Debug", TRUE);
 
     BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
@@ -641,19 +649,19 @@ static void debug_page(void)
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 60;
     ng.ng_Width      = 175;
-    ng.ng_GadgetText = "CDROM Boot";
+    ng.ng_GadgetText = "~CDROM Boot";
     ng.ng_GadgetID   = DEBUG_CDROM_BOOT_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, cdrom_boot, TAG_DONE);
 
     ng.ng_TopEdge    = 76;
-    ng.ng_GadgetText = "Ignore RDBFF_LAST";
+    ng.ng_GadgetText = "Ignore ~RDBFF_LAST";
     ng.ng_GadgetID   = DEBUG_IGNORE_LAST_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, ignore_last, TAG_DONE);
 
     ng.ng_TopEdge    = 92;
-    ng.ng_GadgetText = "Zorro III magic speed hack";
+    ng.ng_GadgetText = "~Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GA_Disabled, TRUE, TAG_DONE);
@@ -661,7 +669,7 @@ static void debug_page(void)
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
     ng.ng_Width      = 120;
-    ng.ng_GadgetText = "Back";
+    ng.ng_GadgetText = "~Back";
     ng.ng_GadgetID   = DEBUG_BACK_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -761,6 +769,7 @@ static void main_page(void)
 {
     struct NewGadget ng;
 
+    current_page = 0;
     SetRGB4(&screen->ViewPort,3,6,8,11);
     page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
@@ -769,23 +778,23 @@ static void main_page(void)
     ng.ng_LeftEdge   = 140;
     ng.ng_TopEdge    = 150;
     ng.ng_Width      = 175;
-    ng.ng_GadgetText = "Disks";
+    ng.ng_GadgetText = "~Disks";
     ng.ng_GadgetID   = MAIN_DISKS_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 170;
-    ng.ng_GadgetText = "DIP Switches";
+    ng.ng_GadgetText = "DIP ~Switches";
     ng.ng_GadgetID   = MAIN_DIPSWITCH_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 150;
     ng.ng_LeftEdge   = 325;
-    ng.ng_GadgetText = "About";
+    ng.ng_GadgetText = "~About";
     ng.ng_GadgetID   = MAIN_ABOUT_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
     ng.ng_TopEdge= 170;
-    ng.ng_GadgetText = "Debug";
+    ng.ng_GadgetText = "Debu~g";
     ng.ng_GadgetID   = MAIN_DEBUG_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -795,7 +804,7 @@ static void main_page(void)
         ng.ng_LeftEdge=538;
         ng.ng_Width = 88;
     }
-    ng.ng_GadgetText = "Boot";
+    ng.ng_GadgetText = "~Boot";
     ng.ng_GadgetID   = MAIN_BOOT_ID;
     LastAdded = create_gadget(BUTTON_KIND);
 
@@ -826,6 +835,70 @@ static void event_loop(void)
             case IDCMP_RAWKEY:
                 if (icode == 0x45) // key down ESC
                     running = FALSE;
+                break;
+            case IDCMP_VANILLAKEY:
+                switch (icode) {
+                case 'd':
+                case 'D':
+                    disks_page();
+                    break;
+                case 'a':
+                case 'A':
+                    about_page();
+                    break;
+                case 'g':
+                case 'G':
+                    debug_page();
+                    break;
+                case 's':
+                case 'S':
+                    dipswitch_page();
+                    break;
+                case 'b':
+                case 'B':
+                    if (current_page == 0) {
+                        // We're on main page, so Boot
+                        running = FALSE;
+                    } else {
+                        // We're on a sub-page, so Back to main
+                        main_page();
+                    }
+                    break;
+                case 'c':
+                case 'C':
+                    if (current_page == 4) { // Debug page
+                        // Toggle CDROM Boot checkbox
+                        asave->cdrom_boot = !asave->cdrom_boot;
+                        Save_BattMem();
+                        // Find and update the gadget directly instead of redrawing page
+                        struct Gadget *cdrom_gad = gadgets;
+                        while (cdrom_gad && cdrom_gad->GadgetID != DEBUG_CDROM_BOOT_ID)
+                            cdrom_gad = cdrom_gad->NextGadget;
+                        if (cdrom_gad)
+                            GT_SetGadgetAttrs(cdrom_gad, window, NULL, GTCB_Checked, asave->cdrom_boot, TAG_DONE);
+                    }
+                    break;
+                case 'r':
+                case 'R':
+                    if (current_page == 4) { // Debug page
+                        // Toggle Ignore RDBFF_LAST checkbox
+                        asave->ignore_last = !asave->ignore_last;
+                        Save_BattMem();
+                        // Find and update the gadget directly instead of redrawing page
+                        struct Gadget *ignore_gad = gadgets;
+                        while (ignore_gad && ignore_gad->GadgetID != DEBUG_IGNORE_LAST_ID)
+                            ignore_gad = ignore_gad->NextGadget;
+                        if (ignore_gad)
+                            GT_SetGadgetAttrs(ignore_gad, window, NULL, GTCB_Checked, asave->ignore_last, TAG_DONE);
+                    }
+                    break;
+                case 'z':
+                case 'Z':
+                    if (current_page == 4) { // Debug page
+                        // Zorro III magic speed hack is disabled, so do nothing
+                    }
+                    break;
+                }
                 break;
             case IDCMP_GADGETUP:
                 switch (gad->GadgetID)
