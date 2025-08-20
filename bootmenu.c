@@ -471,14 +471,7 @@ static int scan_disks(void)
             x=52;
             y=52+(cnt*10);
 
-            ULONG unitNum;
-            if (i > 7 || lun > 7) {
-                // Phase V wide SCSI scheme for IDs/LUNs > 7
-                unitNum = lun * 10 * 1000 + i * 10 + HD_WIDESCSI;
-            } else {
-                // Traditional scheme for IDs/LUNs <= 7
-                unitNum = i + lun * 10;
-            }
+            ULONG unitNum = calculate_unit_number(i, lun);
             printf("OpenDevice('%s', %"PRId32", %p, 0)\n", real_device_name, unitNum, request);
             UBYTE err = OpenDevice(real_device_name, unitNum, (struct IORequest*)request, 0);
             if (err == 0) {
@@ -492,11 +485,26 @@ static int scan_disks(void)
 
                 if (err == 0) {
                     unsigned int t_len;
-                    char unit_str[]="0.0";
-                    unit_str[0]='0'+(unitNum % 10);
-                    unit_str[2]='0'+(unitNum / 10);
+                    int target, lun;
+                    char unit_str[5];
+
+                    decode_unit_number(unitNum, &target, &lun);
+
+                    if (target > 9) {
+                        unit_str[0] = '1';
+                        unit_str[1] = '0' + (target - 10);
+                        unit_str[2] = '.';
+                        unit_str[3] = '0' + lun;
+                        unit_str[4] = 0;
+                    } else {
+                        unit_str[0] = '0' + target;
+                        unit_str[1] = '.';
+                        unit_str[2] = '0' + lun;
+                        unit_str[3] = 0;
+                    }
+
                     Move(rp,x,y);
-                    Text(rp, (char *)unit_str, 3);
+                    Text(rp, (char *)unit_str, strlen(unit_str));
                     x+=48;
                     Move(rp,x,y);
                     t_len = strlen(inq_res.vendor);

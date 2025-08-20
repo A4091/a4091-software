@@ -639,7 +639,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     return (0);
 }
 
-static ULONG
+ULONG
 calculate_unit_number(int target, int lun)
 {
     if (target > 7 || lun > 7) {
@@ -654,7 +654,7 @@ calculate_unit_number(int target, int lun)
 void
 decode_unit_number(ULONG unit_num, int *target, int *lun)
 {
-    if ((unit_num & HD_WIDESCSI) == HD_WIDESCSI) {
+    if ((unit_num % 10) == HD_WIDESCSI) {
         // Phase V wide SCSI scheme
         *target = (unit_num / 10) % 1000;
         *lun = (unit_num / (10 * 1000)) % 1000;

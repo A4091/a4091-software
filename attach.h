@@ -57,6 +57,7 @@ void deinit_chan(device_t self);
 
 uint8_t get_dip_switches(void);
 void decode_unit_number(ULONG unit_num, int *target, int *lun);
+ULONG calculate_unit_number(int target, int lun);
 
 #endif /* _ATTACH_H */
 
