@@ -850,7 +850,9 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
          */
         struct DriveGeometry *geom = xs->xs_callback_arg;
         uint32_t blksize = geom->dg_TotalSectors;
-        geom->dg_TotalSectors = geom->dg_SectorSize + 1;
+        geom->dg_TotalSectors = geom->dg_SectorSize;
+	if (geom->dg_TotalSectors != 0xffffffff)
+		geom->dg_TotalSectors++;
         geom->dg_SectorSize = blksize;
         conv_sectors_to_chs(geom->dg_TotalSectors, &geom->dg_Cylinders,
                             &geom->dg_Heads, &geom->dg_TrackSectors);
