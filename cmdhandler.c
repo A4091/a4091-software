@@ -327,8 +327,12 @@ CMD_READ_continue:
             rc = sd_readwrite(iotd->iotd_Req.io_Unit, blkno, B_READ,
                               iotd->iotd_Req.io_Data,
                               iotd->iotd_Req.io_Length, ior);
-            if (rc == 0) {
-                iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
+            if (rc == IOERR_UNITBUSY) {
+                /* Resource exhausted (bounce buffer), queue it */
+                struct scsipi_periph *periph = (struct scsipi_periph *) ior->io_Unit;
+                AddTail((struct List *) &periph->periph_channel->chan_stalled_queue,
+                        (struct Node *) ior);
+            } else if (rc == 0) {
                 /* cmd_complete() does ReplyMsg() */
             } else {
                 iotd->iotd_Req.io_Error = rc;
@@ -352,8 +356,12 @@ CMD_WRITE_continue:
             rc = sd_readwrite(iotd->iotd_Req.io_Unit, blkno, B_WRITE,
                               iotd->iotd_Req.io_Data,
                               iotd->iotd_Req.io_Length, ior);
-            if (rc == 0) {
-                iotd->iotd_Req.io_Actual = iotd->iotd_Req.io_Length;
+            if (rc == IOERR_UNITBUSY) {
+                /* Resource exhausted (bounce buffer), queue it */
+                struct scsipi_periph *periph = (struct scsipi_periph *) ior->io_Unit;
+                AddTail((struct List *) &periph->periph_channel->chan_stalled_queue,
+                        (struct Node *) ior);
+            } else if (rc == 0) {
                 /* cmd_complete() does ReplyMsg() */
             } else {
                 iotd->iotd_Req.io_Error = rc;
@@ -762,11 +770,21 @@ fail_msgport:
 
     sc         = asave->as_device_private;
     active     = &sc->sc_channel.chan_active;
+    chan       = &sc->sc_channel;
+
+    /* Allocate a signal for software interrupt (chaining/queueing) */
+    int soft_sig = AllocSignal(-1);
+    if (soft_sig == -1) {
+        /* Fallback? Should not happen */
+        printf("Failed to allocate signal\n");
+    }
+    chan->chan_sig_mask = 1L << soft_sig;
+    chan->chan_task = task;
+
     cmd_mask   = BIT(msgport->mp_SigBit);
     int_mask   = BIT(asave->as_irq_signal);
     timer_mask = BIT(asave->as_timerport->mp_SigBit);
-    wait_mask  = int_mask | timer_mask | cmd_mask;
-    chan       = &sc->sc_channel;
+    wait_mask  = int_mask | timer_mask | cmd_mask | chan->chan_sig_mask;
 
     asave->as_int_mask   = int_mask;
     asave->as_timer_mask = timer_mask;
@@ -790,11 +808,53 @@ fail_msgport:
             restart_timer();
         }
 
+        if (mask & chan->chan_sig_mask) {
+            /* Process continuation or stalled queue */
+            if (chan->chan_continue_iotd != NULL) {
+                struct IOExtTD *iotd = chan->chan_continue_iotd;
+                struct scsipi_periph *periph = (struct scsipi_periph *) iotd->iotd_Req.io_Unit;
+                uint64_t blkno = chan->chan_current_blkno;
+                uint32_t len   = iotd->iotd_Req.io_Length - iotd->iotd_Req.io_Actual;
+                void    *buf   = (uint8_t *)iotd->iotd_Req.io_Data + iotd->iotd_Req.io_Actual;
+                uint     flags = (iotd->iotd_Req.io_Command == CMD_READ ||
+                                  iotd->iotd_Req.io_Command == TD_READ64 ||
+                                  iotd->iotd_Req.io_Command == NSCMD_TD_READ64) ?
+                                  B_READ : B_WRITE;
+                int rc;
+
+                chan->chan_continue_iotd = NULL;
+                rc = sd_readwrite(periph, blkno, flags, buf, len, iotd);
+                if (rc == IOERR_UNITBUSY) {
+                    /* Bounce buffer is busy (shouldn't happen for continuations,
+                     * but handle it anyway). Re-queue to stalled queue.
+                     */
+                    AddTail((struct List *) &chan->chan_stalled_queue,
+                            (struct Node *) iotd);
+                } else if (rc != 0) {
+                    /* Other error (e.g., out of memory) - fail the request.
+                     * io_Actual already contains the amount successfully transferred
+                     * before the error, so don't modify it.
+                     */
+                    iotd->iotd_Req.io_Error = rc;
+                    ReplyMsg(&iotd->iotd_Req.io_Message);
+                }
+            }
+
+            while (chan->chan_bounce_allocated == 0) {
+                struct IORequest *nior = (struct IORequest *)
+                    RemHead((struct List *) &chan->chan_stalled_queue);
+                if (nior == NULL)
+                    break;
+                if (cmd_do_iorequest(nior))
+                    return; /* Exit? */
+            }
+        }
+
         if (*active > 20) {
-            wait_mask = int_mask | timer_mask;
+            wait_mask = int_mask | timer_mask | chan->chan_sig_mask;
             goto run_completion_queue;
         } else {
-            wait_mask = int_mask | timer_mask | cmd_mask;
+            wait_mask = int_mask | timer_mask | cmd_mask | chan->chan_sig_mask;
         }
 
         /* Handle new requests */
@@ -802,7 +862,7 @@ fail_msgport:
             if (cmd_do_iorequest(ior))
                 return;  // Exit handler
             if (*active > 20) {
-                wait_mask = int_mask | timer_mask;
+                wait_mask = int_mask | timer_mask | chan->chan_sig_mask;
                 break;
             }
         }

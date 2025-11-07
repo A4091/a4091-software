@@ -337,6 +337,14 @@ struct scsipi_channel {
 	/* Completed (async) jobs. */
 	struct scsipi_xfer_queue chan_complete;
 
+#ifdef PORT_AMIGA
+	uint32_t chan_bounce_allocated;  /* bytes of Chip RAM used for bounce buffers */
+	struct MinList chan_stalled_queue;
+	void *chan_continue_iotd;
+	struct Task *chan_task;
+	uint32_t chan_sig_mask;
+	uint64_t chan_current_blkno;
+#endif
 #ifndef PORT_AMIGA
 	/* callback we may have to call from completion thread */
 	void (*chan_callback)(struct scsipi_channel *, void *);

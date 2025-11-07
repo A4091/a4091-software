@@ -199,6 +199,9 @@ scsipi_channel_init(struct scsipi_channel *chan)
 #ifdef PORT_AMIGA
 	int i;
 	chan->chan_xs_free = NULL;
+	chan->chan_stalled_queue.mlh_Head = (struct MinNode *)&chan->chan_stalled_queue.mlh_Tail;
+	chan->chan_stalled_queue.mlh_Tail = NULL;
+	chan->chan_stalled_queue.mlh_TailPred = (struct MinNode *)&chan->chan_stalled_queue.mlh_Head;
 #else /* !PORT_AMIGA */
 	struct scsipi_adapter *adapt = chan->chan_adapter;
 	int i;
@@ -720,9 +723,6 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
  *
  *	NOTE: Must be called with channel lock held
  */
-#ifdef PORT_AMIGA
-static
-#endif
 void
 scsipi_put_xs(struct scsipi_xfer *xs)
 {

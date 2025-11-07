@@ -14,6 +14,9 @@
 #ifndef _SD_H
 #define _SD_H
 
+#define MAX_BOUNCE_SIZE (256 * 1024)
+
+
 int sd_readwrite(void *periph, uint64_t blkno, uint b_flags,
                  void *buf, uint buflen, void *ior);
 int sd_seek(void *periph_p, uint64_t blkno, void *ior);

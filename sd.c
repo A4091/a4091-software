@@ -21,6 +21,8 @@
 #include <string.h>
 #include <sys/param.h>
 #include <exec/errors.h>
+#include <exec/types.h>
+#include <exec/memory.h>
 #include <devices/scsidisk.h>
 #include <devices/trackdisk.h>
 #include "scsipiconf.h"
@@ -68,6 +70,25 @@ static const int8_t error_code_mapping[] = {
     ERROR_BUS_RESET,  // 8 XS_RESET             Bus reset; possible retry cmd
     ERROR_TRY_AGAIN,  // 9 XS_REQUEUE           Requeue this command
 };
+
+/* Check if a memory range is likely Zorro II RAM.
+ * This is a simple check based on common Zorro II address ranges.
+ */
+static inline BOOL
+is_zorro_ii_address(APTR address, ULONG length)
+{
+    ULONG start_addr = (ULONG)address;
+    ULONG end_addr = start_addr + length - 1;
+
+    /* 8MB Zorro II space */
+    if (start_addr >= 0x00200000 && end_addr < 0x00a00000)
+        return TRUE;
+
+    /* A Zorro II card itself (registers) might live at 0x00e8xxxx or
+     * 0x00a0xxxx, but DMA buffers won't live there.
+     */
+    return FALSE;
+}
 
 /* Translate error code to AmigaOS code */
 static int
@@ -464,6 +485,66 @@ sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
 
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
+
+    if (__predict_false(is_zorro_ii_address(xs->data, xs->datalen))) {
+        struct scsipi_channel *chan = periph->periph_channel;
+        void *bounce_buf;
+
+        if (chan->chan_bounce_allocated > 0) {
+            /* Bounce buffer limit reached (serialization for Zorro II).
+             * Return Busy so the handler can queue this request.
+             */
+            scsipi_put_xs(xs);
+            return (IOERR_UNITBUSY);
+        }
+
+        /* Starting a Zorro II bounce buffer transfer. */
+        if (((struct IOExtTD *)ior)->iotd_Req.io_Actual == 0) {
+            /* New transfer - save the starting block */
+            chan->chan_current_blkno = blkno;
+        }
+        /* else: continuation - chan_current_blkno already set and updated */
+
+        if (xs->datalen > MAX_BOUNCE_SIZE) {
+            /* Transfer is too large for a single bounce buffer.
+             * Cap the length of this transfer. The completion routine
+             * will issue the next chunk.
+             */
+            uint32_t nblks_new = MAX_BOUNCE_SIZE >> blkshift;
+            xs->datalen = nblks_new << blkshift;
+
+            /* Fix up the command block with new length */
+            if (use_6_byte_cmd) {
+                struct scsi_rw_6 *cmd = (struct scsi_rw_6 *) &xs->cmdstore;
+                cmd->length = nblks_new & 0xff;
+            } else if ((blkno & 0xffffffff) == blkno) {
+                struct scsipi_rw_10 *cmd = (struct scsipi_rw_10 *) &xs->cmdstore;
+                _lto2b(nblks_new, cmd->length);
+            } else {
+                struct scsipi_rw_16 *cmd = (struct scsipi_rw_16 *) &xs->cmdstore;
+                _lto4b(nblks_new, cmd->length);
+            }
+        }
+
+        chan->chan_bounce_allocated += xs->datalen;
+        bounce_buf = AllocMem(xs->datalen, MEMF_CHIP | MEMF_PUBLIC);
+        printf("Allocating %"PRIu32" bytes bounce buffer (%"PRIu32" total)\n",
+               xs->datalen, chan->chan_bounce_allocated);
+        if (bounce_buf == NULL) {
+            /* Could not allocate bounce buffer, fail the command synchronously */
+            chan->chan_bounce_allocated -= xs->datalen;
+            scsipi_put_xs(xs);
+            return (TDERR_NoMem);
+        }
+
+        xs->xs_callback_arg = xs->data; // Store original buffer
+        xs->data = bounce_buf;
+
+        if (xs->xs_control & XS_CTL_DATA_OUT) {
+            /* Copy data to bounce buffer for a write operation */
+            CopyMem(xs->xs_callback_arg, xs->data, xs->datalen);
+        }
+    }
 
 #if 0
     printf("sd%d.%d %p issue %c %u %u\n",
@@ -1007,7 +1088,57 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
 static void
 sd_complete(struct scsipi_xfer *xs)
 {
-    int rc = translate_xs_error(xs);
+    int rc;
+    struct IOExtTD *iotd = (struct IOExtTD *) xs->amiga_ior;
+    struct scsipi_channel *chan = xs->xs_periph->periph_channel;
+    bool freed_bounce = false;
+
+    /* If we used a bounce buffer, handle it now */
+    if (xs->xs_callback_arg != NULL) {
+        void *orig_buf = xs->xs_callback_arg;
+        void *bounce_buf = xs->data;
+
+        if (xs->error == XS_NOERROR && (xs->xs_control & XS_CTL_DATA_IN)) {
+            /* Copy data back from bounce buffer for a read operation */
+            CopyMem(bounce_buf, orig_buf, xs->datalen);
+        }
+
+        xs->data = orig_buf; /* Restore original buffer pointer */
+        xs->xs_callback_arg = NULL;
+        FreeMem(bounce_buf, xs->datalen);
+        chan->chan_bounce_allocated -= xs->datalen;
+        printf("Freeing %"PRIu32" bytes bounce buffer, %"PRIu32" remaining\n",
+               xs->datalen, chan->chan_bounce_allocated);
+        freed_bounce = true;
+    }
+
+    rc = translate_xs_error(xs);
+
+    if (rc == 0) {
+        /* Update actual bytes transferred */
+        iotd->iotd_Req.io_Actual += xs->datalen;
+        chan->chan_current_blkno += (xs->datalen >> xs->xs_periph->periph_blkshift);
+
+        if (iotd->iotd_Req.io_Actual < iotd->iotd_Req.io_Length) {
+            /* Split transfer: we have more to do.
+             * We cannot call sd_readwrite directly here because we might be
+             * in interrupt context and sd_readwrite calls AllocMem.
+             * Signal the command handler task to continue this request.
+             */
+            chan->chan_continue_iotd = iotd;
+            Signal(chan->chan_task, chan->chan_sig_mask);
+            return;
+        }
+    }
+
+    /* If we are here, the command is complete (success or error).
+     * Check if we freed up bounce buffer space, and if so, wake up
+     * the handler to check the stalled queue.
+     */
+    if (freed_bounce) {
+         if (chan->chan_task)
+             Signal(chan->chan_task, chan->chan_sig_mask);
+    }
 
 #ifdef DEBUG
     if (xs->amiga_ior == NULL) {
