@@ -720,9 +720,6 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
  *
  *	NOTE: Must be called with channel lock held
  */
-#ifdef PORT_AMIGA
-static
-#endif
 void
 scsipi_put_xs(struct scsipi_xfer *xs)
 {
