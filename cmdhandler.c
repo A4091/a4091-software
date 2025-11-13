@@ -277,6 +277,7 @@ cmd_do_iorequest(struct IORequest * ior)
 {
     int             rc;
     uint64_t        blkno;
+    unsigned long   blkno_high, blkno_low;
     uint            blkshift;
     struct IOExtTD *iotd = (struct IOExtTD *) ior;
     UWORD           cmd = ior->io_Command;
@@ -392,8 +393,23 @@ CMD_WRITE_continue:
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
-            blkno = ((uint64_t) iotd->iotd_Req.io_Actual << (32 - blkshift)) |
-                    (iotd->iotd_Req.io_Offset >> blkshift);
+            // 1. Calculate the high 32-bit part of the final blkno
+            //    (blkno >> 32)
+            // Since 'iotd->iotd_Req.io_Actual' is the high word of the 64-bit
+            // LBA: blkno_high gets the result of shifting 'io_Actual' right by
+            // 'blkshift'.
+            blkno_high = iotd->iotd_Req.io_Actual >> blkshift;
+
+            // 2. Calculate the low 32-bit part of the final blkno
+            //    (blkno & 0xFFFFFFFF)
+            // This is composed of two parts OR'd together:
+            // a) The bits that shift *down* from io_Actual (the high word)
+            // b) The bits from io_Offset (the low word) shifted right.
+            blkno_low = iotd->iotd_Req.io_Actual << (32 - blkshift);
+            blkno_low |= (iotd->iotd_Req.io_Offset >> blkshift);
+
+            // 3. Combine the two 32-bit halves into the final 64-bit blkno
+            blkno = ((uint64_t)blkno_high << 32) | blkno_low;
             goto CMD_READ_continue;
 
         case NSCMD_TD_FORMAT64:
@@ -410,16 +426,24 @@ CMD_WRITE_continue:
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
-            blkno = ((uint64_t) iotd->iotd_Req.io_Actual << (32 - blkshift)) |
-                    (iotd->iotd_Req.io_Offset >> blkshift);
+
+            blkno_high = iotd->iotd_Req.io_Actual >> blkshift;
+            blkno_low = iotd->iotd_Req.io_Actual << (32 - blkshift);
+            blkno_low |= (iotd->iotd_Req.io_Offset >> blkshift);
+            blkno = ((uint64_t)blkno_high << 32) | blkno_low;
+
             goto CMD_WRITE_continue;
 
 #ifdef ENABLE_SEEK
         case NSCMD_TD_SEEK64:
         case TD_SEEK64:
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
-            blkno = ((uint64_t) iotd->iotd_Req.io_Actual << (32 - blkshift)) |
-                    (iotd->iotd_Req.io_Offset >> blkshift);
+
+            blkno_high = iotd->iotd_Req.io_Actual >> blkshift;
+            blkno_low = iotd->iotd_Req.io_Actual << (32 - blkshift);
+            blkno_low |= (iotd->iotd_Req.io_Offset >> blkshift);
+            blkno = ((uint64_t)blkno_high << 32) | blkno_low;
+
             goto CMD_SEEK_continue;
         case TD_SEEK:
             PRINTF_CMD("TD_SEEK %d off=%"PRIu32"\n",
