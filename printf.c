@@ -245,7 +245,7 @@ kprintn(buf_t *desc, UINTMAX_T value, uint base, int flags, int width, int dot)
 
     do {
         uint32_t rem;
-	value = udiv64_32(&rem, value, base);
+        value = udiv64_32(&rem, value, base);
         uint digit = (uint)rem;
         *p++ = (char) (digit + ((digit <= 9) ? '0' : hex_a));
     } while (value != 0);
