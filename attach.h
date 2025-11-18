@@ -44,6 +44,11 @@ typedef struct {
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;
+#ifdef ENABLE_QUICKINTS
+    uint8_t              quick_int;
+    /* quick interrupt support */
+    ULONG                quick_vec_num;
+#endif
 } a4091_save_t;
 
 extern a4091_save_t *asave;

@@ -142,6 +142,93 @@ device_private(device_t dev)
     return (asave->as_device_private);
 }
 
+#ifdef ENABLE_QUICKINTS
+
+#include "quickints.c"
+
+/*
+ * a4091_quick_irq
+ * -----------------------
+ * Assembly wrapper for quick interrupts that calls the existing
+ * irq_handler() C function. This reuses all the existing interrupt
+ * handling logic.
+ */
+void __stdargs a4091_quick_irq(void);
+asm (
+    "    .globl _a4091_quick_irq         \n"
+    "_a4091_quick_irq:                   \n"
+    "    move.l  d0,-(sp)                \n"
+    "    move.w  0xdff01c,d0             \n" // Interrupt Enable State
+    "    btst.l  #14,d0                  \n" // Check if pending disable
+    "    bne.s   RealInterrupt           \n"
+    "ExitInt:                            \n"
+    "    move.l  (sp)+,d0                \n"
+    "    rte                             \n"
+    "RealInterrupt:                      \n"
+    "    movem.l d1/a0-a1,-(sp)          \n" // Save registers for C ABI
+    "    move.l  _asave,a1               \n" // Load pointer to a4091_save
+    "    jsr     _irq_handler            \n" // Call C handler (a1 passed in register)
+    "    movem.l (sp)+,d1/a0-a1          \n" // Restore registers
+    "    bra.s   ExitInt                 \n" // Return from interrupt
+);
+
+/*
+ * a4091_add_quick_irq_handler
+ * ---------------------------
+ * Set up quick interrupt handling for the A4091 card.
+ */
+static int
+a4091_add_quick_irq_handler(uint32_t a4091_base)
+{
+    ULONG intnum;
+    struct Task *task = FindTask(NULL);
+    if (task == NULL)
+        return (ERROR_OPEN_FAIL);
+
+    asave->as_SysBase    = SysBase;
+    asave->as_svc_task   = task;
+    asave->as_irq_count  = 0;
+    asave->as_irq_signal = AllocSignal(-1);
+
+    // Obtain a quick interrupt vector
+    intnum = ObtainQuickVector(a4091_quick_irq);
+    if (intnum == 0) {
+        printf("Failed to obtain quick interrupt vector\n");
+        FreeSignal(asave->as_irq_signal);
+        return (ERROR_NO_FREE_STORE);
+    }
+
+    asave->quick_vec_num = intnum;
+
+    // Program the A4091 to use this quick interrupt vector
+    *ADDR8(a4091_base + A4091_OFFSET_QUICKINT) = (uint8_t)intnum;
+
+    printf("Quick interrupt vector %lu installed at A4091\n", intnum);
+    return (0);
+}
+
+/*
+ * a4091_remove_quick_irq_handler
+ * ------------------------------
+ * Remove quick interrupt handling and restore the vector.
+ */
+static void
+a4091_remove_quick_irq_handler(void)
+{
+    if (asave->quick_vec_num != 0) {
+        printf("Removing quick ISR handler (%d irqs)\n", asave->as_irq_count);
+        asave->as_exiting = 1;
+        ReleaseQuickVector(asave->quick_vec_num);
+
+        /* Reset quick interrupt in hardware by writing to upper half of INTVEC range */
+        *ADDR8(asave->as_addr + A4091_OFFSET_QUICKINT | (1<<17)) = 0;
+
+        asave->quick_vec_num = 0;
+        FreeSignal(asave->as_irq_signal);
+    }
+}
+#endif
+
 static int
 a4091_add_local_irq_handler(void)
 {
@@ -510,7 +597,14 @@ init_chan(device_t self, UBYTE *boardnum)
 
     scsipi_channel_init(chan);
 
-    rc = a4091_add_local_irq_handler();
+#ifdef ENABLE_QUICKINTS
+    // Use quick interrupts if enabled in battmem, otherwise use normal interrupts
+    if (asave->quick_int)
+        rc = a4091_add_quick_irq_handler(dev_base);
+    else
+#endif
+        rc = a4091_add_local_irq_handler();
+
     if (rc != 0)
         return (rc);
 
@@ -538,7 +632,14 @@ deinit_chan(device_t self)
 #else
 #error "Need to define NCR53C710 or NCR53C770"
 #endif
-    a4091_remove_local_irq_handler();
+#ifdef ENABLE_QUICKINTS
+    // Remove quick or normal interrupt based on what was installed
+    if (asave->quick_int && asave->quick_vec_num != 0)
+        a4091_remove_quick_irq_handler();
+    else
+#endif
+        a4091_remove_local_irq_handler();
+
     a4091_release((uint32_t) sc->sc_siopp - 0x00800000);
 }
 

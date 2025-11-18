@@ -33,6 +33,9 @@ int Load_BattMem(void)
 {
     UBYTE cdrom_boot = 0,
           ignore_last = 0;
+#ifdef ENABLE_QUICKINTS
+    UBYTE quick_int = 0;
+#endif
 
     BattMemBase = OpenResource(BATTMEMNAME);
     if (!BattMemBase)
@@ -46,12 +49,23 @@ int Load_BattMem(void)
     ReadBattMem(&ignore_last,
                 BATTMEM_A4091_IGNORE_LAST_ADDR,
                 BATTMEM_A4091_IGNORE_LAST_LEN);
+#ifdef ENABLE_QUICKINTS
+    ReadBattMem(&quick_int,
+                BATTMEM_A4091_QUICK_INT_ADDR,
+                BATTMEM_A4091_QUICK_INT_LEN);
+#endif
 
     // CDROM_BOOT defaults to on, hence invert it
     asave->cdrom_boot = !cdrom_boot;
     asave->ignore_last = ignore_last;
+#ifdef ENABLE_QUICKINTS
+    asave->quick_int = quick_int;
+#endif
     printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
     printf("  ignore_last: %s\n", asave->ignore_last?"on":"off");
+#ifdef ENABLE_QUICKINTS
+    printf("  quick_int: %s\n", asave->quick_int?"on":"off");
+#endif
     ReleaseBattSemaphore();
 
     return 1;
@@ -61,6 +75,9 @@ int Save_BattMem(void)
 {
     UBYTE cdrom_boot = !asave->cdrom_boot,
           ignore_last = asave->ignore_last;
+#ifdef ENABLE_QUICKINTS
+    UBYTE quick_int = asave->quick_int;
+#endif
 
     if (!BattMemBase)
         return 0;
@@ -69,12 +86,20 @@ int Save_BattMem(void)
     printf("Storing settings to BattMem\n");
     printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
     printf("  ignore_last: %s\n", asave->ignore_last?"on":"off");
+#ifdef ENABLE_QUICKINTS
+    printf("  quick_int: %s\n", asave->quick_int?"on":"off");
+#endif
     WriteBattMem(&cdrom_boot,
                  BATTMEM_A4091_CDROM_BOOT_ADDR,
                  BATTMEM_A4091_CDROM_BOOT_LEN);
     WriteBattMem(&ignore_last,
                  BATTMEM_A4091_IGNORE_LAST_ADDR,
                  BATTMEM_A4091_IGNORE_LAST_LEN);
+#ifdef ENABLE_QUICKINTS
+    WriteBattMem(&quick_int,
+                 BATTMEM_A4091_QUICK_INT_ADDR,
+                 BATTMEM_A4091_QUICK_INT_LEN);
+#endif
 
     ReleaseBattSemaphore();
 
