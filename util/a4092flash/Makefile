@@ -1,7 +1,10 @@
 PROJECT=a4092flash
 CC=m68k-amigaos-gcc
 HOSTCC=gcc
-CFLAGS=-lamiga -mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
+# Compiler flags (do not place libraries here)
+CFLAGS=-mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
+# Libraries must come last on the link line
+LDLIBS=-lamiga -lgcc
 .PHONY:	clean all
 
 GIT_REF_NAME = $(shell git branch --show-current)
@@ -15,7 +18,7 @@ CFLAGS+=-DDEVICE_VERSION=$(DEVICE_VERSION) -DDEVICE_REVISION=$(DEVICE_REVISION)
 CFLAGS+=-DGIT_REF=$(GIT_REF) -DBUILD_DATE=$(BUILD_DATE)
 endif
 
-all:	$(PROJECT)
+all:	$(PROJECT) spiutil
 
 OBJ =   flash.o \
 	config.o \
@@ -26,11 +29,14 @@ SRCS = $(OBJ:%.o=%.c)
 
 
 a4092flash: $(SRCS) *.h
-	$(CC) -o $@ $(CFLAGS) $(SRCS)
+	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
+
+spiutil: spiutil.c
+	$(CC) $(CFLAGS) -o $@ spiutil.c $(LDLIBS)
 
 test:
 	$(HOSTCC) -o nvram_test nvram_test.c
 	./nvram_test
 
 clean:
-	-rm -rf $(PROJECT) nvram_test
+	-rm -rf $(PROJECT) nvram_test spiutil
