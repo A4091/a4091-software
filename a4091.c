@@ -959,7 +959,7 @@ a4091_remove_quick_irq_handler(void)
         ReleaseQuickVector(a4091_save.quick_vec_num);
 
         /* Reset quick interrupt in hardware by writing to upper half of INTVEC range */
-        *ADDR8(a4091_base + (A4091_OFFSET_QUICKINT | (1<<17))) = 0;
+        *ADDR8(a4091_base + (A4091_OFFSET_QUICKINT | (1<<17))) = 0x26;
 
         a4091_save.quick_vec_num = 0;
         a4091_save.use_quick_int = 0;

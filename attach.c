@@ -221,7 +221,7 @@ a4091_remove_quick_irq_handler(void)
         ReleaseQuickVector(asave->quick_vec_num);
 
         /* Reset quick interrupt in hardware by writing to upper half of INTVEC range */
-        *ADDR8(asave->as_addr + A4091_OFFSET_QUICKINT | (1<<17)) = 0;
+        *ADDR8(asave->as_addr + (A4091_OFFSET_QUICKINT | (1<<17))) = 0x26;
 
         asave->quick_vec_num = 0;
         FreeSignal(asave->as_irq_signal);
