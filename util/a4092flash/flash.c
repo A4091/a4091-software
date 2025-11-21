@@ -30,8 +30,11 @@
 
 #include "flash.h"
 #include "flash_constants.h"
+#include "spi.h"
+#include "nibble_word.h"
 
 static ULONG flashbase;
+static flash_type_t current_flash_type = FLASH_TYPE_NONE;
 
 /**
  * @brief Reads a single byte from the flash memory at the given byte address,
@@ -44,7 +47,7 @@ static ULONG flashbase;
  * @param byte_address The byte address (0x000000 - 0x7FFFFF) to read from.
  * @return The UBYTE value read from the flash.
  */
-static UBYTE flash_read_byte(ULONG byte_address)
+static UBYTE parallel_flash_read_byte(ULONG byte_address)
 {
     // Calculate the physical 32-bit word address in memory.
     // Each byte address maps to a unique 32-bit word in the underlying memory.
@@ -53,16 +56,8 @@ static UBYTE flash_read_byte(ULONG byte_address)
     // Read the full 32-bit word value from the memory-mapped flash.
     ULONG word_value = *word_ptr;
 
-    // Extract the higher nibble (bits 28-31) and shift it into the correct position
-    // (most significant 4 bits of the UBYTE).
-    UBYTE high_nibble = (UBYTE)((word_value >> 28) & 0x0F);
-
-    // Extract the lower nibble (bits 12-15) and keep it in its correct position
-    // (least significant 4 bits of the UBYTE).
-    UBYTE low_nibble = (UBYTE)((word_value >> 12) & 0x0F);
-
-    // Combine the two nibbles to form the complete 8-bit byte.
-    return (high_nibble << 4) | low_nibble;
+    // Unpack the byte from the A4092 nibble word format
+    return unpack_nibble_word(word_value);
 }
 
 /**
@@ -76,30 +71,18 @@ static UBYTE flash_read_byte(ULONG byte_address)
  * @param byte_address The byte address (0x000000 - 0x7FFFFF) to write to.
  * @param data The UBYTE value to write to the flash.
  */
-static void flash_write_byte(ULONG byte_address, UBYTE data)
+static void parallel_flash_write_byte(ULONG byte_address, UBYTE data)
 {
     // Calculate the physical 32-bit word address in memory.
     // Each byte address maps to a unique 32-bit word in the underlying memory.
     volatile ULONG *word_ptr = (volatile ULONG *)(flashbase + (byte_address * 4));
 
-    // Extract the higher 4 bits (nibble) and lower 4 bits (nibble) from the data byte.
-    UBYTE high_nibble_to_write = (data >> 4) & 0x0F;
-    UBYTE low_nibble_to_write = data & 0x0F;
-
-    // Prepare the new high nibble value, shifting it to bit positions 28-31.
-    ULONG new_high_nibble_part = ((ULONG)high_nibble_to_write) << 28;
-    // Prepare the new low nibble value, shifting it to bit positions 12-15.
-    ULONG new_low_nibble_part = ((ULONG)low_nibble_to_write) << 12;
-
-    // Combine the preserved bits with the newly prepared high and low nibble parts.
-    ULONG new_word_value = new_high_nibble_part | new_low_nibble_part;
-
-    // Write the modified 32-bit word back to the memory-mapped flash.
-    *word_ptr = new_word_value;
+    // Pack the byte into the A4092 nibble word format and write it
+    *word_ptr = pack_nibble_word(data);
 }
 
-static inline void flash_command(UBYTE);
-static inline void flash_poll(ULONG);
+static inline void parallel_flash_command(UBYTE);
+static inline void parallel_flash_poll(ULONG);
 
 struct flashchips {
 	UWORD id;
@@ -182,100 +165,103 @@ static ULONG flash_get_sectorSize(UBYTE manufacturer, UBYTE device)
     return sectorSize;
 }
 
-/** flash_readByte
+/** parallel_flash_readByte
  *
- * @brief Read a byte from Flash
+ * @brief Read a byte from parallel Flash
  * @param address Address to read from
  * @return The data that was read
  */
-UBYTE flash_readByte(ULONG address)
+UBYTE parallel_flash_readByte(ULONG address)
 {
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
-  return flash_read_byte(address);
+  return parallel_flash_read_byte(address);
 }
 
 
 
-/** flash_writeByte
+/** parallel_flash_writeByte
  *
- * @brief Write a byte to the Flash
+ * @brief Write a byte to the parallel Flash
  * @param address Address to write to
  * @param data The data to be written
  */
-void flash_writeByte(ULONG address, UBYTE data)
+void parallel_flash_writeByte(ULONG address, UBYTE data)
 {
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
-  flash_unlock_sdp();
-  flash_command(CMD_BYTE_PROGRAM);
-  flash_write_byte(address, data);
-  flash_poll(address); // Poll the status using the byte address
+  parallel_flash_unlock_sdp();
+  parallel_flash_command(CMD_BYTE_PROGRAM);
+  parallel_flash_write_byte(address, data);
+  parallel_flash_poll(address); // Poll the status using the byte address
   return;
 }
 
-/** flash_command
+/** parallel_flash_command
  *
- * @brief send a command to the Flash
+ * @brief send a command to the parallel Flash
  * @param command The command byte to send.
  */
-static inline void flash_command(UBYTE command)
+static inline void parallel_flash_command(UBYTE command)
 {
   // Write command byte to the specific command address
-  flash_write_byte(ADDR_CMD_STEP_1, command);
+  parallel_flash_write_byte(ADDR_CMD_STEP_1, command);
   return;
 }
 
-/** flash_unlock_sdp
+/** parallel_flash_unlock_sdp
  *
  * @brief Send the SDP command sequence
  */
-void flash_unlock_sdp(void)
+void parallel_flash_unlock_sdp(void)
 {
   // Write the sequence bytes to the specific addresses
-  flash_write_byte(ADDR_CMD_STEP_1, CMD_SDP_STEP_1);
-  flash_write_byte(ADDR_CMD_STEP_2, CMD_SDP_STEP_2);
+  parallel_flash_write_byte(ADDR_CMD_STEP_1, CMD_SDP_STEP_1);
+  parallel_flash_write_byte(ADDR_CMD_STEP_2, CMD_SDP_STEP_2);
   return;
 }
 
-/** flash_erase_chip
+/** parallel_flash_erase_chip
  *
  * @brief Perform a chip erase.
  */
-void flash_erase_chip(void)
+void parallel_flash_erase_chip(void)
 {
-  flash_unlock_sdp();
-  flash_command(CMD_ERASE);
-  flash_unlock_sdp();
-  flash_command(CMD_ERASE_CHIP);
+  parallel_flash_unlock_sdp();
+  parallel_flash_command(CMD_ERASE);
+  parallel_flash_unlock_sdp();
+  parallel_flash_command(CMD_ERASE_CHIP);
 
-  flash_poll(0);
+  parallel_flash_poll(0);
 }
 
-/** flash_erase_bank
+/** parallel_flash_erase_bank
  *
- * Erase the currently selected 32KB bank
+ * Erase a bank starting at the specified address
  *
+ * @param address Starting address of the bank
+ * @param sectorSize Size of each sector
+ * @param bankSize Total size of the bank to erase
  */
-void flash_erase_bank(ULONG sectorSize, ULONG bankSize)
+void parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
 {
   if (sectorSize > 0) {
     int count = bankSize / sectorSize;
     for (int i = 0; i < count; i++) {
-      flash_erase_sector(i * sectorSize, sectorSize);
+      parallel_flash_erase_sector(address + (i * sectorSize), sectorSize);
     }
   }
 }
 
-/** flash_erase_sector
+/** parallel_flash_erase_sector
  *
  * @brief Erase a sector
  * @param address Address of sector to erase
  *
  */
-void flash_erase_sector(ULONG address, ULONG sectorSize)
+void parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
 {
   bool failed = false;
   ULONG i;
@@ -284,16 +270,16 @@ void flash_erase_sector(ULONG address, ULONG sectorSize)
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
-  flash_unlock_sdp();
-  flash_command(CMD_ERASE);
-  flash_unlock_sdp();
+  parallel_flash_unlock_sdp();
+  parallel_flash_command(CMD_ERASE);
+  parallel_flash_unlock_sdp();
   // Write erase sector command to the specific sector address
-  flash_write_byte(address, CMD_ERASE_SECTOR);
-  flash_poll(address);
+  parallel_flash_write_byte(address, CMD_ERASE_SECTOR);
+  parallel_flash_poll(address);
 
   // Verify
   for (i=address; i<address + sectorSize; i++) {
-    if ((d=flash_read_byte(i)) != 0xff) {
+    if ((d=parallel_flash_read_byte(i)) != 0xff) {
       failed = true;
       printf("Sector 0x%lx+0x%lx 0x%02x != 0xff\n", (unsigned long)address, (unsigned long)i, d);
     }
@@ -302,12 +288,12 @@ void flash_erase_sector(ULONG address, ULONG sectorSize)
     printf("SECTOR ERASE FAILED for sector 0x%lx\n", (unsigned long)address);
 }
 
-/** flash_poll
+/** parallel_flash_poll
  *
  * @brief Poll the status bits at address, until they indicate that the operation has completed.
  * @param address Address to poll
  */
-static inline void flash_poll(ULONG address)
+static inline void parallel_flash_poll(ULONG address)
 {
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
@@ -316,20 +302,20 @@ static inline void flash_poll(ULONG address)
   // Continuously read the status byte twice until the status bit 6 (DQ6) matches,
   // indicating the operation has completed.
   do {
-    val1 = flash_read_byte(address);
-    val2 = flash_read_byte(address);
+    val1 = parallel_flash_read_byte(address);
+    val2 = parallel_flash_read_byte(address);
   } while (((val1 & (1 << 6)) != (val2 & (1 << 6))));
 }
 
-/** flash_init
+/** parallel_flash_init
  *
  * @brief Check the manufacturer id of the device, return manuf and dev id
  * @param manuf Pointer to a UBYTE that will be updated with the returned manufacturer id
  * @param devid Pointer to a UBYTE that will be updatet with the returned device id
- * @param flashbase Pointer to the Flash base address
+ * @param base Pointer to the Flash base address
  * @return True if the manufacturer ID matches the expected value and flashbase is valid.
  */
-bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize)
+bool parallel_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize)
 {
   bool ret = false;
   UBYTE manufId;
@@ -337,19 +323,19 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
 
   if (size) *size = 0;
   if (sectorSize) *sectorSize = 0;
- 
+
   // Set the global flashbase pointer.
   flashbase = (ULONG)base;
 
-  flash_unlock_sdp();
-  flash_command(CMD_ID_ENTRY);
+  parallel_flash_unlock_sdp();
+  parallel_flash_command(CMD_ID_ENTRY);
 
   // Read manufacturer ID
-  manufId = flash_read_byte(0);
+  manufId = parallel_flash_read_byte(0);
   // Read device ID
-  deviceId = flash_read_byte(1);
+  deviceId = parallel_flash_read_byte(1);
 
-  flash_command(CMD_CFI_ID_EXIT);
+  parallel_flash_command(CMD_CFI_ID_EXIT);
 
   // Update the output parameters if pointers are valid.
   if (manuf) *manuf = manufId;
@@ -366,4 +352,140 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
   }
 
   return (ret);
+}
+
+/* ===== Abstraction layer - unified flash API ===== */
+
+/**
+ * flash_get_type
+ *
+ * @brief Get the current flash type
+ * @return The flash type (FLASH_TYPE_NONE, FLASH_TYPE_PARALLEL, or FLASH_TYPE_SPI)
+ */
+flash_type_t flash_get_type(void)
+{
+  return current_flash_type;
+}
+
+/**
+ * flash_init
+ *
+ * @brief Initialize flash - tries SPI first, then falls back to parallel
+ * @param manuf Pointer to store manufacturer ID
+ * @param devid Pointer to store device ID
+ * @param base Base address of the board
+ * @param size Pointer to store flash size
+ * @param sectorSize Pointer to store sector size
+ * @return true if flash detected and initialized
+ */
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize)
+{
+  // Try SPI first (more common on modern A4092 boards)
+  if (spi_flash_init(manuf, devid, base, size, sectorSize)) {
+    current_flash_type = FLASH_TYPE_SPI;
+    return true;
+  }
+
+  // Fall back to parallel flash
+  if (parallel_flash_init(manuf, devid, base, size, sectorSize)) {
+    current_flash_type = FLASH_TYPE_PARALLEL;
+    return true;
+  }
+
+  // No flash detected
+  current_flash_type = FLASH_TYPE_NONE;
+  return false;
+}
+
+/**
+ * flash_readByte
+ *
+ * @brief Read a byte from flash (dispatches to SPI or parallel)
+ * @param address Address to read from
+ * @return The byte read
+ */
+UBYTE flash_readByte(ULONG address)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    return spi_flash_readByte(address);
+  } else {
+    return parallel_flash_readByte(address);
+  }
+}
+
+/**
+ * flash_writeByte
+ *
+ * @brief Write a byte to flash (dispatches to SPI or parallel)
+ * @param address Address to write to
+ * @param data Byte to write
+ */
+void flash_writeByte(ULONG address, UBYTE data)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    spi_flash_writeByte(address, data);
+  } else {
+    parallel_flash_writeByte(address, data);
+  }
+}
+
+/**
+ * flash_erase_chip
+ *
+ * @brief Erase entire flash chip (dispatches to SPI or parallel)
+ */
+void flash_erase_chip(void)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    spi_flash_erase_chip();
+  } else {
+    parallel_flash_erase_chip();
+  }
+}
+
+/**
+ * flash_erase_sector
+ *
+ * @brief Erase a flash sector (dispatches to SPI or parallel)
+ * @param address Starting address
+ * @param sectorSize Size of sector to erase
+ */
+void flash_erase_sector(ULONG address, ULONG sectorSize)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    spi_flash_erase_sector(address, sectorSize);
+  } else {
+    parallel_flash_erase_sector(address, sectorSize);
+  }
+}
+
+/**
+ * flash_erase_bank
+ *
+ * @brief Erase a flash bank (dispatches to SPI or parallel)
+ * @param address Starting address of the bank
+ * @param sectorSize Sector size
+ * @param bankSize Bank size
+ */
+void flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    // For SPI, erase starting at address for bankSize
+    spi_flash_erase_sector(address, bankSize);
+  } else {
+    parallel_flash_erase_bank(address, sectorSize, bankSize);
+  }
+}
+
+/**
+ * flash_cleanup
+ *
+ * @brief Cleanup flash operations (restore CPU state if needed)
+ */
+void flash_cleanup(void)
+{
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    spi_flash_cleanup();
+  }
+  // Parallel flash doesn't need cleanup
 }

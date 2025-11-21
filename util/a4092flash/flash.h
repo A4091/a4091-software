@@ -24,12 +24,32 @@
 #endif
 #include <stdbool.h>
 
-void flash_unlock_sdp(void);
-void flash_erase_chip(void);
+/* Flash type enumeration */
+typedef enum {
+    FLASH_TYPE_NONE = 0,
+    FLASH_TYPE_PARALLEL,
+    FLASH_TYPE_SPI
+} flash_type_t;
+
+/* Get current flash type */
+flash_type_t flash_get_type(void);
+
+/* Unified flash API - automatically dispatches to SPI or Parallel implementation */
+bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
 UBYTE flash_readByte(ULONG address);
 void flash_writeByte(ULONG address, UBYTE data);
-bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
+void flash_erase_chip(void);
 void flash_erase_sector(ULONG address, ULONG sectorSize);
-void flash_erase_bank(ULONG sectorSize, ULONG bankSize);
+void flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize);
+void flash_cleanup(void);
+
+/* Parallel flash specific functions (used internally) */
+void parallel_flash_unlock_sdp(void);
+bool parallel_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
+UBYTE parallel_flash_readByte(ULONG address);
+void parallel_flash_writeByte(ULONG address, UBYTE data);
+void parallel_flash_erase_chip(void);
+void parallel_flash_erase_sector(ULONG address, ULONG sectorSize);
+void parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize);
 
 #endif

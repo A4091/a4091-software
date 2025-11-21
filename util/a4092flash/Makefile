@@ -21,6 +21,7 @@ endif
 all:	$(PROJECT) spiutil
 
 OBJ =   flash.o \
+	spi.o \
 	config.o \
 	main.o \
 	nvram_flash.o
