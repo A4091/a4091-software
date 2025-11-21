@@ -13,4 +13,6 @@ int scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
     int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
     struct buf *bp, int flags);
 
+void scsipi_put_xs(struct scsipi_xfer *xs);
+
 #endif /* _SCSIPI_BASE */
