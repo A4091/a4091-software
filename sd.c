@@ -21,6 +21,8 @@
 #include <string.h>
 #include <sys/param.h>
 #include <exec/errors.h>
+#include <exec/types.h>
+#include <exec/memory.h>
 #include <devices/scsidisk.h>
 #include <devices/trackdisk.h>
 #include "scsipiconf.h"
@@ -68,6 +70,28 @@ static const int8_t error_code_mapping[] = {
     ERROR_BUS_RESET,  // 8 XS_RESET             Bus reset; possible retry cmd
     ERROR_TRY_AGAIN,  // 9 XS_REQUEUE           Requeue this command
 };
+
+/* Check if a memory range is likely Zorro II RAM.
+ * This is a simplified check based on common Zorro II address ranges.
+ * A more robust check might involve querying Exec's memory list if possible
+ * during driver initialization to build a map of Zorro II boards, but
+ * that is significantly more complex for a device driver's DMA path.
+ */
+static inline BOOL
+is_zorro_ii_address(APTR address, ULONG length)
+{
+    ULONG start_addr = (ULONG)address;
+    ULONG end_addr = start_addr + length - 1;
+
+    /* 8MB Zorro II space */
+    if (start_addr >= 0x00200000 && end_addr < 0x00a00000)
+        return TRUE;
+
+    /* A Zorro II card itself (registers) might live at 0x00e8xxxx or
+     * 0x00a0xxxx, but DMA buffers won't live there.
+     */
+    return FALSE;
+}
 
 /* Translate error code to AmigaOS code */
 static int
@@ -464,6 +488,23 @@ sd_readwrite(void *periph_p, uint64_t blkno, uint b_flags, void *buf,
 
     xs->amiga_ior = ior;
     xs->xs_done_callback = sd_complete;
+
+    if (__predict_false(is_zorro_ii_address(xs->data, xs->datalen))) {
+        void *bounce_buf = AllocMem(xs->datalen, MEMF_CHIP | MEMF_PUBLIC);
+        if (bounce_buf == NULL) {
+            /* Could not allocate bounce buffer, fail the command synchronously */
+            scsipi_put_xs(xs);
+            return (TDERR_NoMem);
+        }
+
+        xs->xs_callback_arg = xs->data; // Store original buffer
+        xs->data = bounce_buf;
+
+        if (xs->xs_control & XS_CTL_DATA_OUT) {
+            /* Copy data to bounce buffer for a write operation */
+            CopyMem(xs->xs_callback_arg, xs->data, xs->datalen);
+        }
+    }
 
 #if 0
     printf("sd%d.%d %p issue %c %u %u\n",
@@ -1007,7 +1048,24 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
 static void
 sd_complete(struct scsipi_xfer *xs)
 {
-    int rc = translate_xs_error(xs);
+    int rc;
+
+    /* If we used a bounce buffer, handle it now */
+    if (xs->xs_callback_arg != NULL) {
+        void *orig_buf = xs->xs_callback_arg;
+        void *bounce_buf = xs->data;
+
+        if (xs->error == XS_NOERROR && (xs->xs_control & XS_CTL_DATA_IN)) {
+            /* Copy data back from bounce buffer for a read operation */
+            CopyMem(bounce_buf, orig_buf, xs->datalen);
+        }
+
+        xs->data = orig_buf; /* Restore original buffer pointer */
+        xs->xs_callback_arg = NULL;
+        FreeMem(bounce_buf, xs->datalen);
+    }
+
+    rc = translate_xs_error(xs);
 
 #ifdef DEBUG
     if (xs->amiga_ior == NULL) {
