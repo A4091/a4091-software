@@ -27,7 +27,7 @@ Pre-built releases of the driver, ROM images, and tools are available from the p
 
 ### 🛠️ Building From Source
 
-Building the software is a straightforward process. You will need a modern `m68k-amigaos-gcc` cross-compiler toolchain, such as [Bebbo's amiga-gcc](https://github.com/amiga-gcc/amiga-gcc).
+Building the software is a straightforward process. You will need a modern `m68k-amigaos-gcc` cross-compiler toolchain, such as [Bebbo's amiga-gcc](https://github.com/reinauer/container-amiga-gcc).
 
 **Compile the Software**
 
