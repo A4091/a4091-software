@@ -84,7 +84,7 @@ static void parallel_flash_write_byte(ULONG byte_address, UBYTE data)
 }
 
 static inline void parallel_flash_command(UBYTE);
-static inline void parallel_flash_poll(ULONG);
+static inline bool parallel_flash_poll(ULONG);
 
 struct flashchips {
 	UWORD id;
@@ -197,7 +197,9 @@ void parallel_flash_writeByte(ULONG address, UBYTE data)
   parallel_flash_unlock_sdp();
   parallel_flash_command(CMD_BYTE_PROGRAM);
   parallel_flash_write_byte(address, data);
-  parallel_flash_poll(address); // Poll the status using the byte address
+  if (!parallel_flash_poll(address)) {
+      printf("Write failed at address 0x%x\n", address);
+  }
   return;
 }
 
@@ -237,8 +239,7 @@ bool parallel_flash_erase_chip(void)
   parallel_flash_unlock_sdp();
   parallel_flash_command(CMD_ERASE_CHIP);
 
-  parallel_flash_poll(0);
-  return true;
+  return parallel_flash_poll(0);
 }
 
 /** parallel_flash_erase_bank
@@ -270,6 +271,7 @@ bool parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
  */
 bool parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
 {
+  (void)sectorSize;  // Unused for parallel flash
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -278,27 +280,37 @@ bool parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
   parallel_flash_unlock_sdp();
   // Write erase sector command to the specific sector address
   parallel_flash_write_byte(address, CMD_ERASE_SECTOR);
-  parallel_flash_poll(address);
-  return true;
+  return parallel_flash_poll(address);
 }
 
 /** parallel_flash_poll
  *
  * @brief Poll the status bits at address, until they indicate that the operation has completed.
  * @param address Address to poll
+ * @return true if successful, false on timeout
  */
-static inline void parallel_flash_poll(ULONG address)
+static inline bool parallel_flash_poll(ULONG address)
 {
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
   UBYTE val1, val2;
+  ULONG timeout = 10000000; // Safety timeout
+
   // Continuously read the status byte twice until the status bit 6 (DQ6) matches,
   // indicating the operation has completed.
   do {
     val1 = parallel_flash_read_byte(address);
     val2 = parallel_flash_read_byte(address);
-  } while (((val1 & (1 << 6)) != (val2 & (1 << 6))));
+    timeout--;
+  } while ( ((val1 & (1 << 6)) != (val2 & (1 << 6))) && timeout > 0);
+
+  if (timeout == 0) {
+     printf("Flash poll timeout at 0x%x!\n", address);
+     return false;
+  }
+
+  return true;
 }
 
 /** parallel_flash_init
