@@ -57,72 +57,7 @@ struct ExpansionBase *ExpansionBase = NULL;
 // NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
 struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
 
-/* * Global variable to store the original CACR state.
- * Must be non-static so inline assembly can reference it.
- */
-ULONG g_OriginalCACR = 0;
-
-/* Bit 13: Write Allocate */
-#define WA_BIT_MASK 0x00002000
-/* Bit 9:  Data Cache Enable (Safety check) */
-#define DCE_BIT_MASK 0x00000100
-
-/* Forward declarations for supervisor functions */
-ULONG __stdargs Sup_DisableWA(void);
-ULONG __stdargs Sup_RestoreWA(void);
-
-/*
- */
-static void Disable_WA_030(void) {
-    /* 1. Check if we are actually on a 68030 */
-    if (!(SysBase->AttnFlags & AFF_68030)) {
-        return;
-    }
-
-    /* 2. Define supervisor function inline (must use RTE not RTS) and call it */
-    __asm__ __volatile__ (
-        "       bra     1f                     \n"
-        "       .globl  _Sup_DisableWA         \n"
-        "_Sup_DisableWA:                       \n"
-        "       movec   %%cacr,%%d0            \n"  // Read CACR
-        "       move.l  %%d0,_g_OriginalCACR   \n"  // Save it
-        "       btst    #8,%%d0                \n"  // Test DCE bit (bit 8)
-        "       beq.s   .skip_disable          \n"  // Skip if cache not enabled
-        "       bclr    #13,%%d0               \n"  // Clear WA bit (bit 13)
-        "       movec   %%d0,%%cacr            \n"  // Write back
-        ".skip_disable:                        \n"
-        "       moveq   #0,%%d0                \n"  // Return 0
-        "       rte                            \n"  // Return from exception
-        "1:                                    \n"
-        :
-        :
-        : "d0", "cc", "memory"
-    );
-    Supervisor(Sup_DisableWA);
-}
-
-static void Restore_CACR_030(void) {
-    /* 1. Check if we are on a 68030 */
-    if (!(SysBase->AttnFlags & AFF_68030)) {
-        return;
-    }
-
-    /* 2. Define supervisor function inline (must use RTE not RTS) and call it */
-    __asm__ __volatile__ (
-        "       bra     1f                     \n"
-        "       .globl  _Sup_RestoreWA         \n"
-        "_Sup_RestoreWA:                       \n"
-        "       move.l  _g_OriginalCACR,%%d0   \n"  // Load saved CACR
-        "       movec   %%d0,%%cacr            \n"  // Restore it
-        "       moveq   #0,%%d0                \n"  // Return 0
-        "       rte                            \n"  // Return from exception
-        "1:                                    \n"
-        :
-        :
-        : "d0", "cc", "memory"
-    );
-    Supervisor(Sup_RestoreWA);
-}
+#include "cpu_support.h"
 
 static inline uint32_t pack_nibble_word(uint8_t b)
 {
@@ -680,7 +615,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "No A4092 board found via expansion.library\n");
         return 1;
     } else {
-	printf("A4092 found at 0x%lx\n", base);
+	printf("A4092 found at 0x%x\n", base);
     }
 
     int argi = 1;
@@ -688,8 +623,8 @@ int main(int argc, char **argv)
 
     const char *cmd = argv[argi++];
 
-    Disable_WA_030();
-    atexit(Restore_CACR_030);
+    cpu_disable_write_allocation();
+    atexit(cpu_restore_write_allocation);
 
     if (strcmp(cmd,"id")==0) {
         return cmd_id(base);

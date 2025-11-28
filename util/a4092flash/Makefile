@@ -20,20 +20,19 @@ endif
 
 all:	$(PROJECT) spiutil
 
-OBJ =   flash.o \
-	spi.o \
-	config.o \
-	main.o \
-	nvram_flash.o
-
-SRCS = $(OBJ:%.o=%.c)
+SRCS = flash.c \
+       spi.c \
+       config.c \
+       main.c \
+       nvram_flash.c \
+       cpu_support.c
 
 
 a4092flash: $(SRCS) *.h
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 
-spiutil: spiutil.c
-	$(CC) $(CFLAGS) -o $@ spiutil.c $(LDLIBS)
+spiutil: spiutil.c cpu_support.c
+	$(CC) $(CFLAGS) -o $@ spiutil.c cpu_support.c $(LDLIBS)
 
 test:
 	$(HOSTCC) -o nvram_test nvram_test.c

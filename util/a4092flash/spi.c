@@ -5,12 +5,10 @@
 #include <stdbool.h>
 #include "spi.h"
 #include "nibble_word.h"
+#include "cpu_support.h"
 
 // This is a stand-in until I get SysBase properly
 extern struct ExecBase *SysBase;
-
-/* Global variable to store the original CACR state for 68030 */
-ULONG g_OriginalCACR = 0;
 
 /* Use mirrored addresses for writes to work around 68030 write-allocation bug.
  * The MMU must be configured to make the write-mirror non-cacheable.
@@ -21,61 +19,6 @@ ULONG g_OriginalCACR = 0;
 #define SPI_PORT_READ_END_OFFS   0x7FFFFC
 #define SPI_PORT_WRITE_HOLD_OFFS 0x7FFFF8 // 0x7FFFF0
 #define SPI_PORT_WRITE_END_OFFS  0x7FFFFC // 0x7FFFF4
-
-/* Forward declarations for supervisor functions */
-ULONG __stdargs Sup_DisableWA(void);
-ULONG __stdargs Sup_RestoreWA(void);
-
-void spi_disable_burst(void) {
-    /* 1. Check if we are actually on a 68030 */
-    if (!(SysBase->AttnFlags & AFF_68030)) {
-        return;
-    }
-
-    /* 2. Define supervisor function inline (must use RTE not RTS) and call it */
-    __asm__ __volatile__ (
-        "       bra     1f                     \n"
-        "       .globl  _Sup_DisableWA         \n"
-        "_Sup_DisableWA:                       \n"
-        "       movec   %%cacr,%%d0            \n"  // Read CACR
-        "       move.l  %%d0,_g_OriginalCACR   \n"  // Save it (note underscore prefix)
-        "       btst    #8,%%d0                \n"  // Test DCE bit (bit 8)
-        "       beq.s   .skip_disable          \n"  // Skip if cache not enabled
-        "       bclr    #13,%%d0               \n"  // Clear WA bit (bit 13)
-        "       movec   %%d0,%%cacr            \n"  // Write back
-        ".skip_disable:                        \n"
-        "       moveq   #0,%%d0                \n"  // Return 0
-        "       rte                            \n"  // Return from exception
-        "1:                                    \n"
-        :
-        :
-        : "d0", "cc", "memory"
-    );
-    Supervisor(Sup_DisableWA);
-}
-
-void spi_restore_burst(void) {
-    /* 1. Check if we are on a 68030 */
-    if (!(SysBase->AttnFlags & AFF_68030)) {
-        return;
-    }
-
-    /* 2. Define supervisor function inline (must use RTE not RTS) and call it */
-    __asm__ __volatile__ (
-        "       bra     1f                     \n"
-        "       .globl  _Sup_RestoreWA         \n"
-        "_Sup_RestoreWA:                       \n"
-        "       move.l  _g_OriginalCACR,%%d0   \n"  // Load saved CACR (note underscore prefix)
-        "       movec   %%d0,%%cacr            \n"  // Restore it
-        "       moveq   #0,%%d0                \n"  // Return 0
-        "       rte                            \n"  // Return from exception
-        "1:                                    \n"
-        :
-        :
-        : "d0", "cc", "memory"
-    );
-    Supervisor(Sup_RestoreWA);
-}
 
 /* MMIO access helpers using shared nibble_word functions */
 static inline void mmio_write_hold(uint32_t base, uint8_t v)
@@ -155,7 +98,7 @@ static bool spi_wait_wip_clear(uint32_t base, uint32_t max_iters)
             return true;
         }
     }
-    fprintf(stderr, "SPI: timeout waiting for WIP clear (SR1=%02X)\n", spi_read_sr1(base));
+    printf("SPI: timeout waiting for WIP clear (SR1=%02X)\n", spi_read_sr1(base));
     return false;
 }
 static bool spi_wait_wel_set(uint32_t base, uint32_t max_iters)
@@ -172,14 +115,14 @@ static bool spi_write_status(uint32_t base, uint8_t sr1, uint8_t sr2)
 {
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        fprintf(stderr, "ERROR: WEL not set before status write\n");
+        printf("ERROR: WEL not set before status write\n");
         return false;
     }
     spi_tx_hold(base, SPI_CMD_WRSR);
     spi_tx_hold(base, sr1);
     spi_tx_end(base, sr2);
     if (!spi_wait_wip_clear(base, 100000)) {
-        fprintf(stderr, "ERROR: status register write timed out\n");
+        printf("ERROR: status register write timed out\n");
         return false;
     }
     return true;
@@ -195,13 +138,13 @@ bool spi_clear_block_protect(uint32_t base)
     uint8_t new_sr1 = sr1 & (uint8_t)~SR1_BP_MASK;
     printf("SPI flash reports block protection (SR1=%02X SR2=%02X); clearing BP bits...\n", sr1, sr2);
     if (!spi_write_status(base, new_sr1, sr2)) {
-        fprintf(stderr, "ERROR: failed to clear block protection bits\n");
+        printf("ERROR: failed to clear block protection bits\n");
         return false;
     }
     uint8_t verify1 = spi_read_sr1(base);
     uint8_t verify2 = spi_read_sr2(base);
     if (verify1 & SR1_BP_MASK) {
-        fprintf(stderr, "ERROR: block protection bits still set (SR1=%02X SR2=%02X). Check WP# pin.\n", verify1, verify2);
+        printf("ERROR: block protection bits still set (SR1=%02X SR2=%02X). Check WP# pin.\n", verify1, verify2);
         return false;
     }
     return true;
@@ -220,7 +163,7 @@ static bool spi_block_erase(uint32_t base, uint32_t baddr, uint8_t erase_cmd)
 {
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        fprintf(stderr, "ERROR: WEL not set before erase at 0x%08lX\n", (unsigned long)baddr);
+        printf("ERROR: WEL not set before erase at 0x%08lX\n", (unsigned long)baddr);
         return false;
     }
     spi_tx_hold(base, erase_cmd);
@@ -239,7 +182,7 @@ static bool spi_page_program(uint32_t base, uint32_t addr, const uint8_t *data, 
     if (!len || len > SPI_PAGE_SIZE) return false;
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        fprintf(stderr, "ERROR: WEL not set before program at 0x%08lX\n", (unsigned long)addr);
+        printf("ERROR: WEL not set before program at 0x%08lX\n", (unsigned long)addr);
         return false;
     }
     spi_tx_hold(base, SPI_CMD_PP);
@@ -322,14 +265,14 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     spi_base_address = (uint32_t)(uintptr_t)base;
 
     // Enable SPI access (disable write allocation on 68030)
-    spi_disable_burst();
+    cpu_disable_write_allocation();
 
     // Read JEDEC ID
     spi_read_id(spi_base_address, &mfg, &type, &cap);
 
     // Check if it's a valid SPI flash (manufacturer should not be 0xFF or 0x00)
     if (mfg == 0xFF || mfg == 0x00 || mfg == 0x9F) {
-        spi_restore_burst();
+        cpu_restore_write_allocation();
         spi_base_address = 0;
         return false;
     }
@@ -427,5 +370,5 @@ bool spi_flash_erase_chip(void)
  */
 void spi_flash_cleanup(void)
 {
-    spi_restore_burst();
+    cpu_restore_write_allocation();
 }

@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
   ULONG romSize    = 0;
 
   if (DosBase == NULL) {
-    return(rc);
+    return(20);
   }
 
   printf("\n%s\n\n", VERSION);
