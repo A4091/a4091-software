@@ -25,7 +25,16 @@ xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
 xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
 xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK makedir Devs
+if [ -r ../a4091.device ]; then
 xdftool $DISK write ../a4091.device Devs/a4091.device
+fi
+if [ -r ../a4092.device ]; then
+xdftool $DISK write ../a4092.device Devs/a4092.device
+fi
+if [ -r ../a4092_cdfs.rom ]; then
+xdftool $DISK makedir ROMs
+xdftool $DISK write ../a4092_cdfs.rom ROMs/a4092_cdfs.rom
+fi
 xdftool $DISK write A4091.guide
 xdftool $DISK write A4091.guide.info
 xdftool $DISK write Disk.info

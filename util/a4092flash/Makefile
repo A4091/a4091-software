@@ -5,6 +5,7 @@ HOSTCC=gcc
 CFLAGS=-mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
 # Libraries must come last on the link line
 LDLIBS=-lamiga -lgcc
+QUIET?=@
 .PHONY:	clean all
 
 GIT_REF_NAME = $(shell git branch --show-current)
@@ -29,13 +30,17 @@ SRCS = flash.c \
 
 
 a4092flash: $(SRCS) *.h
-	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
+	@echo Building $@
+	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 
 spiutil: spiutil.c cpu_support.c
-	$(CC) $(CFLAGS) -o $@ spiutil.c cpu_support.c $(LDLIBS)
+	@echo Building $@
+	$(QUIET)$(CC) $(CFLAGS) -o $@ spiutil.c cpu_support.c $(LDLIBS)
 
 test:
+	@echo Building NVRAM tests
 	$(HOSTCC) -o nvram_test nvram_test.c
+	@echo Running NVRAM tests
 	./nvram_test
 
 clean:

@@ -56,7 +56,7 @@ else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
 endif
 ifeq ($(DEVNAME),a4092)
-SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c
+SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c util/a4092flash/cpu_support.c
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
@@ -67,7 +67,7 @@ OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 OBJSROM := $(OBJDIR)/rom.o
-TOOLS   := $(PROGU) $(PROGD)
+TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -303,11 +303,15 @@ $(OBJDIR):
 	mkdir -p $@/3rdparty/mounter
 	mkdir -p $@/util/a4092flash
 
+util/a4092flash/a4092flash:
+	$(QUIET)make -s -C util/a4092flash
+
 clean:
 	@echo Cleaning.
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
+	$(QUIET)make -s -C util/a4092flash clean
 
 distclean: clean
 	@echo Cleaning really good.
