@@ -859,7 +859,9 @@ a4091_add_local_irq_handler(void)
         a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
         a4091_save.local_isr->is_Data         = &a4091_save;
 #pragma GCC diagnostic push
+#if GCC_VERSION > 60500
 #pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
         a4091_save.local_isr->is_Code         = (void (*)()) a4091_irq_handler;
 #pragma GCC diagnostic pop
 

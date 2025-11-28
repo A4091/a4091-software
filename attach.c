@@ -203,7 +203,7 @@ a4091_add_quick_irq_handler(uint32_t a4091_base)
     // Program the A4091 to use this quick interrupt vector
     *ADDR8(a4091_base + A4091_OFFSET_QUICKINT) = (uint8_t)intnum;
 
-    printf("Quick interrupt vector %lu installed at A4091\n", intnum);
+    printf("Quick interrupt vector %"PRIu32" installed at A4091\n", intnum);
     return (0);
 }
 
@@ -252,7 +252,9 @@ a4091_add_local_irq_handler(void)
     asave->as_isr->is_Node.ln_Name = real_device_name; // a4091.device
     asave->as_isr->is_Data         = asave;
 #pragma GCC diagnostic push
+#if GCC_VERSION > 60500
 #pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
     asave->as_isr->is_Code         = (void (*)()) irq_handler;
 #pragma GCC diagnostic pop
 

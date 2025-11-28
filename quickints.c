@@ -116,7 +116,7 @@ ULONG __stdargs ObtainQuickVector(APTR vector)
         : "cc", "memory"
     );
     if (BadQuickIntFound) {
-        dprintf("BadQuickInt = 0x%08lx\n", BadQuickInt);
+        dprintf("BadQuickInt = 0x%08"PRIx32"\n", BadQuickInt);
     } else {
         dprintf("BadQuickInt not found.\n");
     }
@@ -142,7 +142,7 @@ void ReleaseQuickVector(ULONG vectorNum)
     }
 
     oldVec = (APTR)Supervisor(ReleaseVec);
-    dprintf(" old vector = 0x%08lx\n", (ULONG)oldVec);
+    dprintf(" old vector = 0x%08"PRIx32"\n", (ULONG)oldVec);
 
     // Call supervisor code to restore the vector
     asm volatile(
