@@ -263,6 +263,7 @@ bool spi_read_buf(uint32_t base, uint32_t addr, uint8_t *out, size_t len)
     out[len-1] = spi_rx_end(base);
     return true;
 }
+
 bool spi_write_buf_pagewise(uint32_t base, uint32_t addr, const uint8_t *in, size_t len, void (*progress)(size_t done, size_t total))
 {
     size_t done = 0;
@@ -282,18 +283,20 @@ bool spi_erase_range_blocks(uint32_t base, uint32_t addr, size_t len)
 {
     uint32_t start = (addr / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
     uint32_t end   = ((addr + (uint32_t)len - 1) / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
+
     for (uint32_t b = start; b <= end; b += SPI_BLOCK_SIZE) {
         if (!spi_block_erase(base, b, SPI_CMD_BE_64K)) return false;
     }
+
     return true;
 }
 
-void spi_erase_chip(uint32_t base, ULONG flashSize) {
-    spi_erase_range_blocks(base, 0, flashSize);
+bool spi_erase_chip(uint32_t base, ULONG flashSize) {
+    return spi_erase_range_blocks(base, 0, flashSize);
 }
 
-void spi_erase_bank(uint32_t base, ULONG bankSize) {
-    spi_erase_range_blocks(base, 0, bankSize);
+bool spi_erase_bank(uint32_t base, ULONG bankSize) {
+    return spi_erase_range_blocks(base, 0, bankSize);
 }
 
 /* ===== Abstraction layer implementation ===== */
@@ -399,20 +402,22 @@ void spi_flash_writeByte(ULONG address, UBYTE data)
  * @brief Erase a sector (rounds up to 64KB block boundaries)
  * @param address Starting address
  * @param sectorSize Size of sector to erase
+ * @return true if erase and verification successful, false otherwise
  */
-void spi_flash_erase_sector(ULONG address, ULONG sectorSize)
+bool spi_flash_erase_sector(ULONG address, ULONG sectorSize)
 {
-    spi_erase_range_blocks(spi_base_address, address, sectorSize);
+    return spi_erase_range_blocks(spi_base_address, address, sectorSize);
 }
 
 /**
  * spi_flash_erase_chip
  *
  * @brief Erase the entire SPI flash chip
+ * @return true if erase and verification successful, false otherwise
  */
-void spi_flash_erase_chip(void)
+bool spi_flash_erase_chip(void)
 {
-    spi_erase_range_blocks(spi_base_address, 0, spi_flash_size);
+    return spi_erase_range_blocks(spi_base_address, 0, spi_flash_size);
 }
 
 /**

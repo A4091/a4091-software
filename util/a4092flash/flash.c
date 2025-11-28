@@ -34,6 +34,8 @@
 #include "nibble_word.h"
 
 static ULONG flashbase;
+static ULONG flash_size = 0;
+static ULONG sector_size = 0;
 static flash_type_t current_flash_type = FLASH_TYPE_NONE;
 
 /**
@@ -226,8 +228,9 @@ void parallel_flash_unlock_sdp(void)
 /** parallel_flash_erase_chip
  *
  * @brief Perform a chip erase.
+ * @return true if successful, false on failure
  */
-void parallel_flash_erase_chip(void)
+bool parallel_flash_erase_chip(void)
 {
   parallel_flash_unlock_sdp();
   parallel_flash_command(CMD_ERASE);
@@ -235,6 +238,7 @@ void parallel_flash_erase_chip(void)
   parallel_flash_command(CMD_ERASE_CHIP);
 
   parallel_flash_poll(0);
+  return true;
 }
 
 /** parallel_flash_erase_bank
@@ -244,8 +248,9 @@ void parallel_flash_erase_chip(void)
  * @param address Starting address of the bank
  * @param sectorSize Size of each sector
  * @param bankSize Total size of the bank to erase
+ * @return true on success
  */
-void parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
+bool parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
 {
   if (sectorSize > 0) {
     int count = bankSize / sectorSize;
@@ -253,20 +258,18 @@ void parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
       parallel_flash_erase_sector(address + (i * sectorSize), sectorSize);
     }
   }
+  return true;
 }
 
 /** parallel_flash_erase_sector
  *
  * @brief Erase a sector
  * @param address Address of sector to erase
- *
+ * @param sectorSize Size of sector to erase
+ * @return true on success
  */
-void parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
+bool parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
 {
-  bool failed = false;
-  ULONG i;
-  UBYTE d;
-
   // Mask address to ensure it is within the valid flash size.
   address &= (FLASH_SIZE - 1);
 
@@ -276,16 +279,7 @@ void parallel_flash_erase_sector(ULONG address, ULONG sectorSize)
   // Write erase sector command to the specific sector address
   parallel_flash_write_byte(address, CMD_ERASE_SECTOR);
   parallel_flash_poll(address);
-
-  // Verify
-  for (i=address; i<address + sectorSize; i++) {
-    if ((d=parallel_flash_read_byte(i)) != 0xff) {
-      failed = true;
-      printf("Sector 0x%lx+0x%lx 0x%02x != 0xff\n", (unsigned long)address, (unsigned long)i, d);
-    }
-  }
-  if (failed)
-    printf("SECTOR ERASE FAILED for sector 0x%lx\n", (unsigned long)address);
+  return true;
 }
 
 /** parallel_flash_poll
@@ -383,17 +377,23 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
   // Try SPI first (more common on modern A4092 boards)
   if (spi_flash_init(manuf, devid, base, size, sectorSize)) {
     current_flash_type = FLASH_TYPE_SPI;
+    if (size) flash_size = *size;
+    if (sectorSize) sector_size = *sectorSize;
     return true;
   }
 
   // Fall back to parallel flash
   if (parallel_flash_init(manuf, devid, base, size, sectorSize)) {
     current_flash_type = FLASH_TYPE_PARALLEL;
+    if (size) flash_size = *size;
+    if (sectorSize) sector_size = *sectorSize;
     return true;
   }
 
   // No flash detected
   current_flash_type = FLASH_TYPE_NONE;
+  flash_size = 0;
+  sector_size = 0;
   return false;
 }
 
@@ -430,51 +430,116 @@ void flash_writeByte(ULONG address, UBYTE data)
 }
 
 /**
+ * flash_verify_erased
+ *
+ * @brief Verify that a flash region contains only 0xFF bytes
+ * @param address Starting address
+ * @param size Size of region to verify
+ * @return true if all bytes are 0xFF, false otherwise
+ */
+static bool flash_verify_erased(ULONG address, ULONG size)
+{
+  bool failed = false;
+  UBYTE d;
+
+  printf("Verifying erase from 0x%08lX (%lu bytes)...\n", (unsigned long)address, (unsigned long)size);
+
+  for (ULONG i = address; i < address + size; i++) {
+    d = flash_readByte(i);
+    if (d != 0xFF) {
+      failed = true;
+      printf("Erase verify failed at 0x%08lX: expected 0xFF, got 0x%02X\n", (unsigned long)i, d);
+    }
+  }
+
+  if (failed) {
+    printf("ERASE VERIFICATION FAILED for region 0x%08lX-0x%08lX\n",
+           (unsigned long)address, (unsigned long)(address + size - 1));
+  } else {
+    printf("Erase verification successful!\n");
+  }
+
+  return !failed;
+}
+
+/**
  * flash_erase_chip
  *
  * @brief Erase entire flash chip (dispatches to SPI or parallel)
+ * @return true if erase and verification successful, false otherwise
  */
-void flash_erase_chip(void)
+bool flash_erase_chip(void)
 {
+  bool result;
+
   if (current_flash_type == FLASH_TYPE_SPI) {
-    spi_flash_erase_chip();
+    result = spi_flash_erase_chip();
   } else {
-    parallel_flash_erase_chip();
+    result = parallel_flash_erase_chip();
   }
+
+  if (!result) {
+    return false;
+  }
+
+  // Verify the entire chip
+  return flash_verify_erased(0, flash_size);
 }
 
 /**
  * flash_erase_sector
  *
- * @brief Erase a flash sector (dispatches to SPI or parallel)
+ * @brief Erase a flash sector (dispatches to SPI or parallel) and verify
  * @param address Starting address
  * @param sectorSize Size of sector to erase
+ * @return true if erase and verification successful, false otherwise
  */
-void flash_erase_sector(ULONG address, ULONG sectorSize)
+bool flash_erase_sector(ULONG address, ULONG sectorSize)
 {
+  bool result;
+
   if (current_flash_type == FLASH_TYPE_SPI) {
-    spi_flash_erase_sector(address, sectorSize);
+    result = spi_flash_erase_sector(address, sectorSize);
   } else {
     parallel_flash_erase_sector(address, sectorSize);
+    result = true;
   }
+
+  if (!result) {
+    return false;
+  }
+
+  // Verify the erased sector
+  return flash_verify_erased(address, sectorSize);
 }
 
 /**
  * flash_erase_bank
  *
- * @brief Erase a flash bank (dispatches to SPI or parallel)
+ * @brief Erase a flash bank (dispatches to SPI or parallel) and verify
  * @param address Starting address of the bank
  * @param sectorSize Sector size
  * @param bankSize Bank size
+ * @return true if erase and verification successful, false otherwise
  */
-void flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
+bool flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
 {
+  bool result;
+
   if (current_flash_type == FLASH_TYPE_SPI) {
     // For SPI, erase starting at address for bankSize
-    spi_flash_erase_sector(address, bankSize);
+    result = spi_flash_erase_sector(address, bankSize);
   } else {
     parallel_flash_erase_bank(address, sectorSize, bankSize);
+    result = true;
   }
+
+  if (!result) {
+    return false;
+  }
+
+  // Verify the erased bank
+  return flash_verify_erased(address, bankSize);
 }
 
 /**

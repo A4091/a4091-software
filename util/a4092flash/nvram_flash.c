@@ -66,12 +66,8 @@ int flash_format_nvram_partition(ULONG partition_address, ULONG size)
         return NVRAM_ERR_INVALID_ARG;
     }
 
-    flash_erase_sector(partition_address,size);
-
-    for (ULONG i = 0; i < size; ++i) {
-        if (flash_readByte(partition_address + i) != 0xFF) {
-            return NVRAM_ERR_VERIFY_ERASE_FAIL;
-        }
+    if (!flash_erase_sector(partition_address, size)) {
+        return NVRAM_ERR_VERIFY_ERASE_FAIL;
     }
 
     struct nvram_partition_hdr hdr = { .magic = NVRAM_MAGIC, .partition_size = size };

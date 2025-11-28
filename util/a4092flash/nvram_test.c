@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "nvram_flash.h"
 #include "nvram_flash.c"
 
 // --- Flash API ---
 UBYTE flash_readByte(ULONG address);
 void flash_writeByte(ULONG address, UBYTE data);
-void flash_erase_sector(ULONG address, ULONG sectorSize);
+bool flash_erase_sector(ULONG address, ULONG sectorSize);
 
 // --- Stub Flash Implementation ---
 #define FLASH_SECTOR_SIZE (4 * 1024)
@@ -16,11 +17,12 @@ void flash_erase_sector(ULONG address, ULONG sectorSize);
 static UBYTE flash_memory_stub[FLASH_TOTAL_SIZE];
 
 // Stubs now convert absolute address to an offset in the memory array
-void flash_erase_sector(ULONG offset, ULONG sectorSize)
+bool flash_erase_sector(ULONG offset, ULONG sectorSize)
 {
     ULONG sector_start_offset = (offset / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE;
     printf("STUB: Erasing sector at offset 0x%X (size: 0x%X)\n", sector_start_offset, sectorSize);
     memset(flash_memory_stub + sector_start_offset, 0xFF, sectorSize);
+    return true;
 }
 
 void flash_writeByte(ULONG offset, UBYTE data)

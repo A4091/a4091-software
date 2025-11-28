@@ -348,17 +348,29 @@ int main(int argc, char *argv[])
           ULONG bankSize = 65536; // hardcode A4091/A4092 image size for now
           if (config->eraseFlash) {
             printf("Erasing whole flash.\n");
-            flash_erase_chip();
+            if (!flash_erase_chip()) {
+              fprintf(stderr, "ERROR: Flash erase/verify failed!\n");
+              rc = 5;
+              goto exit;
+            }
           }
 
           if (config->writeFlash && config->scsi_rom_filename) {
             if (config->eraseFlash == false) {
               if (sectorSize > 0) {
                 printf("Erasing flash bank.\n");
-                flash_erase_bank(0, sectorSize, bankSize);
+                if (!flash_erase_bank(0, sectorSize, bankSize)) {
+                  fprintf(stderr, "ERROR: Flash bank erase/verify failed!\n");
+                  rc = 5;
+                  goto exit;
+                }
               } else {
                 printf("Erasing whole flash.\n");
-                flash_erase_chip();
+                if (!flash_erase_chip()) {
+                  fprintf(stderr, "ERROR: Flash erase/verify failed!\n");
+                  rc = 5;
+                  goto exit;
+                }
               }
             }
             printf("Writing A4092 ROM image to flash memory.\n");
