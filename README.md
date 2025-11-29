@@ -104,15 +104,15 @@ The journey begins with `rom.S`, a critical piece of assembly code that lives in
 This loading process involves two key components, also written in assembly:
 
 * **Relocator**: Once in RAM, the driver's code needs to be adjusted so that all its internal memory references point to the correct locations in RAM. The relocator code handles this task, making the driver executable.
-* **RNC Decompressor**: To save precious space in the 64KB ROM, the `a4091.device` driver is compressed using the **RNC Pro-Pack** algorithm. A small, fast RNC decompressor, written in hand-optimized 68k assembly, is included to unpack the driver into its final, executable form in RAM.
+* **ZX0 Decompressor**: To save precious space in the 64KB ROM, the `a4091.device` driver is compressed using the **ZX0** algorithm. A small, fast ZX0 decompressor, written in hand-optimized 68k assembly, is included to unpack the driver into its final, executable form in RAM.
 
 ### ROM Access Internals
 
 The A4091 uses an 8-bit wide ROM. On Zorro III systems like the Amiga 3000 and 4000, ROM access is limited to nibble-wide reads during the AutoConfig™ phase. Because of this limitation, it is not possible to execute driver code in place from ROM.
 
-To address this, the ROM code relocates the compressed driver image into main RAM, decompresses it using the built-in RNC decompressor, and then performs relocation on code and data pointers. This approach results in a boot process that is both compatible with the hardware and faster due to RAM execution speed.
+To address this, the ROM code relocates the compressed driver image into main RAM, decompresses it using the built-in ZX0 decompressor, and then performs relocation on code and data pointers. This approach results in a boot process that is both compatible with the hardware and faster due to RAM execution speed.
 
-This relocation and decompression is handled by hand-optimized assembly routines in `rom.S`, `reloc.S`, and `rnc.S`, and is a core component of the early boot logic.
+This relocation and decompression is handled by hand-optimized assembly routines in `rom.S`, `reloc.S`, and the ZX0 decompressor, and is a core component of the early boot logic.
 
 ### Boot Menu
 

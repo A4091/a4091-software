@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# zx0 does not have a header, so this wrapper script adds one
+# so we can recognize compressed files during relocation.
+#
+# 00 "ZX0" magic
+# 03 Version byte
+# 04 Decompressed size
+# 08 Compressed size
+# 0C beginning of compressed data
+#
+
+INPUT=$1
+OUTPUT=$2
+TEMP=$( mktemp )
+
+if [ "$INPUT" == "" -o "$OUTPUT" == "" ]; then
+  echo "Usage: $0 <input> <output>"
+  exit
+fi
+
+printf 'ZX0\x01' > "$OUTPUT"
+USIZE=$(wc -c < "$INPUT" | tr -d '[:space:]')
+printf "%08x" "$USIZE" | xxd -r -p >> "$OUTPUT"
+
+if [ ! -x 3rdparty/salvador/salvador ]; then
+  echo "Building salvador"
+  ( cd 3rdparty/salvador && make -s )
+  echo "done"
+fi
+3rdparty/salvador/salvador ${INPUT} ${TEMP}
+CSIZE=$(wc -c < "$TEMP" | tr -d '[:space:]')
+printf "%08x" "$CSIZE" | xxd -r -p >> "$OUTPUT"
+
+cat "$TEMP" >> "$OUTPUT"
+rm "$TEMP"
+
+echo "$INPUT ($USIZE) -> $OUTPUT ($CSIZE)"

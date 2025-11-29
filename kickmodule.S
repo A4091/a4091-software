@@ -119,11 +119,11 @@ ROM             EQU    1
 
 device_data:
     IFD NCR53C710
-    incbin "scsi710.device.rnc"
+    incbin "scsi710.device.zx0"
     ENDIF
 
     IFD NCR53C770
-    incbin "scsi770.device.rnc"
+    incbin "scsi770.device.zx0"
     ENDIF
 
     CNOP    0,4

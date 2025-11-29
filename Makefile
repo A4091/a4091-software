@@ -262,9 +262,9 @@ $(OBJDIR)/%.o: %.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
-%.rnc: % $(OBJDIR)/rnc
+%.zx0: %
 	@printf "Compressing $< ... "
-	$(QUIET)$(OBJDIR)/rnc p $< $@ -m 1 >/dev/null
+	$(QUIET)util/zx0wrap $< $@ >/dev/null
 	@printf "`wc -c < $<` -> `wc -c < $@` bytes${end}\n"
 
 $(OBJDIR)/rom.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
@@ -287,10 +287,6 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-$(OBJDIR)/rnc: 3rdparty/propack/main.c
-	@echo Building $@
-	$(QUIET)$(HOSTCC) -O3 -flto -Wno-unused-result $^ -o $@
-
 $(OBJDIR)/romtool: romtool.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) -O2 -Wall $^ -o $@
@@ -300,16 +296,16 @@ $(ROM_ND): $(OBJSROM) rom.ld
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $(filter %.o, $^)
 	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM $@ fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM $@ FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM $@ fits in 64k${end}\n" )
 
-$(ROM): $(ROM_ND) $(PROG).rnc $(OBJDIR)/romtool
+$(ROM): $(ROM_ND) $(PROG).zx0 $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM) -D $(PROG).rnc
+	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM) -D $(PROG).zx0
 
-$(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
+$(ROM_CD): $(ROM) $(CDFS).zx0 $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
-	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.rnc -T 0x46443031
+	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).zx0 -T 0x43443031
+	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.zx0 -T 0x46443031
 
-$(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).rnc
+$(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).zx0
 	@echo Building $@
 	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(NDK_PATH) $(TARGETAFLAGS)
 
@@ -324,13 +320,13 @@ util/a4092flash/a4092flash:
 clean:
 	@echo Cleaning.
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
-	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
+	$(QUIET)rm -f $(PROG).zx0 $(CDFS).zx0
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 	$(QUIET)make -s -C util/a4092flash clean
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.rnc *.rom *.kick a4091_*.lha
+	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick a4091_*.lha
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
