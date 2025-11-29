@@ -38,6 +38,21 @@ else
 $(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
 endif
 
+ifeq ($(DEVNAME),a4092)
+# Flash type configuration for A4092 - enable both by default
+# Override with: make FLASH_PARALLEL=1 or make FLASH_SPI=0
+FLASH_PARALLEL ?= 0
+FLASH_SPI ?= 1
+
+ifeq ($(FLASH_PARALLEL), 1)
+TARGETCFLAGS += -DFLASH_PARALLEL=1
+endif
+
+ifeq ($(FLASH_SPI), 1)
+TARGETCFLAGS += -DFLASH_SPI=1
+endif
+endif
+
 OBJDIR  := objs
 
 ROM	:= $(DEVNAME).rom

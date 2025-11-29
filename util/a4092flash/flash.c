@@ -29,14 +29,23 @@
 #include <stdbool.h>
 
 #include "flash.h"
+#ifdef FLASH_PARALLEL
 #include "flash_constants.h"
+#endif
+#ifdef FLASH_SPI
 #include "spi.h"
+#endif
 #include "nibble_word.h"
 
+#ifdef FLASH_PARALLEL
 static ULONG flashbase;
+#endif
 static ULONG flash_size = 0;
 static ULONG sector_size = 0;
 static flash_type_t current_flash_type = FLASH_TYPE_NONE;
+
+#ifdef FLASH_PARALLEL
+/* ===== Parallel flash implementation ===== */
 
 /**
  * @brief Reads a single byte from the flash memory at the given byte address,
@@ -359,6 +368,7 @@ bool parallel_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG
 
   return (ret);
 }
+#endif /* FLASH_PARALLEL */
 
 /* ===== Abstraction layer - unified flash API ===== */
 
@@ -386,6 +396,7 @@ flash_type_t flash_get_type(void)
  */
 bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize)
 {
+#ifdef FLASH_SPI
   // Try SPI first (more common on modern A4092 boards)
   if (spi_flash_init(manuf, devid, base, size, sectorSize)) {
     current_flash_type = FLASH_TYPE_SPI;
@@ -393,7 +404,9 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
     if (sectorSize) sector_size = *sectorSize;
     return true;
   }
+#endif
 
+#ifdef FLASH_PARALLEL
   // Fall back to parallel flash
   if (parallel_flash_init(manuf, devid, base, size, sectorSize)) {
     current_flash_type = FLASH_TYPE_PARALLEL;
@@ -401,6 +414,7 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
     if (sectorSize) sector_size = *sectorSize;
     return true;
   }
+#endif
 
   // No flash detected
   current_flash_type = FLASH_TYPE_NONE;
@@ -418,11 +432,17 @@ bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, U
  */
 UBYTE flash_readByte(ULONG address)
 {
+#ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
     return spi_flash_readByte(address);
-  } else {
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
     return parallel_flash_readByte(address);
   }
+#endif
+  return 0xFF; // Default to erased state if no flash type available
 }
 
 /**
@@ -434,11 +454,16 @@ UBYTE flash_readByte(ULONG address)
  */
 void flash_writeByte(ULONG address, UBYTE data)
 {
+#ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
     spi_flash_writeByte(address, data);
-  } else {
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
     parallel_flash_writeByte(address, data);
   }
+#endif
 }
 
 /**
@@ -482,20 +507,21 @@ static bool flash_verify_erased(ULONG address, ULONG size)
  */
 bool flash_erase_chip(void)
 {
-  bool result;
+  bool result = false;
 
+#ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
     result = spi_flash_erase_chip();
-  } else {
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
     result = parallel_flash_erase_chip();
   }
+#endif
 
-  if (!result) {
-    return false;
-  }
-
-  // Verify the entire chip
-  return flash_verify_erased(0, flash_size);
+  // Only verify if erase succeeded
+  return result && flash_verify_erased(0, flash_size);
 }
 
 /**
@@ -508,21 +534,22 @@ bool flash_erase_chip(void)
  */
 bool flash_erase_sector(ULONG address, ULONG sectorSize)
 {
-  bool result;
+  bool result = false;
 
+#ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
     result = spi_flash_erase_sector(address, sectorSize);
-  } else {
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
     parallel_flash_erase_sector(address, sectorSize);
     result = true;
   }
+#endif
 
-  if (!result) {
-    return false;
-  }
-
-  // Verify the erased sector
-  return flash_verify_erased(address, sectorSize);
+  // Only verify if erase succeeded
+  return result && flash_verify_erased(address, sectorSize);
 }
 
 /**
@@ -536,22 +563,24 @@ bool flash_erase_sector(ULONG address, ULONG sectorSize)
  */
 bool flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
 {
-  bool result;
+  bool result = false;
 
+#ifdef FLASH_SPI
+  (void)sectorSize;
   if (current_flash_type == FLASH_TYPE_SPI) {
     // For SPI, erase starting at address for bankSize
     result = spi_flash_erase_sector(address, bankSize);
-  } else {
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
     parallel_flash_erase_bank(address, sectorSize, bankSize);
     result = true;
   }
+#endif
 
-  if (!result) {
-    return false;
-  }
-
-  // Verify the erased bank
-  return flash_verify_erased(address, bankSize);
+  // Only verify if erase succeeded
+  return result && flash_verify_erased(address, bankSize);
 }
 
 /**
@@ -561,8 +590,10 @@ bool flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
  */
 void flash_cleanup(void)
 {
+#ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
     spi_flash_cleanup();
   }
+#endif
   // Parallel flash doesn't need cleanup
 }

@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef FLASH_SPI
+
 /* ===== CPU specific ===== */
 void spi_disable_burst(void);
 void spi_restore_burst(void);
@@ -36,5 +38,7 @@ void spi_flash_writeByte(ULONG address, UBYTE data);
 bool spi_flash_erase_sector(ULONG address, ULONG sectorSize);
 bool spi_flash_erase_chip(void);
 void spi_flash_cleanup(void);
+
+#endif /* FLASH_SPI */
 
 #endif // SPI_H

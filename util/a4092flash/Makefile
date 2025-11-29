@@ -19,6 +19,23 @@ CFLAGS+=-DDEVICE_VERSION=$(DEVICE_VERSION) -DDEVICE_REVISION=$(DEVICE_REVISION)
 CFLAGS+=-DGIT_REF=$(GIT_REF) -DBUILD_DATE=$(BUILD_DATE)
 endif
 
+# Flash type configuration - enable both by default, for the
+# a4092flash utility the space consumed is not critical but
+# in the driver we don't want to carry a parralel flash driver
+# if the verilog has parallel flash disabled.
+#
+# Override with: make FLASH_PARALLEL=0 or make FLASH_SPI=0
+FLASH_PARALLEL ?= 1
+FLASH_SPI ?= 1
+
+ifeq ($(FLASH_PARALLEL), 1)
+CFLAGS += -DFLASH_PARALLEL=1
+endif
+
+ifeq ($(FLASH_SPI), 1)
+CFLAGS += -DFLASH_SPI=1
+endif
+
 all:	$(PROJECT) spiutil
 
 SRCS = flash.c \

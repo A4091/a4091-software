@@ -43,6 +43,7 @@ bool flash_erase_sector(ULONG address, ULONG sectorSize);
 bool flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize);
 void flash_cleanup(void);
 
+#ifdef FLASH_PARALLEL
 /* Parallel flash specific functions (used internally) */
 void parallel_flash_unlock_sdp(void);
 bool parallel_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
@@ -51,5 +52,6 @@ void parallel_flash_writeByte(ULONG address, UBYTE data);
 bool parallel_flash_erase_chip(void);
 bool parallel_flash_erase_sector(ULONG address, ULONG sectorSize);
 bool parallel_flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize);
+#endif
 
 #endif

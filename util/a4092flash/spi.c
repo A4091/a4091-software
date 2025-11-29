@@ -1,3 +1,5 @@
+#ifdef FLASH_SPI
+
 #include <exec/execbase.h>
 #include <proto/exec.h>
 #include <string.h>
@@ -372,3 +374,5 @@ void spi_flash_cleanup(void)
 {
     cpu_restore_write_allocation();
 }
+
+#endif /* FLASH_SPI */
