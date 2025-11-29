@@ -14,12 +14,12 @@ INPUT=$1
 OUTPUT=$2
 TEMP=$( mktemp )
 
-if [ "$INPUT" == "" -o "$OUTPUT" == "" ]; then
+if [ -z "$INPUT" ] || [ -z "$OUTPUT" ]; then
   echo "Usage: $0 <input> <output>"
   exit
 fi
 
-printf 'ZX0\x01' > "$OUTPUT"
+printf 'ZX0\001' > "$OUTPUT"
 USIZE=$(wc -c < "$INPUT" | tr -d '[:space:]')
 printf "%08x" "$USIZE" | xxd -r -p >> "$OUTPUT"
 
