@@ -1,6 +1,6 @@
 
 
-VER=$(awk '/#define DEVICE_/{if (V != "") print V""$NF; else V=$NF"."}' ../version.h)
+VER=$(git describe --tags --dirty | sed -r 's/^release_//')
 DISK=a4091_$VER.adf
 THIRDPARTY=../3rdparty
 

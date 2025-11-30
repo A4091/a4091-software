@@ -362,6 +362,10 @@ lha:
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
 	rm -rf a4091_$$VER
 
+disk:
+	@echo "Building Disk image"
+	$(QUIET)$(MAKE) -s -C disk
+
 all-targets:
 	@echo "Cleaning up first"
 	$(QUIET)$(MAKE) DEVICE=A4091 distclean
@@ -382,7 +386,7 @@ all-targets:
 	$(QUIET)$(MAKE) a4091d
 	$(QUIET)$(MAKE) a4091d
 	@echo "Building Disk image"
-	$(QUIET)cd disk && $(MAKE)
+	$(QUIET)$(MAKE) disk
 	$(QUIET)$(MAKE) DEVICE=A4091 lha
 
-.PHONY: verbose all $(OBJDIR)/CDVDFS
+.PHONY: verbose all $(OBJDIR)/CDVDFS disk
