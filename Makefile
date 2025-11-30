@@ -2,9 +2,8 @@ NOW     := $(shell date '+%Y-%m-%d %H:%M:%S')
 DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
-# VERSION is 42.xx-dirty
-FULL_VERSION := $(shell git describe --tags --dirty | sed -r 's/^release_//')
-GIT_REF := "$(shell git rev-parse --short HEAD)"
+# FULL_VERSION is 42.xx-yy-dirty
+FULL_VERSION ?= $(shell git describe --tags --dirty | sed -r 's/^release_//')
 DEVICE_VERSION := $(shell echo $(FULL_VERSION) | cut -f1 -d\.)
 DEVICE_REVISION := $(shell echo $(FULL_VERSION) | cut -f2 -d\.|cut -f1 -d\-)
 
@@ -136,7 +135,6 @@ CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
 CFLAGS += -DDEVICE_REVISION=$(DEVICE_REVISION)
 CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
 CFLAGS += -DFULL_VERSION="$(FULL_VERSION)"
-CFLAGS += -DGIT_REF="$(GIT_REF)"
 
 CFLAGS_TOOLS := -Wall -Wextra -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
 CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"

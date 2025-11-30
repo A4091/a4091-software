@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
