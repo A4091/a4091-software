@@ -2,6 +2,11 @@ NOW     := $(shell date '+%Y-%m-%d %H:%M:%S')
 DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
+# VERSION is 42.xx-dirty
+FULL_VERSION := $(shell git describe --tags --dirty | sed -r 's/^release_//')
+GIT_REF := "$(shell git rev-parse --short HEAD)"
+DEVICE_VERSION := $(shell echo $(FULL_VERSION) | cut -f1 -d\.)
+DEVICE_REVISION := $(shell echo $(FULL_VERSION) | cut -f2 -d\.|cut -f1 -d\-)
 
 # Default to NCR53C770 driver:
 
@@ -127,6 +132,11 @@ CFLAGS  += -Os -fomit-frame-pointer -noixemul
 CFLAGS  += -msmall-code
 CFLAGS  += -Wall -Wextra -Wno-pointer-sign
 CFLAGS += -mcpu=68060
+CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
+CFLAGS += -DDEVICE_REVISION=$(DEVICE_REVISION)
+CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
+CFLAGS += -DFULL_VERSION="$(FULL_VERSION)"
+CFLAGS += -DGIT_REF="$(GIT_REF)"
 
 CFLAGS_TOOLS := -Wall -Wextra -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
 CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"
@@ -230,7 +240,7 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
 $(PROG): $(OBJS) $(ASMOBJS)
-	@echo Building $@
+	@echo "Building $@ v$(DEVICE_VERSION).$(DEVICE_REVISION) (v$(FULL_VERSION))"
 	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
 	@LEN="`wc -c < $@| sed 's/^ *//'`"; printf "${yellow}$(PROG) is $${LEN} bytes${end}\n"
@@ -255,8 +265,12 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/version.i: version.h
-	$(QUIET)awk '/#define DEVICE_/{print $$2" EQU "$$3}' $< > $@
+$(OBJDIR)/version.i: Makefile
+	$(QUIET)echo 'DEVICE_VERSION EQU $(DEVICE_VERSION)' > $@
+	$(QUIET)echo 'DEVICE_REVISION EQU $(DEVICE_REVISION)' >> $@
+	$(QUIET)echo 'FULL_VERSION_STR MACRO' >> $@
+	$(QUIET)echo '	dc.b "$(FULL_VERSION)"' >> $@
+	$(QUIET)echo '	ENDM' >> $@
 
 $(OBJDIR)/%.o: %.S
 	@echo Building $@

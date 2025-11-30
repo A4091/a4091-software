@@ -14,11 +14,6 @@
 #include "version.h"
 #include "port.h"
 
-#ifdef DEBUG_DEVICE
-const char * const version_str =
-    XSTR(DEVICE_VERSION)"."XSTR(DEVICE_REVISION)" built "BUILD_DATE" "BUILD_TIME;
-#endif
-
 #define DEVICE_ID_STRING XSTR(DEVNAME) " " XSTR(DEVICE_VERSION) "." \
         XSTR(DEVICE_REVISION) " (" AMIGA_DATE ")\r\n"
         /* format: "name version.revision (dd.mm.yyyy)" */

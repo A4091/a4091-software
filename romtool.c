@@ -36,7 +36,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 
-#define ROMTOOL_VERSION "v0.2 (2023-11-22)"
+#define ROMTOOL_VERSION "v0.4 (2025-11-28)"
 
 #ifndef O_BINARY
 #define O_BINARY 0

@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper";
+const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper & Stefan Reinauer";
 
 #include <stdio.h>
 #include <stdlib.h>
