@@ -21,6 +21,9 @@ jobs:
         with:
           submodules: true
 
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
+
       - name: Build all artifacts
         run: make all-targets
 
@@ -41,6 +44,9 @@ jobs:
     steps:
       - name: Checkout (required by gh-release)
         uses: actions/checkout@v4
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4

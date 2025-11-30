@@ -14,6 +14,9 @@ jobs:
       with:
         submodules: true
 
+    - name: Mark git directory as safe
+      run: git config --global --add safe.directory '*'
+
     - name: Install file utility
       run: |
         apt-get update
