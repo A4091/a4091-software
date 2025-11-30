@@ -59,6 +59,8 @@ struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
 
 #include "cpu_support.h"
 
+#define MAX_TRANSFER_SIZE (8 * 1024 * 1024)
+
 static inline uint32_t pack_nibble_word(uint8_t b)
 {
     uint32_t hi = ((uint32_t)((b >> 4) & 0x0F)) << 28; /* bits 28..31 */
@@ -481,6 +483,7 @@ static int cmd_read(uint32_t base, const char *saddr, const char *slen, const ch
 {
     uint32_t addr; size_t len;
     if (!parse_u32(saddr,&addr) || !parse_size(slen,&len)) { fprintf(stderr,"bad addr/len\n"); return 2; }
+    if (len > MAX_TRANSFER_SIZE) { fprintf(stderr,"len too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
     uint8_t *buf = (uint8_t*)malloc(len);
     if (!buf) { fprintf(stderr,"OOM\n"); return 2; }
     printf("Reading 0x%zx bytes from 0x%08lX...\n", len, (unsigned long)addr);
@@ -494,6 +497,7 @@ static int cmd_erase(uint32_t base, const char *saddr, const char *slen, bool do
 {
     uint32_t addr; size_t len;
     if (!parse_u32(saddr,&addr) || !parse_size(slen,&len)) { fprintf(stderr,"bad addr/len\n"); return 2; }
+    if (len > MAX_TRANSFER_SIZE) { fprintf(stderr,"len too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
     if (!spi_clear_block_protect(base)) { return 3; }
     printf("Erasing range 0x%08lX .. 0x%08lX in 64KiB blocks\n",
            (unsigned long)addr, (unsigned long)(uint32_t)(addr+len-1));
@@ -554,6 +558,7 @@ static int cmd_patch(uint32_t base, const char *saddr, const char *hexlist)
     uint32_t addr; if (!parse_u32(saddr,&addr)) { fprintf(stderr,"bad addr\n"); return 2; }
     uint8_t *bytes=NULL; size_t n=0;
     if (!parse_hexbytes(hexlist, &bytes, &n) || n==0) { fprintf(stderr,"bad hex bytes\n"); return 2; }
+    if (n > MAX_TRANSFER_SIZE) { fprintf(stderr,"too many bytes (max %d)\n", MAX_TRANSFER_SIZE); free(bytes); return 2; }
     if (!spi_clear_block_protect(base)) { free(bytes); return 3; }
     printf("Patching %zu byte(s) at 0x%08lX (assumes erased)...\n", n, (unsigned long)addr);
     bool ok = spi_write_buf_pagewise(base, addr, bytes, n);
