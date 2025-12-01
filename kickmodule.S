@@ -25,6 +25,7 @@
     INCLUDE "exec/libraries.i"
     INCLUDE "exec/memory.i"
     INCLUDE "lvo/exec_lib.i"
+    INCLUDE "version.i"
 
 ******* Resident Structure *******************************************
 **********************************************************************
@@ -53,11 +54,15 @@ name_string:
 
 id_string:
     IFD NCR53C710
-    dc.b    'A4000T_710_scsidisk 42.32 (15.07.2025)',0
+    dc.b    'A4000T_710_scsidisk '
     ENDIF
     IFD NCR53C770
-    dc.b    'A4000T_770_scsidisk 42.32 (15.07.2025)',0
+    dc.b    'A4000T_770_scsidisk '
     ENDIF
+    FULL_VERSION_STR
+    dc.b    ' ('
+    DATE_STR
+    dc.b    ')',0
     CNOP    0,4             ; Word-align the following code
 
 ******* Wrapper Initialization Code **********************************

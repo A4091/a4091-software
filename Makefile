@@ -251,11 +251,14 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/version.i: Makefile
+$(OBJDIR)/version.i: Makefile $(OBJDIR)
 	$(QUIET)echo 'DEVICE_VERSION EQU $(DEVICE_VERSION)' > $@
 	$(QUIET)echo 'DEVICE_REVISION EQU $(DEVICE_REVISION)' >> $@
 	$(QUIET)echo 'FULL_VERSION_STR MACRO' >> $@
 	$(QUIET)echo '	dc.b "$(FULL_VERSION)"' >> $@
+	$(QUIET)echo '	ENDM' >> $@
+	$(QUIET)echo 'DATE_STR MACRO' >> $@
+	$(QUIET)echo '	dc.b "$(ADATE)"' >> $@
 	$(QUIET)echo '	ENDM' >> $@
 
 $(OBJDIR)/%.o: %.S
@@ -307,7 +310,7 @@ $(ROM_CD): $(ROM) $(CDFS).zx0 $(OBJDIR)/romtool
 
 $(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).zx0
 	@echo Building $@
-	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(NDK_PATH) $(TARGETAFLAGS)
+	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(TARGETAFLAGS)
 
 $(OBJDIR):
 	mkdir -p $@
