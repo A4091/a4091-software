@@ -33,6 +33,7 @@
 #include <dos/dos.h>
 #include <proto/alib.h>
 #include <dos/dosextens.h>
+#include "../../ndkcompat.h"
 
 /* Use mirrored addresses for writes to work around 68030 write-allocation bug.
  * The MMU must be configured to make the write-mirror non-cacheable.
@@ -630,7 +631,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "No A4092 board found via expansion.library\n");
         return 1;
     } else {
-	printf("A4092 found at 0x%x\n", base);
+	printf("A4092 found at 0x%"PRIx32"\n", base);
     }
 
     int argi = 1;

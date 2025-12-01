@@ -36,6 +36,7 @@
 #include "spi.h"
 #endif
 #include "nibble_word.h"
+#include "../../ndkcompat.h"
 
 #ifdef FLASH_PARALLEL
 static ULONG flashbase;
@@ -209,7 +210,7 @@ void parallel_flash_writeByte(ULONG address, UBYTE data)
   parallel_flash_command(CMD_BYTE_PROGRAM);
   parallel_flash_write_byte(address, data);
   if (!parallel_flash_poll(address)) {
-      printf("Write failed at address 0x%x\n", address);
+      printf("Write failed at address 0x%"PRIx32"\n", address);
   }
   return;
 }
@@ -317,7 +318,7 @@ static inline bool parallel_flash_poll(ULONG address)
   } while ( ((val1 & (1 << 6)) != (val2 & (1 << 6))) && timeout > 0);
 
   if (timeout == 0) {
-     printf("Flash poll timeout at 0x%x!\n", address);
+     printf("Flash poll timeout at 0x%"PRIx32"!\n", address);
      return false;
   }
 
