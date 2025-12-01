@@ -132,7 +132,9 @@ static bool flash_is_supported(UBYTE manufacturer, UBYTE device, UWORD *size)
 		      devices_supported[i].vendor,
 		      devices_supported[i].device,
 		      devices_supported[i].size);
-      *size = devices_supported[i].size;
+      if (size) {
+          *size = devices_supported[i].size;
+      }
       return true;
     }
 

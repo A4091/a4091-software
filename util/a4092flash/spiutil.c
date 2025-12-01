@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <limits.h>
 
 
 #include <dos/dos.h>
@@ -399,9 +400,16 @@ static bool parse_size(const char *s, size_t *out)
     char *end = NULL;
     unsigned long v = strtoul(s, &end, 0);
     if (end==s) return false;
-    if (*end=='K' || *end=='k') { v *= 1024ul; ++end; }
-    else if (*end=='M' || *end=='m') { v *= 1024ul*1024ul; ++end; }
+    if (*end=='K' || *end=='k') {
+        if (v > ULONG_MAX / 1024ul) return false;
+        v *= 1024ul; ++end;
+    }
+    else if (*end=='M' || *end=='m') {
+        if (v > ULONG_MAX / (1024ul*1024ul)) return false;
+        v *= 1024ul*1024ul; ++end;
+    }
     if (*end!='\0') return false;
+    if (v > (unsigned long)SIZE_MAX) return false;
     *out = (size_t)v; return true;
 }
 
@@ -428,7 +436,11 @@ static void usage(const char *argv0)
 /* parse CSV of hex bytes for 'patch' */
 static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
 {
-    uint8_t *buf = (uint8_t*)malloc(strlen(s)+1);
+    const size_t max_hex_chars = MAX_TRANSFER_SIZE * 6; /* avoid unbounded input */
+    size_t slen = strlen(s);
+    if (slen == 0 || slen > max_hex_chars) return false;
+    size_t capacity = slen + 1;
+    uint8_t *buf = (uint8_t*)malloc(capacity);
     if (!buf) return false;
     size_t n=0;
     const char *p=s;
@@ -446,6 +458,7 @@ static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
             if (nibbles>2) break;
         }
         if (nibbles==0) { free(buf); return false; }
+        if (n >= MAX_TRANSFER_SIZE || n >= capacity) { free(buf); return false; }
         buf[n++] = (uint8_t)v;
         while (*p==' '||*p=='\t'||*p==',') ++p;
         if (*p=='\0') break;
@@ -479,10 +492,8 @@ static int cmd_id(uint32_t base)
     return 0;
 }
 
-static int cmd_read(uint32_t base, const char *saddr, const char *slen, const char *outfile)\
+static int cmd_read(uint32_t base, uint32_t addr, size_t len, const char *outfile)
 {
-    uint32_t addr; size_t len;
-    if (!parse_u32(saddr,&addr) || !parse_size(slen,&len)) { fprintf(stderr,"bad addr/len\n"); return 2; }
     if (len > MAX_TRANSFER_SIZE) { fprintf(stderr,"len too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
     uint8_t *buf = (uint8_t*)malloc(len);
     if (!buf) { fprintf(stderr,"OOM\n"); return 2; }
@@ -557,8 +568,7 @@ static int cmd_patch(uint32_t base, const char *saddr, const char *hexlist)
 {
     uint32_t addr; if (!parse_u32(saddr,&addr)) { fprintf(stderr,"bad addr\n"); return 2; }
     uint8_t *bytes=NULL; size_t n=0;
-    if (!parse_hexbytes(hexlist, &bytes, &n) || n==0) { fprintf(stderr,"bad hex bytes\n"); return 2; }
-    if (n > MAX_TRANSFER_SIZE) { fprintf(stderr,"too many bytes (max %d)\n", MAX_TRANSFER_SIZE); free(bytes); return 2; }
+    if (!parse_hexbytes(hexlist, &bytes, &n) || n==0) { free(bytes); fprintf(stderr,"bad hex bytes\n"); return 2; }
     if (!spi_clear_block_protect(base)) { free(bytes); return 3; }
     printf("Patching %zu byte(s) at 0x%08lX (assumes erased)...\n", n, (unsigned long)addr);
     bool ok = spi_write_buf_pagewise(base, addr, bytes, n);
@@ -624,8 +634,6 @@ int main(int argc, char **argv)
     }
 
     int argi = 1;
-    if (argi >= argc) { usage(argv[0]); return 1; }
-
     const char *cmd = argv[argi++];
 
     cpu_disable_write_allocation();
@@ -636,7 +644,10 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"read")==0) {
         if (argi+2 >= argc) { usage(argv[0]); return 1; }
-        return cmd_read(base, argv[argi], argv[argi+1], argv[argi+2]);
+        uint32_t addr; size_t len;
+        if (!parse_u32(argv[argi], &addr) || !parse_size(argv[argi+1], &len)) { fprintf(stderr,"bad addr/len\n"); return 2; }
+        if (len > MAX_TRANSFER_SIZE) { fprintf(stderr,"len too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
+        return cmd_read(base, addr, len, argv[argi+2]);
     }
     else if (strcmp(cmd,"erase")==0) {
         if (argi+1 >= argc) { usage(argv[0]); return 1; }

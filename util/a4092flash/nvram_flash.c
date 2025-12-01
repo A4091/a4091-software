@@ -163,8 +163,6 @@ int flash_write_nvram(ULONG partition_address, struct nvram_t* new_entry)
         }
         free_slot_offset = write_offset;
     }
-    
-    if (free_slot_offset == 0) return NVRAM_ERR_FULL;
 
     struct nvram_t entry_to_write;
     memcpy(entry_to_write.data, new_entry->data, sizeof(entry_to_write.data));
