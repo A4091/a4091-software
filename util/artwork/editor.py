@@ -349,7 +349,7 @@ class EditorApp:
         self._bind_key('3', lambda: self.set_tool("outline"))
         self._bind_key('4', lambda: self.set_tool("zorro"))
         # Zoom shortcuts
-        for seq in ("<Control-plus>", "<Control-KP_Add>", "<Command-=>"):
+        for seq in ("<Control-plus>", "<Control-KP_Add>", "<Control-equal>", "<Command-plus>", "<Command-equal>"):
             self.root.bind_all(seq, lambda e: self._zoom_in())
         for seq in ("<Control-minus>", "<Control-KP_Subtract>", "<Command-minus>"):
             self.root.bind_all(seq, lambda e: self._zoom_out())
