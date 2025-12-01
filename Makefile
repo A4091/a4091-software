@@ -313,9 +313,9 @@ $(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).zx0
 	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(TARGETAFLAGS)
 
 $(OBJDIR):
-	mkdir -p $@
-	mkdir -p $@/3rdparty/mounter
-	mkdir -p $@/util/a4092flash
+	$(QUIET)mkdir -p $@
+	$(QUIET)mkdir -p $@/3rdparty/mounter
+	$(QUIET)mkdir -p $@/util/a4092flash
 
 util/a4092flash/a4092flash:
 	$(QUIET)make -s -C util/a4092flash
