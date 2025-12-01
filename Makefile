@@ -232,10 +232,12 @@ $(PROG): $(OBJS) $(ASMOBJS)
 $(PROGU): $(OBJSU)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSU) -o $@
+	$(QUIET)$(STRIP) $@
 
 $(PROGD): $(OBJSD)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSD) -o $@
+	$(QUIET)$(STRIP) $@
 
 $(OBJDIR)/siop_script.out: siop_script.ss $(SC_ASM)
 	@echo Generating $@

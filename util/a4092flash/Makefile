@@ -1,5 +1,6 @@
 PROJECT=a4092flash
 CC=m68k-amigaos-gcc
+STRIP=m68k-amigaos-strip
 HOSTCC=gcc
 # Compiler flags (do not place libraries here)
 CFLAGS=-mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
@@ -49,6 +50,7 @@ SRCS = flash.c \
 a4092flash: $(SRCS) *.h
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
+	$(QUIET)$(STRIP) -s $@
 
 spiutil: spiutil.c cpu_support.c
 	@echo Building $@
