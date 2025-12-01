@@ -409,7 +409,7 @@ static bool parse_size(const char *s, size_t *out)
         v *= 1024ul*1024ul; ++end;
     }
     if (*end!='\0') return false;
-    if (v > (unsigned long)SIZE_MAX) return false;
+
     *out = (size_t)v; return true;
 }
 
