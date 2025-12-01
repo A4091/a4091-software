@@ -34,7 +34,7 @@
 #define A4091_INTPRI 30
 #define A4091_IRQ    3
 
-#if defined(DRIVER_A4091)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
 # define HW_OFFSET_REGISTERS     A4091_OFFSET_REGISTERS
 # define HW_OFFSET_SWITCHES      A4091_OFFSET_SWITCHES
 # define HW_CLOCK_FREQ           50     /* SCSI Clock = 50 MHz */

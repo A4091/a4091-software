@@ -279,7 +279,7 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
 /*
  * a4091_find
  * ----------
@@ -343,7 +343,7 @@ a4091_find(UBYTE *boardnum)
         }
     }
 
-#if DRIVER_A4092
+#if defined(DRIVER_A4092)
     UBYTE manufId,devId;
     ULONG sectorSize;
     ULONG flashSize;
@@ -439,7 +439,7 @@ a4091_validate(uint32_t dev_base)
 #define siop_scratch siop_scratcha
 #endif
     /* Create write pointer offset for 68030 cache write-allocate workaround */
-#if defined(DRIVER_A4091)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x40);
 #elif defined(DRIVER_A4000T)
     siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
@@ -512,7 +512,7 @@ init_chan(device_t self, UBYTE *boardnum)
     uint8_t dip_switches;
     int rc;
 
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     dev_base = a4091_find(boardnum);
 #else
     dev_base = a4000t_find(boardnum);

@@ -22,7 +22,7 @@ DEVNAME=a4091
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4092)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4092" -DNO_CONFIGDEV=0 -DDRIVER_A4092 -DHAVE_ROM=1
+TARGETCFLAGS := -DDRIVER_A4092 -DNCR53C710=1 -DDEVNAME="a4092" -DNO_CONFIGDEV=0 -DHAVE_ROM=1 -DFLASH_SPI=1 # -DFLASH_PARALLEL=1
 TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=a4092
 HAVE_ROM=y
@@ -40,21 +40,6 @@ DEVNAME=scsi770
 HAVE_ROM=n
 else
 $(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
-endif
-
-ifeq ($(DEVNAME),a4092)
-# Flash type configuration for A4092 - enable both by default
-# Override with: make FLASH_PARALLEL=1 or make FLASH_SPI=0
-FLASH_PARALLEL ?= 0
-FLASH_SPI ?= 1
-
-ifeq ($(FLASH_PARALLEL), 1)
-TARGETCFLAGS += -DFLASH_PARALLEL=1
-endif
-
-ifeq ($(FLASH_SPI), 1)
-TARGETCFLAGS += -DFLASH_SPI=1
-endif
 endif
 
 OBJDIR  := objs
@@ -120,6 +105,7 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS) -I. -I3rdparty/mounter
 #DEBUG  += -DDEBUG_SIOP        # Debug siop.c
 #DEBUG  += -DDEBUG_MOUNTER     # Debug mounter.c
 #DEBUG  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
+#DEBUG  += -DDEBUG_FLASH       # Debug util/a4092flash/*
 #DEBUG  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 CFLAGS  += $(DEBUG)
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)

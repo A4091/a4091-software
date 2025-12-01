@@ -53,8 +53,10 @@
 #include "mounter.h" // for Port/IOReq wrappers
 #include "a4091.h"
 
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091)
 #define BOOTMENU_NAME "A4091"
+#elif defined(DRIVER_A4092)
+#define BOOTMENU_NAME "A4092"
 #elif defined(DRIVER_A4000T)
 #define BOOTMENU_NAME "NCR53C710"
 #elif defined(DRIVER_A4000T770)
@@ -197,10 +199,14 @@ static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
 
     if (welcome) {
         SetAPen(rp,1);
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091)
         Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,32,TRUE);
-#else
+#elif defined(DRIVER_A4092)
+        Print("Welcome to your Amiga 4092 Zorro III SCSI-2 Host Controller",0,32,TRUE);
+#elif defined(DRIVER_A4000T)
         Print(" Welcome to Amiga 4000(T) SCSI Configuration & Diagnostics",0,32,TRUE);
+#elif defined(DRIVER_A4000T770)
+        Print("Welcome to Amiga 4000D UW SCSI Configuration & Diagnostics",0,32,TRUE);
 #endif
         Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,42,TRUE);
     }
@@ -336,9 +342,9 @@ static void about_page(void)
     current_page = 3;
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
     SetAPen(&screen->RastPort, 1);
-#if defined(DRIVER_A4091)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
-    Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
+    Print("Berlin and Terry Fisher for the original A4091. Driver",118,76,FALSE);
 #elif defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
     Print("Thank you to the Amiga engineers for a wonderful", 118,68,FALSE);
     Print("machine that passed the test of time. Driver",118,76,FALSE);
@@ -707,55 +713,27 @@ struct drawing {
     SHORT x, y, w, h;
 };
 
-#ifdef DRIVER_A4091
-static const struct drawing card[] = {
-    { 1, 3,   0,   0, 436, 146 }, // card
-    { 1, 3,  57, 146, 163,  10 }, // zslot
-    { 1, 2, 437,  18,   1, 155 }, // bracket
-    { 1, 2, 437,  18,  12,   2 },
-    { 2, 2, 223,  14, 190, 128 }, // silkscreen
-    { 1, 0, 270,  64,  94,  32 }, // cutout
-    { 2, 1, 420,  44,  16,  56 }, // HPDB-50 connector
-    { 2, 1, 421, 112,  15,  30 }, // DIP switches
-    { 1, 1,  12,  12,  16,  16 }, // U304 (GAL)
-    { 1, 1,  12,  38,  16,  16 }, // U203 (GAL)
-    { 1, 1,  12,  64,  16,  16 }, // U305 (GAL)
-    { 1, 1,  38,  12,  16,  16 }, // U207 (GAL)
-    { 1, 1,  38,  38,  16,  16 }, // U306 (GAL)
-    { 1, 1,  64,  12,  16,  16 }, // U205 (GAL)
-    { 1, 1,  64,  38,  16,  16 }, // U202 (GAL)
-    { 1, 1,  64,  64,  16,  16 }, // U303 (GAL)
-    { 1, 1,  88,   8,   2,   8 }, // J100 (ROM size)
-    { 1, 1,  96,  12,  18,  46 }, // U206 (ROM)
-    { 1, 1, 126,   4,  84,   8 }, // CN309 (SCSI connector)
-    { 1, 1, 132,  30,  42,  44 }, // U300 (LSI)
-    { 1, 2,  39,  82,  14,  24 }, // U301 (OSC)
-    { 1, 1,  48,  64,   5,  10 }, // U302 (74F74)
-    { 1, 1,  21, 118,  10,  16 }, // U109 (74F245)
-    { 1, 1,  62,  90,  10,  16 }, // U200 (74FCT374)
-    { 1, 1,  68, 118,  10,  16 }, // U201 (74FCT521)
-    { 1, 1,  96,  88,  10,  18 }, // U105 (74FCT543)
-    { 1, 1,  95, 118,  10,  18 }, // U100 (74FCT543)
-    { 1, 1, 121,  88,  10,  18 }, // U108 (74FCT543)
-    { 1, 1, 121, 118,  10,  18 }, // U101 (74FCT543)
-    { 1, 1, 140,  88,  10,  18 }, // U106 (74FCT543)
-    { 1, 1, 140, 118,  10,  18 }, // U102 (74FCT543)
-    { 1, 1, 160,  90,  10,  16 }, // U204 (74FCT374)
-    { 1, 1, 160, 118,  10,  18 }, // U107 (74FCT543)
-    { 1, 1, 184,  90,  10,  16 }, // U213 (74F244)
-    { 1, 1, 180, 120,  10,  16 }, // U103 (74F245)
-    { 1, 1, 208,  90,   6,  10 }, // U307 (74F07)
-    { 1, 1, 191,  28,   8,  12 }, // U311 (upper terminator)
-    { 1, 1, 189,  48,   8,  12 }, // U310 (lower terminator)
-    { 1, 2, 196, 116,   4,  24 }, // power connector
-    { 1, 2, 201, 118,   0,  20 },
-    { 3, 2,  57, 146, 163,  10 }  // zorro pins
-};
+#if defined(DRIVER_A4091)
+#include "util/artwork/assets/a4091.h"
+#define ART_X_OFFSET 103
+#define ART_Y_OFFSET 50
 
+#define HAVE_ARTWORK
+#elif defined(DRIVER_A4092)
+#include "util/artwork/assets/a4092.h"
+#define ART_X_OFFSET 206
+#define ART_Y_OFFSET 50
+
+#define HAVE_ARTWORK
+#else
+#undef HAVE_ARTWORK
+#endif
+
+#ifdef HAVE_ARTWORK
 static void draw_card(const struct drawing c[], int length)
 {
     struct RastPort *rp = &screen->RastPort;
-    int x=103, y=50, i,j;
+    int x=ART_X_OFFSET, y=ART_Y_OFFSET, i,j;
 
     for (i=0; i<length; i++) {
         struct drawing d = c[i];

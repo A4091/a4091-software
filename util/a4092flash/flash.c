@@ -17,7 +17,7 @@
  */
 
 #ifdef _KERNEL
-#ifdef DEBUG_ATTACH
+#ifdef DEBUG_FLASH
 #define USE_SERIAL_OUTPUT
 #endif
 #include "port.h"

@@ -1,5 +1,12 @@
 #ifdef FLASH_SPI
 
+#ifdef _KERNEL
+#ifdef DEBUG_FLASH
+#define USE_SERIAL_OUTPUT
+#endif
+#include "port.h"
+#endif
+
 #include <exec/execbase.h>
 #include <proto/exec.h>
 #include <string.h>
@@ -146,6 +153,7 @@ bool spi_clear_block_protect(uint32_t base)
     uint8_t verify1 = spi_read_sr1(base);
     uint8_t verify2 = spi_read_sr2(base);
     if (verify1 & SR1_BP_MASK) {
+	(void)verify2;
         printf("ERROR: block protection bits still set (SR1=%02X SR2=%02X). Check WP# pin.\n", verify1, verify2);
         return false;
     }
@@ -310,6 +318,7 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
             break;
     }
 
+    (void)vendor; (void)device;
     printf("Flash part: %s %s (%lu KB)\n", vendor, device, (unsigned long)(spi_flash_size / 1024));
 
     return true;
