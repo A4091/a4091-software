@@ -342,10 +342,10 @@ kickstart:
 $(ROM_DB):
 
 lha:
-	$(QUIET)VER=$$(awk '/#define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
+	$(QUIET)VER=$(FULL_VERSION) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
-	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_DB) $(ROM_ND) $(ROM_CD) $(OBJDIR)/romtool a4091_$$VER ;\
+	cp -p *.device *.rom *.kick $(PROGU) $(PROGD)  util/a4092flash/a4092flash $(OBJDIR)/romtool a4091_$$VER ;\
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
@@ -357,25 +357,33 @@ disk:
 
 all-targets:
 	@echo "Cleaning up first"
-	$(QUIET)$(MAKE) DEVICE=A4091 distclean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 distclean
 	@echo "Building A4091 debug image"
-	$(QUIET)$(MAKE) DEVICE=A4091 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
-	$(QUIET)mv $(ROM) $(ROM_DB)
-	$(QUIET)$(MAKE) DEVICE=A4091 clean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv a4091.rom a4091_debug.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4091 clean
 	@echo "Building A4091 driverless, normal and cdboot image"
-	$(QUIET)$(MAKE) DEVICE=A4091 $(ROM_CD)
-	$(QUIET)$(MAKE) DEVICE=A4091 clean
-	@echo "Building scsi710.device"
-	$(QUIET)$(MAKE) DEVICE=A4000T scsi710.device
-	$(QUIET)$(MAKE) DEVICE=A4000T clean
-	@echo "Building scsi770.device"
-	$(QUIET)$(MAKE) DEVICE=A4000T770 scsi770.device
-	$(QUIET)$(MAKE) DEVICE=A4000T770 clean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 a4091_cdfs.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4091 clean
+	@echo "Building A4092 debug image"
+	$(QUIET)$(MAKE) -s DEVICE=A4092 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv a4092.rom a4092_debug.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4092 clean
+	@echo "Building A4092 driverless, normal and cdboot image"
+	$(QUIET)$(MAKE) -s DEVICE=A4092 a4092_cdfs.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4092 clean
+	@echo "Building scsi710.device and scsi710.kick"
+	$(QUIET)$(MAKE) -s DEVICE=A4000T scsi710.kick
+	$(QUIET)$(MAKE) -s DEVICE=A4000T clean
+	@echo "Building scsi770.device and scsi770.kick"
+	$(QUIET)$(MAKE) -s DEVICE=A4000T770 scsi770.kick
+	$(QUIET)$(MAKE) -s DEVICE=A4000T770 clean
 	@echo "Building utilities"
-	$(QUIET)$(MAKE) a4091d
-	$(QUIET)$(MAKE) a4091d
+	$(QUIET)$(MAKE) -s a4091
+	$(QUIET)$(MAKE) -s a4091d
+	$(QUIET)$(MAKE) -s util/a4092flash/a4092flash
 	@echo "Building Disk image"
-	$(QUIET)$(MAKE) disk
-	$(QUIET)$(MAKE) DEVICE=A4091 lha
+	$(QUIET)$(MAKE) -s disk
+	$(QUIET)$(MAKE) -s DEVICE=A4091 lha
 
 .PHONY: verbose all $(OBJDIR)/CDVDFS disk
