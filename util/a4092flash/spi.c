@@ -309,7 +309,9 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     switch (mfg) {
         case 0xEF:
             vendor = "Winbond";
-            if (type == 0x40 && cap == 0x17) device = "W25Q64";
+            if (type == 0x30 && cap == 0x13) device = "W25X40";
+            else if (type == 0x40 && cap == 0x13) device = "W25Q40";
+            else if (type == 0x40 && cap == 0x17) device = "W25Q64";
             else if (type == 0x40 && cap == 0x18) device = "W25Q128";
             break;
         case 0xC2:

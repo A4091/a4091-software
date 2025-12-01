@@ -482,6 +482,12 @@ static int cmd_id(uint32_t base)
 	    break;
     }
     switch (type << 8 | cap) {
+    case 0x3013:
+	    printf("W25X40");
+	    break;
+    case 0x4013:
+	    printf("W25Q40");
+	    break;
     case 0x4017:
 	    printf("W25Q64");
 	    break;
