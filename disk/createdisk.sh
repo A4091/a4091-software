@@ -9,6 +9,8 @@ test ! -x $THIRDPARTY/bffs/dist/bffs16_src.lha || ( echo "Initialize submodules.
 
 echo "Building devtest..."
 make -s -C $THIRDPARTY/devtest || exit 1
+m68k-amigaos-strip -s $THIRDPARTY/devtest/devtest
+
 echo "Extracting rdb..."
 lha xiq2f $THIRDPARTY/bffs/dist/bffs16_src.lha bffs_1.6/bin/rdb
 
@@ -30,6 +32,12 @@ xdftool $DISK write ../a4091.device Devs/a4091.device
 fi
 if [ -r ../a4092.device ]; then
 xdftool $DISK write ../a4092.device Devs/a4092.device
+fi
+if [ -r ../scsi710.device ]; then
+xdftool $DISK write ../scsi710.device Devs/scsi710.device
+fi
+if [ -r ../scsi770.device ]; then
+xdftool $DISK write ../scsi770.device Devs/scsi770.device
 fi
 if [ -r ../a4092_cdfs.rom ]; then
 xdftool $DISK makedir ROMs
