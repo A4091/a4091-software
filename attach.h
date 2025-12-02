@@ -14,6 +14,10 @@
 #ifndef _ATTACH_H
 #define _ATTACH_H
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#include "util/a4092flash/nvram_flash.h"
+#endif
+
 struct scsipi_periph;
 struct sio_softc;
 struct ExecBase;
@@ -49,6 +53,14 @@ typedef struct {
     /* quick interrupt support */
     ULONG                quick_vec_num;
 #endif
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    /* Cached NVRAM and dirty flags (A4092 only) */
+    struct {
+        struct nvram_t nv;           /* On-flash layout */
+        uint8_t        os_dirty;     /* os_flags dirty */
+        uint8_t        switch_dirty; /* switch_flags dirty */
+    } nvram;
+#endif
 } a4091_save_t;
 
 extern a4091_save_t *asave;
@@ -65,4 +77,3 @@ void decode_unit_number(ULONG unit_num, int *target, int *lun);
 ULONG calculate_unit_number(int target, int lun);
 
 #endif /* _ATTACH_H */
-

@@ -343,17 +343,20 @@ a4091_find(UBYTE *boardnum)
         }
     }
 
-#if defined(DRIVER_A4092)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
     UBYTE manufId,devId;
     ULONG sectorSize;
     ULONG flashSize;
-    struct nvram_t nvram;
 
     if (flash_init(&manufId,&devId,(void *)as_addr,&flashSize,&sectorSize)) {
-        if(!flash_read_nvram(NVRAM_OFFSET, &nvram)) {
+        if(!flash_read_nvram(NVRAM_OFFSET, &asave->nvram.nv)) {
+            /* Initialize hardware DIP register from cached NVRAM */
             *(volatile uint8_t *)(as_addr + HW_OFFSET_SWITCHES) =
-		    nvram.settings.switch_flags;
-	}
+                asave->nvram.nv.settings.switch_flags;
+        }
+        /* Start clean */
+        asave->nvram.os_dirty = 0;
+        asave->nvram.switch_dirty = 0;
     }
 #endif
 
