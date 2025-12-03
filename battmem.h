@@ -17,6 +17,14 @@
 int Load_BattMem(void);
 int Save_BattMem(void);
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+
+/* Commit staged NVRAM changes (A4092 only). Returns:
+ *  1 if wrote new entry, 0 if nothing to do, <0 on error. */
+int Nvram_CommitDirty(void);
+
+#else
+
 #define BATTMEM_A4091_CDROM_BOOT_ADDR 72
 #define BATTMEM_A4091_CDROM_BOOT_LEN   1
 #define BATTMEM_A4091_IGNORE_LAST_ADDR 73
@@ -24,4 +32,5 @@ int Save_BattMem(void);
 #define BATTMEM_A4091_QUICK_INT_ADDR   74
 #define BATTMEM_A4091_QUICK_INT_LEN    1
 
+#endif
 #endif
