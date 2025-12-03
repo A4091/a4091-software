@@ -22,13 +22,22 @@ fi
 INPUT=$1
 OUTPUT=$2
 
+# Check if input file exists
+if [ ! -f "$INPUT" ]; then
+  echo "Error: Input file '$INPUT' does not exist"
+  exit 1
+fi
+
 # Create temp file and ensure cleanup on exit
 TEMP=$(mktemp)
 trap 'rm -f "$TEMP"' EXIT
 
 # Function to write a 32-bit integer as big-endian binary
 write_be32() {
-    echo "$1" | awk '{printf "%c%c%c%c", int($1/16777216)%256, int($1/65536)%256, int($1/256)%256, $1%256}'
+    printf "\\$(printf '%03o' $((($1 >> 24) & 0xff)))"
+    printf "\\$(printf '%03o' $((($1 >> 16) & 0xff)))"
+    printf "\\$(printf '%03o' $((($1 >> 8) & 0xff)))"
+    printf "\\$(printf '%03o' $(($1 & 0xff)))"
 }
 
 # Function to get the size of a file in bytes
