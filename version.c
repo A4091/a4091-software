@@ -14,7 +14,7 @@
 #include "version.h"
 #include "port.h"
 
-#define DEVICE_ID_STRING XSTR(DEVNAME) " " XSTR(DEVICE_VERSION) "." \
-        XSTR(DEVICE_REVISION) " (" AMIGA_DATE ")\r\n"
+#define DEVICE_ID_STRING XSTR(DEVNAME) " " XSTR(FULL_VERSION) \
+        " (" AMIGA_DATE ")\r\n"
         /* format: "name version.revision (dd.mm.yyyy)" */
 const char device_id_string[] = DEVICE_ID_STRING;
