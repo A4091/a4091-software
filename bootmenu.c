@@ -223,13 +223,37 @@ static void draw_dipswitch(UWORD x, UWORD y, UWORD off)
 {
     struct RastPort *rp = &screen->RastPort;
 
+    /* Draw gray box (recessed: black top/left, white bottom/right) */
+    SetAPen(rp, 0);
+    RectFill(rp, x+10, y, x+52, y+8);
+    /* Gray box - black top edge */
+    SetAPen(rp, 1);
+    Move(rp, x+10, y); Draw(rp, x+52, y);
+    /* Gray box - black left edge */
+    Move(rp, x+10, y); Draw(rp, x+10, y+8);
+    /* Gray box - white bottom edge */
     SetAPen(rp, 2);
-    SetOPen(rp, 1);
-    RectFill(rp, x+10, y, x+52,y+8);
+    Move(rp, x+10, y+8); Draw(rp, x+52, y+8);
+    /* Gray box - white right edge */
+    Move(rp, x+52, y); Draw(rp, x+52, y+8);
+
+    /* Position slider based on switch state */
     if (!off)
         x+= 20;
-    SetAPen(rp, 0);
-    RectFill(rp, x+12, y+2, x+30,y+6);
+
+    /* White slider (raised: white top/left, black bottom/right) */
+    SetAPen(rp, 2);
+    RectFill(rp, x+12, y+2, x+30, y+6);
+    /* White slider - white top edge */
+    SetAPen(rp, 2);
+    Move(rp, x+12, y+2); Draw(rp, x+30, y+2);
+    /* White slider - white left edge */
+    Move(rp, x+12, y+2); Draw(rp, x+12, y+6);
+    /* White slider - black bottom edge */
+    SetAPen(rp, 1);
+    Move(rp, x+12, y+6); Draw(rp, x+30, y+6);
+    /* White slider - black right edge */
+    Move(rp, x+30, y+2); Draw(rp, x+30, y+6);
 }
 
 static char *dipswitch_text(int val, int num)
@@ -283,16 +307,26 @@ static void draw_dipswitches(UWORD x, UWORD y)
     Move(rp, x+16, y);
     Text(rp, "Off/On",6);
 
-    SetAPen(rp, 3);    /* Set A pen color. */
-    SetOPen(rp, 1);
+    /* Draw red box with raised 3D border (white top/left, black bottom/right) */
+    SetAPen(rp, 3);
     RectFill(rp, x, y+2, x+70, y+90);
+    /* Raised - white top edge */
+    SetAPen(rp, 2);
+    Move(rp, x, y+2); Draw(rp, x+70, y+2);
+    /* Raised - white left edge */
+    Move(rp, x, y+2); Draw(rp, x, y+90);
+    /* Raised - black bottom edge */
+    SetAPen(rp, 1);
+    Move(rp, x, y+90); Draw(rp, x+70, y+90);
+    /* Raised - black right edge */
+    Move(rp, x+70, y+2); Draw(rp, x+70, y+90);
 
     for (i=0; i<8; i++) {
         draw_dipswitch(x+8, y+7+(i*10), dip_switches&BIT(7-i));
     }
 
+    SetAPen(rp, 1);
     for (i=0; i<8; i++) {
-        SetAPen(rp, 1);
         SetBPen(rp, 3);
         Move(rp, x+6,y+(i*10)+14);
         num[0] = '8' - i;
@@ -304,8 +338,6 @@ static void draw_dipswitches(UWORD x, UWORD y)
     }
 
     hostid[9]='0'+(dip_switches&7);
-    SetAPen(rp, 1);
-    SetBPen(rp, 0);
     Move(rp, x+280, y+64);
     Text(rp, (char *)hostid,10);
     BNDRYOFF(rp);
