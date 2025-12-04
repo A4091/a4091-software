@@ -128,7 +128,7 @@ static void init_bootmenu(void)
         TAG_DONE);
 
     window = OpenWindowTags(NULL,
-        WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
+        WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
         WA_CustomScreen,  screen,
         WA_Flags,         (WFLG_NOCAREREFRESH | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP),
         TAG_DONE);
@@ -311,6 +311,39 @@ static void draw_dipswitches(UWORD x, UWORD y)
     BNDRYOFF(rp);
 }
 
+/* Redraw only one DIP switch row and its description to avoid flicker */
+static void redraw_dip_row(UWORD base_x, UWORD base_y, int row, UBYTE dip_switches)
+{
+    struct RastPort *rp = &screen->RastPort;
+    if (row < 0 || row > 7) return;
+
+    /* Redraw the switch slider */
+    draw_dipswitch(base_x + 8, base_y + 7 + (row * 10), dip_switches & BIT(7 - row));
+
+    /* Redraw the textual description on the right side */
+    SetAPen(rp, 1);
+    SetBPen(rp, 0);
+    Move(rp, base_x + 82, base_y + (row * 10) + 14);
+    /* Clear previous text by printing spaces over a safe width */
+    Text(rp, "                        ", 24);
+    Move(rp, base_x + 82, base_y + (row * 10) + 14);
+    char *ret = dipswitch_text(dip_switches & BIT(7 - row), 8 - row);
+    Text(rp, (char *)ret, strlen((char *)ret));
+}
+
+static void redraw_host_id(UWORD base_x, UWORD base_y, UBYTE dip_switches)
+{
+    struct RastPort *rp = &screen->RastPort;
+    char hostid[] = "Host ID: 0";
+    hostid[9] = '0' + (dip_switches & 7);
+    SetAPen(rp, 1);
+    SetBPen(rp, 0);
+    Move(rp, base_x + 280, base_y + 64);
+    Text(rp, "            ", 12);
+    Move(rp, base_x + 280, base_y + 64);
+    Text(rp, hostid, 10);
+}
+
 static void dipswitch_page(void)
 {
     struct NewGadget ng;
@@ -334,6 +367,23 @@ static void dipswitch_page(void)
     draw_dipswitches(120,65);
 
     page_footer();
+}
+
+static void show_toast(STRPTR text)
+{
+    /* Brief on-screen message near the bottom; ~1s */
+    struct RastPort *rp = &screen->RastPort;
+    UWORD len = strlen(text);
+    UWORD x = (640 - len * 8) / 2, y = 190;
+    SetAPen(rp, 1);
+    SetBPen(rp, 0);
+    Move(rp, x, y);
+    Text(rp, text, len);
+    /* Wait ~1 second */
+    for (int i = 0; i < 60; i++) WaitTOF();
+    /* Clear */
+    Move(rp, x, y);
+    Text(rp, "                          ", 26);
 }
 
 static void about_page(void)
@@ -828,6 +878,8 @@ static void event_loop(void)
             class = msg->Class;
             icode = msg->Code;
             gad = msg->IAddress;
+            WORD mx = msg->MouseX;
+            WORD my = msg->MouseY;
             GT_ReplyIMsg(msg);
             switch (class) {
             case IDCMP_RAWKEY:
@@ -861,6 +913,22 @@ static void event_loop(void)
                         // We're on a sub-page, so Back to main
                         main_page();
                     }
+                    break;
+                case '1': case '2': case '3': case '4':
+                case '5': case '6': case '7': case '8':
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+                    if (current_page == 2) { // DIP switches page
+                        int sw = icode - '0'; // 1..8
+                        int row = 8 - sw;     // map to row 0..7
+                        UBYTE dips = get_dip_switches();
+                        UBYTE new_dips = dips ^ BIT(7 - row);
+                        *(volatile uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES) = new_dips;
+                        asave->nvram.nv.settings.switch_flags = new_dips;
+                        asave->nvram.switch_dirty = 1;
+                        redraw_dip_row(120, 65, row, new_dips);
+                        if (row >= 5) redraw_host_id(120, 65, new_dips);
+                    }
+#endif
                     break;
                 case 'c':
                 case 'C':
@@ -913,6 +981,34 @@ static void event_loop(void)
                     }
                     break;
                 }
+                break;
+            case IDCMP_MOUSEBUTTONS:
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+                if (current_page == 2 && icode == SELECTDOWN) {
+                    /* Check if click is within DIP switch area */
+                    UWORD bx = 120, by = 65;
+                    WORD relx = mx - bx;
+                    WORD rely = my - by;
+                    if (relx >= 0 && relx <= 200 && rely >= 0 && rely <= 100) {
+                        /* Compute row based on y; rows every 10 px starting at +7 */
+                        if (rely >= 7) {
+                            int row = (rely - 7) / 10; // 0..7
+                            if (row >= 0 && row < 8) {
+                                /* Restrict x to switch slider region roughly */
+                                if (relx >= 16 && relx <= 90) {
+                                    UBYTE dips = get_dip_switches();
+                                    UBYTE new_dips = dips ^ BIT(7 - row);
+                                    *(volatile uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES) = new_dips;
+                                    asave->nvram.nv.settings.switch_flags = new_dips;
+                                    asave->nvram.switch_dirty = 1;
+                                    redraw_dip_row(bx, by, row, new_dips);
+                                    if (row >= 5) redraw_host_id(bx, by, new_dips);
+                                }
+                            }
+                        }
+                    }
+                }
+#endif
                 break;
             case IDCMP_GADGETUP:
                 switch (gad->GadgetID)
@@ -1015,9 +1111,16 @@ void boot_menu(void)
     init_bootmenu();
     main_page();
     event_loop();
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    {
+        int committed = Nvram_CommitDirty();
+        if (committed > 0) {
+            show_toast("Settings saved");
+        }
+    }
+#endif
     cleanup_bootmenu();
     printf("Bootmenu: exit\n");
     ColdReboot();
     return;
 }
-
