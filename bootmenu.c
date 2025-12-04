@@ -430,20 +430,20 @@ static void about_page(void)
     SetAPen(&screen->RastPort, 1);
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
-    Print("Berlin and Terry Fisher for the original A4091. Driver",118,76,FALSE);
+    Print("Berlin and Terry Fisher for the original A4091.",118,77,FALSE);
 #elif defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
     Print("Thank you to the Amiga engineers for a wonderful", 118,68,FALSE);
-    Print("machine that passed the test of time. Driver",118,76,FALSE);
+    Print("machine that passed the test of time.",118,77,FALSE);
 #endif
+    Print("Driver based on the NetBSD/Amiga SCSI subsystem and",118,86,FALSE);
 #if defined(NCR53C710)
-    Print("based on the NetBSD/Amiga SCSI subsystem and 53C710",118,84,FALSE);
+    Print("NCR53C710 code by many fine contributors over the",118,95,FALSE);
 #elif defined(NCR53C770)
-    Print("based on the NetBSD/Amiga SCSI subsystem and 53C770",118,84,FALSE);
+    Print("NCR53C770 code by many fine contributors over the",118,95,FALSE);
 #endif
-    Print("code by many fine contributors over the years.",118,92,FALSE);
-    Print("Original RDB mounter by Toni Wilen.",118,100,FALSE);
-    Print("Only Amiga makes it possible.", 204,122,FALSE);
-    Print((char *)device_id_string, 118,155,FALSE);
+    Print("years. Original RDB mounter by Toni Wilen.",118,104,FALSE);
+    Print("Only Amiga makes it possible.", 204,127,FALSE);
+    Print((char *)device_id_string, 100,178,FALSE);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
