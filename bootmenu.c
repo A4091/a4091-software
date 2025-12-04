@@ -343,6 +343,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     BNDRYOFF(rp);
 }
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
 /* Redraw only one DIP switch row and its description to avoid flicker */
 static void redraw_dip_row(UWORD base_x, UWORD base_y, int row, UBYTE dip_switches)
 {
@@ -375,6 +376,7 @@ static void redraw_host_id(UWORD base_x, UWORD base_y, UBYTE dip_switches)
     Move(rp, base_x + 280, base_y + 64);
     Text(rp, hostid, 10);
 }
+#endif
 
 static void dipswitch_page(void)
 {
@@ -401,6 +403,7 @@ static void dipswitch_page(void)
     page_footer();
 }
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
 static void show_toast(STRPTR text)
 {
     /* Brief on-screen message near the bottom; ~1s */
@@ -417,6 +420,7 @@ static void show_toast(STRPTR text)
     Move(rp, x, y);
     Text(rp, "                          ", 26);
 }
+#endif
 
 static void about_page(void)
 {
@@ -910,8 +914,10 @@ static void event_loop(void)
             class = msg->Class;
             icode = msg->Code;
             gad = msg->IAddress;
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
             WORD mx = msg->MouseX;
             WORD my = msg->MouseY;
+#endif
             GT_ReplyIMsg(msg);
             switch (class) {
             case IDCMP_RAWKEY:
