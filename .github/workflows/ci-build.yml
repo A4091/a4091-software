@@ -28,7 +28,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
           name: Driver (AutoBoot ROM)
-          path: ${{ github.workspace }}/a4091*.rom
+          path: ${{ github.workspace }}/*.rom
+
+    - name: Archive CI artifacts (Kickstart Modules)
+      uses: actions/upload-artifact@v4
+      with:
+          name: Driver (Kickstart Modules)
+          path: ${{ github.workspace }}/*.kick
 
     - name: Archive CI artifacts (DEVICES)
       uses: actions/upload-artifact@v4

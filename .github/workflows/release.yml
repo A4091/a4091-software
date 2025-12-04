@@ -33,7 +33,8 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            a4091*.rom
+            *.rom
+            *.kick
             *.device
             disk/a4091_*.adf
           if-no-files-found: error
@@ -61,5 +62,6 @@ jobs:
           draft: true
           files: |
             artifacts/*.rom
+            artifacts/*.kick
             artifacts/*.device
             artifacts/**/*.adf
