@@ -437,7 +437,7 @@ static void usage(const char *argv0)
 /* parse CSV of hex bytes for 'patch' */
 static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
 {
-    const size_t max_hex_chars = MAX_TRANSFER_SIZE * 6; /* avoid unbounded input */
+    const size_t max_hex_chars = 4096; /* avoid unbounded input */
     size_t slen = strlen(s);
     if (slen == 0 || slen > max_hex_chars) return false;
     size_t capacity = slen + 1;
