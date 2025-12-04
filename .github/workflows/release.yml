@@ -35,7 +35,7 @@ jobs:
           path: |
             a4091*.rom
             *.device
-            disk/a4091_??.??.adf
+            disk/a4091_*.adf
           if-no-files-found: error
 
   release:
