@@ -773,10 +773,12 @@ static void debug_page(void)
 
     ng.ng_TopEdge    = 108;
 #endif
+#if 0
     ng.ng_GadgetText = "~Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GA_Disabled, TRUE, TAG_DONE);
+#endif
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
