@@ -384,7 +384,7 @@ static void dipswitch_page(void)
     current_page = 2;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - DIP switches", TRUE);
 
-    SetRGB4(&screen->ViewPort,3,11,8,8);
+    SetRGB4(&screen->ViewPort,3,11,6,6);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -409,8 +409,8 @@ static void show_toast(STRPTR text)
     /* Brief on-screen message near the bottom; ~1s */
     struct RastPort *rp = &screen->RastPort;
     UWORD len = strlen(text);
-    UWORD x = (640 - len * 8) / 2, y = 190;
-    SetAPen(rp, 1);
+    UWORD x = (640 - len * 8) / 2, y = 191;
+    SetAPen(rp, 2);
     SetBPen(rp, 0);
     Move(rp, x, y);
     Text(rp, text, len);
@@ -1155,8 +1155,11 @@ void boot_menu(void)
     {
         int committed = Nvram_CommitDirty();
         if (committed > 0) {
-            show_toast("Settings saved");
+            show_toast("Settings saved.");
         }
+        if (committed < 0) {
+            show_toast("Failure to save settings.");
+	}
     }
 #endif
     cleanup_bootmenu();
