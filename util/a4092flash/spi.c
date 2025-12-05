@@ -306,17 +306,27 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     const char *vendor = "Unknown";
     const char *device = "Unknown";
 
+    uint16_t did;
+    did = (type << 8) | cap;
+
     switch (mfg) {
         case 0xEF:
             vendor = "Winbond";
-            if (type == 0x30 && cap == 0x13) device = "W25X40";
-            else if (type == 0x40 && cap == 0x13) device = "W25Q40";
-            else if (type == 0x40 && cap == 0x17) device = "W25Q64";
-            else if (type == 0x40 && cap == 0x18) device = "W25Q128";
+	    switch (did) {
+                case 0x3011: device = "W25X10"; break;
+                case 0x3012: device = "W25X20"; break;
+                case 0x3013: device = "W25X40"; break;
+                case 0x3014: device = "W25X80"; break;
+                case 0x4013: device = "W25Q40"; break;
+                case 0x4017: device = "W25Q64"; break;
+                case 0x4018: device = "W25Q128"; break;
+            }
             break;
         case 0xC2:
             vendor = "Macronix";
-            if (type == 0x20 && cap == 0x17) device = "MX25L6405";
+	    switch (did) {
+                case 0x2017: device = "MX25L6405"; break;
+            }
             break;
     }
 
