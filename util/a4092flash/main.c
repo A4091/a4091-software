@@ -37,6 +37,9 @@
 
 #define PROD_ID_A4092  84
 
+#define A4091_ROM_MAGIC1 0xFFFF5352
+#define A4091_ROM_MAGIC2 0x2F434448
+
 const char ver[] = VERSION_STRING;
 
 struct Library *DosBase;
@@ -247,7 +250,7 @@ int main(int argc, char *argv[])
   ULONG romSize    = 0;
 
   if (DosBase == NULL) {
-    return(rc);
+    return(20);
   }
 
   printf("\n%s\n\n", VERSION);
@@ -345,17 +348,29 @@ int main(int argc, char *argv[])
           ULONG bankSize = 65536; // hardcode A4091/A4092 image size for now
           if (config->eraseFlash) {
             printf("Erasing whole flash.\n");
-            flash_erase_chip();
+            if (!flash_erase_chip()) {
+              fprintf(stderr, "ERROR: Flash erase/verify failed!\n");
+              rc = 5;
+              goto exit;
+            }
           }
 
           if (config->writeFlash && config->scsi_rom_filename) {
             if (config->eraseFlash == false) {
               if (sectorSize > 0) {
                 printf("Erasing flash bank.\n");
-                flash_erase_bank(sectorSize, bankSize);
+                if (!flash_erase_bank(0, sectorSize, bankSize)) {
+                  fprintf(stderr, "ERROR: Flash bank erase/verify failed!\n");
+                  rc = 5;
+                  goto exit;
+                }
               } else {
                 printf("Erasing whole flash.\n");
-                flash_erase_chip();
+                if (!flash_erase_chip()) {
+                  fprintf(stderr, "ERROR: Flash erase/verify failed!\n");
+                  rc = 5;
+                  goto exit;
+                }
               }
             }
             printf("Writing A4092 ROM image to flash memory.\n");
@@ -419,6 +434,7 @@ int main(int argc, char *argv[])
   }
 
 exit:
+  flash_cleanup();
   if (driver_buffer)  FreeMem(driver_buffer,romSize);
   if (config)         FreeMem(config,sizeof(struct Config));
   if (ExpansionBase)  CloseLibrary((struct Library *)ExpansionBase);
@@ -598,61 +614,79 @@ BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *des
   return true;
 }
 
-static int find_a409x_version(const unsigned char *buffer, ULONG romSize) {
-    const char *needle = "A4091 scsidisk";
-    size_t needle_len = strlen(needle);
-
-    // We can only search up to (romSize - needle_len)
-    for (size_t i = 0; i <= romSize - needle_len; i++) {
-        if (memcmp(buffer + i, needle, needle_len) == 0) {
-            return (int)i;
-        }
-    }
-    return -1; // Not found
-}
-
 /**
  * probeFlash()
  *
  * Analyze flash content
  *
- * @param size number of bytes to write
+ * @param romSize total flash size in bytes
  * @returns true on success
 */
 static BOOL probeFlash(ULONG romSize)
 {
   BOOL ret = true;
-  char * buffer;
+  const ULONG BANK_SIZE = 0x10000; // 64KB
+  const ULONG VERSION_SEARCH_SIZE = 4096; // First 4KB contains version string
+  const char *needle = "A4091 scsidisk";
+  size_t needle_len = strlen(needle);
 
   if (romSize == 0) return false;
-  buffer = AllocMem(romSize, 0);
 
-  if (buffer) {
-    fprintf(stdout, "Reading Flash...\n");
-    int i;
-    for (i=0; i<romSize; i++) {
-      buffer[i] = flash_readByte(i);
+  // Check for 64KB image first
+  char magic_buf[8];
+  for (int i = 0; i < 8; i++) {
+    magic_buf[i] = flash_readByte(BANK_SIZE - 8 + i);
+  }
+
+  ULONG magic1, magic2;
+  memcpy(&magic1, magic_buf, 4);
+  memcpy(&magic2, magic_buf + 4, 4);
+
+  if (magic1 == A4091_ROM_MAGIC1 && magic2 == A4091_ROM_MAGIC2) {
+    printf("Found 64KB A4091/A4092 image.\n");
+  } else {
+    // Check for 32KB image
+    for (int i = 0; i < 8; i++) {
+      magic_buf[i] = flash_readByte((BANK_SIZE / 2) - 8 + i);
     }
-    
-    ULONG magic1,magic2;
-    memcpy (&magic1, buffer+0x10000-8, 4);
-    memcpy (&magic2, buffer+0x10000-4, 4);
-    if (magic1 == 0xFFFF5352 && magic2 == 0x2F434448) {
-      printf("Found 64KB A4091/A4092 image.\n");
+
+    memcpy(&magic1, magic_buf, 4);
+    memcpy(&magic2, magic_buf + 4, 4);
+
+    if (magic1 == A4091_ROM_MAGIC1 && magic2 == A4091_ROM_MAGIC2) {
+      printf("Found 32KB A4091/A4092 image.\n");
     } else {
       printf("Not a standard image.\n");
     }
+  }
 
-    int offset = find_a409x_version(buffer, romSize);
-    if (offset > 0) {
+  // Search for version string in first 4KB only
+  ULONG search_size = (romSize < VERSION_SEARCH_SIZE) ? romSize : VERSION_SEARCH_SIZE;
+
+  char *buffer = AllocMem(search_size, 0);
+  if (buffer) {
+    for (int i = 0; i < search_size; i++) {
+      buffer[i] = flash_readByte(i);
+    }
+
+    // Search for version string
+    int offset = -1;
+    for (size_t i = 0; i <= search_size - needle_len; i++) {
+      if (memcmp(buffer + i, needle, needle_len) == 0) {
+        offset = (int)i;
+        break;
+      }
+    }
+
+    if (offset >= 0) {
       printf("Version: %s\n", buffer + offset);
     } else {
       printf("Could not determine version.\n");
     }
 
-    FreeMem(buffer, romSize);
+    FreeMem(buffer, search_size);
   } else {
-    ret=false;
+    ret = false;
   }
 
   return ret;

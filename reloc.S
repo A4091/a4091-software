@@ -41,7 +41,7 @@ _relocate
 
         ; fetch file header
         bsr     RomFetch32
-        cmp.l   #$524e4301,d0 ; Are we compressed?
+        cmp.l   #$5a583001,d0 ; Are we zx0 compressed?
         beq.b   .decompress
 
         bsr     .real_relocate
@@ -51,7 +51,7 @@ _relocate
 .decompress
         movem.l d1-d7/a0-a6,-(sp)
 
-        bsr RomFetch32
+        bsr RomFetch32 ; Read uncompressed size
         ; d0 = original length
         move.l  d0,d3
         moveq   #MEMF_PUBLIC,d1
@@ -60,8 +60,7 @@ _relocate
         move.l  d0,d2
         ; d2 / d3 = Original Ptr/Size
 
-        bsr RomFetch32
-        add.l   #18,d0 ; magic 18 bytes at the beginning
+        bsr RomFetch32 ; Read compressed size
         move.l  d0,d5
         addq    #3,d0  ; padding
         and.b   #-4,d0 ; align
@@ -69,17 +68,6 @@ _relocate
         jsr     _LVOAllocMem(a6)
         move.l  d0,d4
         ; d4 / d5 = Compressed Ptr/Size
-
-        ; Reset ReadHandle (copy current state to frame)
-        move.l  READHANDLE_CURRENT(a4),d0    ; Get current address
-        tst.l   READHANDLE_TYPE(a4)
-        beq     .direct
-        sub.l   #48,d0 ; 12 bytes
-        bra     .storeHandle
-.direct
-        sub.l   #12,d0 ; 12 bytes
-.storeHandle
-        move.l  d0,READHANDLE_CURRENT(a4)
 
         ; Copy compressed file to ram.
         move.l  d4,a0
@@ -94,7 +82,7 @@ _relocate
 
         move.l  d4,a0
         move.l  d2,a1
-        bsr     _Unpack
+        bsr     zx0_decompress
 
         move.l  d4,a1
         move.l  d5,d0
@@ -385,7 +373,11 @@ _relocate
         lsl.l   #3,d0
         add.l   d0,sp
 
-        move.l  d2,d0
+        move.l  d2,-(sp)           ; Save SegList
+        move.l  4,a6
+        jsr     _LVOCacheClearU(a6)
+        move.l  (sp)+,d0           ; Restore SegList to d0
+
         movem.l (sp)+,d1-d7/a0-a6
         rts
 
@@ -542,5 +534,5 @@ InitHandle
 
 ; ----------------------------------------------------------------------
 
-        INCLUDE "rnc.S"
+        INCLUDE "3rdparty/salvador/asm/68000/unzx0_68000.S"
         CODE

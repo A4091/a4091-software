@@ -7,9 +7,6 @@
 [submodule "3rdparty/RDBFlags"]
 	path = 3rdparty/RDBFlags
 	url = ../../reinauer/RDBFlags
-[submodule "3rdparty/propack"]
-	path = 3rdparty/propack
-	url = ../../reinauer/propack
 [submodule "3rdparty/CDVDFS"]
 	path = 3rdparty/CDVDFS
 	url = ../../reinauer/CDVDFS
@@ -19,3 +16,6 @@
 [submodule "3rdparty/mounter"]
 	path = 3rdparty/mounter
 	url = ../mounter
+[submodule "3rdparty/salvador"]
+	path = 3rdparty/salvador
+	url = ../../reinauer/salvador

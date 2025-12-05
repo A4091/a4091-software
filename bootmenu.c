@@ -53,8 +53,10 @@
 #include "mounter.h" // for Port/IOReq wrappers
 #include "a4091.h"
 
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091)
 #define BOOTMENU_NAME "A4091"
+#elif defined(DRIVER_A4092)
+#define BOOTMENU_NAME "A4092"
 #elif defined(DRIVER_A4000T)
 #define BOOTMENU_NAME "NCR53C710"
 #elif defined(DRIVER_A4000T770)
@@ -85,6 +87,7 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define DEBUG_CDROM_BOOT_ID  10
 #define DEBUG_IGNORE_LAST_ID 11
 #define DEBUG_BOGUS_ID       12
+#define DEBUG_QUICK_INT_ID   13
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -125,7 +128,7 @@ static void init_bootmenu(void)
         TAG_DONE);
 
     window = OpenWindowTags(NULL,
-        WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
+        WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
         WA_CustomScreen,  screen,
         WA_Flags,         (WFLG_NOCAREREFRESH | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP),
         TAG_DONE);
@@ -196,10 +199,14 @@ static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
 
     if (welcome) {
         SetAPen(rp,1);
-#ifdef DRIVER_A4091
+#if defined(DRIVER_A4091)
         Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,32,TRUE);
-#else
+#elif defined(DRIVER_A4092)
+        Print("Welcome to your Amiga 4092 Zorro III SCSI-2 Host Controller",0,32,TRUE);
+#elif defined(DRIVER_A4000T)
         Print(" Welcome to Amiga 4000(T) SCSI Configuration & Diagnostics",0,32,TRUE);
+#elif defined(DRIVER_A4000T770)
+        Print("Welcome to Amiga 4000D UW SCSI Configuration & Diagnostics",0,32,TRUE);
 #endif
         Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,42,TRUE);
     }
@@ -216,13 +223,37 @@ static void draw_dipswitch(UWORD x, UWORD y, UWORD off)
 {
     struct RastPort *rp = &screen->RastPort;
 
+    /* Draw gray box (recessed: black top/left, white bottom/right) */
+    SetAPen(rp, 0);
+    RectFill(rp, x+10, y, x+52, y+8);
+    /* Gray box - black top edge */
+    SetAPen(rp, 1);
+    Move(rp, x+10, y); Draw(rp, x+52, y);
+    /* Gray box - black left edge */
+    Move(rp, x+10, y); Draw(rp, x+10, y+8);
+    /* Gray box - white bottom edge */
     SetAPen(rp, 2);
-    SetOPen(rp, 1);
-    RectFill(rp, x+10, y, x+52,y+8);
+    Move(rp, x+10, y+8); Draw(rp, x+52, y+8);
+    /* Gray box - white right edge */
+    Move(rp, x+52, y); Draw(rp, x+52, y+8);
+
+    /* Position slider based on switch state */
     if (!off)
         x+= 20;
-    SetAPen(rp, 0);
-    RectFill(rp, x+12, y+2, x+30,y+6);
+
+    /* White slider (raised: white top/left, black bottom/right) */
+    SetAPen(rp, 2);
+    RectFill(rp, x+12, y+2, x+30, y+6);
+    /* White slider - white top edge */
+    SetAPen(rp, 2);
+    Move(rp, x+12, y+2); Draw(rp, x+30, y+2);
+    /* White slider - white left edge */
+    Move(rp, x+12, y+2); Draw(rp, x+12, y+6);
+    /* White slider - black bottom edge */
+    SetAPen(rp, 1);
+    Move(rp, x+12, y+6); Draw(rp, x+30, y+6);
+    /* White slider - black right edge */
+    Move(rp, x+30, y+2); Draw(rp, x+30, y+6);
 }
 
 static char *dipswitch_text(int val, int num)
@@ -276,16 +307,26 @@ static void draw_dipswitches(UWORD x, UWORD y)
     Move(rp, x+16, y);
     Text(rp, "Off/On",6);
 
-    SetAPen(rp, 3);    /* Set A pen color. */
-    SetOPen(rp, 1);
+    /* Draw red box with raised 3D border (white top/left, black bottom/right) */
+    SetAPen(rp, 3);
     RectFill(rp, x, y+2, x+70, y+90);
+    /* Raised - white top edge */
+    SetAPen(rp, 2);
+    Move(rp, x, y+2); Draw(rp, x+70, y+2);
+    /* Raised - white left edge */
+    Move(rp, x, y+2); Draw(rp, x, y+90);
+    /* Raised - black bottom edge */
+    SetAPen(rp, 1);
+    Move(rp, x, y+90); Draw(rp, x+70, y+90);
+    /* Raised - black right edge */
+    Move(rp, x+70, y+2); Draw(rp, x+70, y+90);
 
     for (i=0; i<8; i++) {
         draw_dipswitch(x+8, y+7+(i*10), dip_switches&BIT(7-i));
     }
 
+    SetAPen(rp, 1);
     for (i=0; i<8; i++) {
-        SetAPen(rp, 1);
         SetBPen(rp, 3);
         Move(rp, x+6,y+(i*10)+14);
         num[0] = '8' - i;
@@ -297,12 +338,45 @@ static void draw_dipswitches(UWORD x, UWORD y)
     }
 
     hostid[9]='0'+(dip_switches&7);
-    SetAPen(rp, 1);
-    SetBPen(rp, 0);
     Move(rp, x+280, y+64);
     Text(rp, (char *)hostid,10);
     BNDRYOFF(rp);
 }
+
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+/* Redraw only one DIP switch row and its description to avoid flicker */
+static void redraw_dip_row(UWORD base_x, UWORD base_y, int row, UBYTE dip_switches)
+{
+    struct RastPort *rp = &screen->RastPort;
+    if (row < 0 || row > 7) return;
+
+    /* Redraw the switch slider */
+    draw_dipswitch(base_x + 8, base_y + 7 + (row * 10), dip_switches & BIT(7 - row));
+
+    /* Redraw the textual description on the right side */
+    SetAPen(rp, 1);
+    SetBPen(rp, 0);
+    Move(rp, base_x + 82, base_y + (row * 10) + 14);
+    /* Clear previous text by printing spaces over a safe width */
+    Text(rp, "                        ", 24);
+    Move(rp, base_x + 82, base_y + (row * 10) + 14);
+    char *ret = dipswitch_text(dip_switches & BIT(7 - row), 8 - row);
+    Text(rp, (char *)ret, strlen((char *)ret));
+}
+
+static void redraw_host_id(UWORD base_x, UWORD base_y, UBYTE dip_switches)
+{
+    struct RastPort *rp = &screen->RastPort;
+    char hostid[] = "Host ID: 0";
+    hostid[9] = '0' + (dip_switches & 7);
+    SetAPen(rp, 1);
+    SetBPen(rp, 0);
+    Move(rp, base_x + 280, base_y + 64);
+    Text(rp, "            ", 12);
+    Move(rp, base_x + 280, base_y + 64);
+    Text(rp, hostid, 10);
+}
+#endif
 
 static void dipswitch_page(void)
 {
@@ -310,7 +384,7 @@ static void dipswitch_page(void)
     current_page = 2;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - DIP switches", TRUE);
 
-    SetRGB4(&screen->ViewPort,3,11,8,8);
+    SetRGB4(&screen->ViewPort,3,11,6,6);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -329,28 +403,47 @@ static void dipswitch_page(void)
     page_footer();
 }
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+static void show_toast(STRPTR text)
+{
+    /* Brief on-screen message near the bottom; ~1s */
+    struct RastPort *rp = &screen->RastPort;
+    UWORD len = strlen(text);
+    UWORD x = (640 - len * 8) / 2, y = 191;
+    SetAPen(rp, 2);
+    SetBPen(rp, 0);
+    Move(rp, x, y);
+    Text(rp, text, len);
+    /* Wait ~1 second */
+    for (int i = 0; i < 60; i++) WaitTOF();
+    /* Clear */
+    Move(rp, x, y);
+    Text(rp, "                          ", 26);
+}
+#endif
+
 static void about_page(void)
 {
     struct NewGadget ng;
     current_page = 3;
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
     SetAPen(&screen->RastPort, 1);
-#if defined(DRIVER_A4091)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
-    Print("Berlin and Terry Fisher for the A4091. Driver",118,76,FALSE);
+    Print("Berlin and Terry Fisher for the original A4091.",118,77,FALSE);
 #elif defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
     Print("Thank you to the Amiga engineers for a wonderful", 118,68,FALSE);
-    Print("machine that passed the test of time. Driver",118,76,FALSE);
+    Print("machine that passed the test of time.",118,77,FALSE);
 #endif
+    Print("Driver based on the NetBSD/Amiga SCSI subsystem and",118,86,FALSE);
 #if defined(NCR53C710)
-    Print("based on the NetBSD/Amiga SCSI subsystem and 53C710",118,84,FALSE);
+    Print("NCR53C710 code by many fine contributors over the",118,95,FALSE);
 #elif defined(NCR53C770)
-    Print("based on the NetBSD/Amiga SCSI subsystem and 53C770",118,84,FALSE);
+    Print("NCR53C770 code by many fine contributors over the",118,95,FALSE);
 #endif
-    Print("code by many fine contributors over the years.",118,92,FALSE);
-    Print("Original RDB mounter by Toni Wilen.",118,100,FALSE);
-    Print("Only Amiga makes it possible.", 204,122,FALSE);
-    Print((char *)device_id_string, 118,155,FALSE);
+    Print("years. Original RDB mounter by Toni Wilen.",118,104,FALSE);
+    Print("Only Amiga makes it possible.", 204,127,FALSE);
+    Print((char *)device_id_string, 100,178,FALSE);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -652,6 +745,9 @@ static void debug_page(void)
 
     BOOL cdrom_boot = asave->cdrom_boot ? TRUE : FALSE;
     BOOL ignore_last = asave->ignore_last ? TRUE : FALSE;
+#ifdef ENABLE_QUICKINTS
+    BOOL quick_int = asave->quick_int ? TRUE : FALSE;
+#endif
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
     ng.ng_LeftEdge   = 400;
@@ -669,10 +765,20 @@ static void debug_page(void)
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, ignore_last, TAG_DONE);
 
     ng.ng_TopEdge    = 92;
+#ifdef ENABLE_QUICKINTS
+    ng.ng_GadgetText = "~Quick Interrupts";
+    ng.ng_GadgetID   = DEBUG_QUICK_INT_ID;
+    LastAdded = create_gadget(CHECKBOX_KIND);
+    GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, quick_int, TAG_DONE);
+
+    ng.ng_TopEdge    = 108;
+#endif
+#if 0
     ng.ng_GadgetText = "~Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GA_Disabled, TRUE, TAG_DONE);
+#endif
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -695,55 +801,27 @@ struct drawing {
     SHORT x, y, w, h;
 };
 
-#ifdef DRIVER_A4091
-static const struct drawing card[] = {
-    { 1, 3,   0,   0, 436, 146 }, // card
-    { 1, 3,  57, 146, 163,  10 }, // zslot
-    { 1, 2, 437,  18,   1, 155 }, // bracket
-    { 1, 2, 437,  18,  12,   2 },
-    { 2, 2, 223,  14, 190, 128 }, // silkscreen
-    { 1, 0, 270,  64,  94,  32 }, // cutout
-    { 2, 1, 420,  44,  16,  56 }, // HPDB-50 connector
-    { 2, 1, 421, 112,  15,  30 }, // DIP switches
-    { 1, 1,  12,  12,  16,  16 }, // U304 (GAL)
-    { 1, 1,  12,  38,  16,  16 }, // U203 (GAL)
-    { 1, 1,  12,  64,  16,  16 }, // U305 (GAL)
-    { 1, 1,  38,  12,  16,  16 }, // U207 (GAL)
-    { 1, 1,  38,  38,  16,  16 }, // U306 (GAL)
-    { 1, 1,  64,  12,  16,  16 }, // U205 (GAL)
-    { 1, 1,  64,  38,  16,  16 }, // U202 (GAL)
-    { 1, 1,  64,  64,  16,  16 }, // U303 (GAL)
-    { 1, 1,  88,   8,   2,   8 }, // J100 (ROM size)
-    { 1, 1,  96,  12,  18,  46 }, // U206 (ROM)
-    { 1, 1, 126,   4,  84,   8 }, // CN309 (SCSI connector)
-    { 1, 1, 132,  30,  42,  44 }, // U300 (LSI)
-    { 1, 2,  39,  82,  14,  24 }, // U301 (OSC)
-    { 1, 1,  48,  64,   5,  10 }, // U302 (74F74)
-    { 1, 1,  21, 118,  10,  16 }, // U109 (74F245)
-    { 1, 1,  62,  90,  10,  16 }, // U200 (74FCT374)
-    { 1, 1,  68, 118,  10,  16 }, // U201 (74FCT521)
-    { 1, 1,  96,  88,  10,  18 }, // U105 (74FCT543)
-    { 1, 1,  95, 118,  10,  18 }, // U100 (74FCT543)
-    { 1, 1, 121,  88,  10,  18 }, // U108 (74FCT543)
-    { 1, 1, 121, 118,  10,  18 }, // U101 (74FCT543)
-    { 1, 1, 140,  88,  10,  18 }, // U106 (74FCT543)
-    { 1, 1, 140, 118,  10,  18 }, // U102 (74FCT543)
-    { 1, 1, 160,  90,  10,  16 }, // U204 (74FCT374)
-    { 1, 1, 160, 118,  10,  18 }, // U107 (74FCT543)
-    { 1, 1, 184,  90,  10,  16 }, // U213 (74F244)
-    { 1, 1, 180, 120,  10,  16 }, // U103 (74F245)
-    { 1, 1, 208,  90,   6,  10 }, // U307 (74F07)
-    { 1, 1, 191,  28,   8,  12 }, // U311 (upper terminator)
-    { 1, 1, 189,  48,   8,  12 }, // U310 (lower terminator)
-    { 1, 2, 196, 116,   4,  24 }, // power connector
-    { 1, 2, 201, 118,   0,  20 },
-    { 3, 2,  57, 146, 163,  10 }  // zorro pins
-};
+#if defined(DRIVER_A4091)
+#include "util/artwork/assets/a4091.h"
+#define ART_X_OFFSET 103
+#define ART_Y_OFFSET 50
 
+#define HAVE_ARTWORK
+#elif defined(DRIVER_A4092)
+#include "util/artwork/assets/a4092.h"
+#define ART_X_OFFSET 206
+#define ART_Y_OFFSET 50
+
+#define HAVE_ARTWORK
+#else
+#undef HAVE_ARTWORK
+#endif
+
+#ifdef HAVE_ARTWORK
 static void draw_card(const struct drawing c[], int length)
 {
     struct RastPort *rp = &screen->RastPort;
-    int x=103, y=50, i,j;
+    int x=ART_X_OFFSET, y=ART_Y_OFFSET, i,j;
 
     for (i=0; i<length; i++) {
         struct drawing d = c[i];
@@ -838,6 +916,10 @@ static void event_loop(void)
             class = msg->Class;
             icode = msg->Code;
             gad = msg->IAddress;
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+            WORD mx = msg->MouseX;
+            WORD my = msg->MouseY;
+#endif
             GT_ReplyIMsg(msg);
             switch (class) {
             case IDCMP_RAWKEY:
@@ -872,6 +954,22 @@ static void event_loop(void)
                         main_page();
                     }
                     break;
+                case '1': case '2': case '3': case '4':
+                case '5': case '6': case '7': case '8':
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+                    if (current_page == 2) { // DIP switches page
+                        int sw = icode - '0'; // 1..8
+                        int row = 8 - sw;     // map to row 0..7
+                        UBYTE dips = get_dip_switches();
+                        UBYTE new_dips = dips ^ BIT(7 - row);
+                        *(volatile uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES) = new_dips;
+                        asave->nvram.nv.settings.switch_flags = new_dips;
+                        asave->nvram.switch_dirty = 1;
+                        redraw_dip_row(120, 65, row, new_dips);
+                        if (row >= 5) redraw_host_id(120, 65, new_dips);
+                    }
+#endif
+                    break;
                 case 'c':
                 case 'C':
                     if (current_page == 4) { // Debug page
@@ -900,6 +998,22 @@ static void event_loop(void)
                             GT_SetGadgetAttrs(ignore_gad, window, NULL, GTCB_Checked, asave->ignore_last, TAG_DONE);
                     }
                     break;
+#ifdef ENABLE_QUICKINTS
+                case 'q':
+                case 'Q':
+                    if (current_page == 4) { // Debug page
+                        // Toggle Quick Interrupts checkbox
+                        asave->quick_int = !asave->quick_int;
+                        Save_BattMem();
+                        // Find and update the gadget directly instead of redrawing page
+                        struct Gadget *quick_gad = gadgets;
+                        while (quick_gad && quick_gad->GadgetID != DEBUG_QUICK_INT_ID)
+                            quick_gad = quick_gad->NextGadget;
+                        if (quick_gad)
+                            GT_SetGadgetAttrs(quick_gad, window, NULL, GTCB_Checked, asave->quick_int, TAG_DONE);
+                    }
+                    break;
+#endif
                 case 'z':
                 case 'Z':
                     if (current_page == 4) { // Debug page
@@ -907,6 +1021,34 @@ static void event_loop(void)
                     }
                     break;
                 }
+                break;
+            case IDCMP_MOUSEBUTTONS:
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+                if (current_page == 2 && icode == SELECTDOWN) {
+                    /* Check if click is within DIP switch area */
+                    UWORD bx = 120, by = 65;
+                    WORD relx = mx - bx;
+                    WORD rely = my - by;
+                    if (relx >= 0 && relx <= 200 && rely >= 0 && rely <= 100) {
+                        /* Compute row based on y; rows every 10 px starting at +7 */
+                        if (rely >= 7) {
+                            int row = (rely - 7) / 10; // 0..7
+                            if (row >= 0 && row < 8) {
+                                /* Restrict x to switch slider region roughly */
+                                if (relx >= 16 && relx <= 90) {
+                                    UBYTE dips = get_dip_switches();
+                                    UBYTE new_dips = dips ^ BIT(7 - row);
+                                    *(volatile uint8_t *)(asave->as_addr + HW_OFFSET_SWITCHES) = new_dips;
+                                    asave->nvram.nv.settings.switch_flags = new_dips;
+                                    asave->nvram.switch_dirty = 1;
+                                    redraw_dip_row(bx, by, row, new_dips);
+                                    if (row >= 5) redraw_host_id(bx, by, new_dips);
+                                }
+                            }
+                        }
+                    }
+                }
+#endif
                 break;
             case IDCMP_GADGETUP:
                 switch (gad->GadgetID)
@@ -940,6 +1082,12 @@ static void event_loop(void)
                     asave->ignore_last=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
                     Save_BattMem();
                     break;
+#ifdef ENABLE_QUICKINTS
+                case DEBUG_QUICK_INT_ID:
+                    asave->quick_int=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
+                    Save_BattMem();
+                    break;
+#endif
                 }
             }
         }
@@ -1003,9 +1151,19 @@ void boot_menu(void)
     init_bootmenu();
     main_page();
     event_loop();
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    {
+        int committed = Nvram_CommitDirty();
+        if (committed > 0) {
+            show_toast("Settings saved.");
+        }
+        if (committed < 0) {
+            show_toast("Failure to save settings.");
+	}
+    }
+#endif
     cleanup_bootmenu();
     printf("Bootmenu: exit\n");
     ColdReboot();
     return;
 }
-

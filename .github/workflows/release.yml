@@ -20,6 +20,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
 
       - name: Build all artifacts
         run: make all-targets
@@ -29,9 +33,10 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            a4091*.rom
+            *.rom
+            *.kick
             *.device
-            disk/a4091_??.??.adf
+            disk/a4091_*.adf
           if-no-files-found: error
 
   release:
@@ -41,6 +46,9 @@ jobs:
     steps:
       - name: Checkout (required by gh-release)
         uses: actions/checkout@v4
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -54,5 +62,6 @@ jobs:
           draft: true
           files: |
             artifacts/*.rom
+            artifacts/*.kick
             artifacts/*.device
             artifacts/**/*.adf

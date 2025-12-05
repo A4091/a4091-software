@@ -1,0 +1,67 @@
+#!/bin/sh
+#
+# zx0wrap (C) 2025 Stefan Reinauer
+#
+# Because zx0 does not have a header, this wrapper script adds
+# one so we can recognize compressed files during relocation.
+#
+# 00 "ZX0" magic
+# 03 Version byte
+# 04 Decompressed size
+# 08 Compressed size
+# 0C beginning of compressed data
+#
+
+set -e
+
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <input> <output>"
+  exit 1
+fi
+
+INPUT=$1
+OUTPUT=$2
+
+# Check if input file exists
+if [ ! -f "$INPUT" ]; then
+  echo "Error: Input file '$INPUT' does not exist"
+  exit 1
+fi
+
+# Create temp file and ensure cleanup on exit
+TEMP=$(mktemp)
+trap 'rm -f "$TEMP"' EXIT
+
+# Function to write a 32-bit integer as big-endian binary
+write_be32() {
+    printf "\\$(printf '%03o' $((($1 >> 24) & 0xff)))"
+    printf "\\$(printf '%03o' $((($1 >> 16) & 0xff)))"
+    printf "\\$(printf '%03o' $((($1 >> 8) & 0xff)))"
+    printf "\\$(printf '%03o' $(($1 & 0xff)))"
+}
+
+# Function to get the size of a file in bytes
+get_file_size() {
+    wc -c < "$1" | tr -d '[:space:]'
+}
+
+
+printf 'ZX0\001' > "$OUTPUT"
+USIZE=$(get_file_size "$INPUT")
+write_be32 "$USIZE" >> "$OUTPUT"
+
+if [ ! -x 3rdparty/salvador/salvador ]; then
+  echo "Building salvador"
+  ( cd 3rdparty/salvador && make -s )
+  echo "done"
+fi
+
+# Compress to temp file
+3rdparty/salvador/salvador "$INPUT" "$TEMP"
+
+CSIZE=$(get_file_size "$TEMP")
+write_be32 "$CSIZE" >> "$OUTPUT"
+
+cat "$TEMP" >> "$OUTPUT"
+
+echo "$INPUT ($USIZE) -> $OUTPUT ($CSIZE)"

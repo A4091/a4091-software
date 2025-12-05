@@ -210,7 +210,7 @@ drv_expunge(struct Library *dev asm("a6"))
         return (0);
     }
 
-    printf("expunge() %s\n", version_str);
+    printf("expunge() %s\n", device_id_string);
 
     /* Ask the command handler to shut down */
     stop_cmd_handler();

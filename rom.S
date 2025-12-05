@@ -287,8 +287,8 @@ DevName
         dc.b    'a4091.device',0                   ; Name string
 IdString
         dc.b    'A4091 scsidisk '
-        dc.b    48+VERSION/10,48+VERSION//10,'.'
-        dc.b    48+REVISION/10,48+REVISION//10,0   ; Id string
+        FULL_VERSION_STR
+        dc.b    0                     ; ID string
 DosName
         dc.b    'dos.library',0                    ; DOS library name
         align 1     ; word align

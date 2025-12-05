@@ -66,12 +66,8 @@ int flash_format_nvram_partition(ULONG partition_address, ULONG size)
         return NVRAM_ERR_INVALID_ARG;
     }
 
-    flash_erase_sector(partition_address,size);
-
-    for (ULONG i = 0; i < size; ++i) {
-        if (flash_readByte(partition_address + i) != 0xFF) {
-            return NVRAM_ERR_VERIFY_ERASE_FAIL;
-        }
+    if (!flash_erase_sector(partition_address, size)) {
+        return NVRAM_ERR_VERIFY_ERASE_FAIL;
     }
 
     struct nvram_partition_hdr hdr = { .magic = NVRAM_MAGIC, .partition_size = size };
@@ -167,8 +163,6 @@ int flash_write_nvram(ULONG partition_address, struct nvram_t* new_entry)
         }
         free_slot_offset = write_offset;
     }
-    
-    if (free_slot_offset == 0) return NVRAM_ERR_FULL;
 
     struct nvram_t entry_to_write;
     memcpy(entry_to_write.data, new_entry->data, sizeof(entry_to_write.data));

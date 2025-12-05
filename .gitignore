@@ -14,6 +14,7 @@ TODO
 *.rom
 *.adf
 *.rnc
+*.zx0
 *.kick
 *.device
 *.log

@@ -36,7 +36,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 
-#define ROMTOOL_VERSION "v0.2 (2023-11-22)"
+#define ROMTOOL_VERSION "v0.4 (2025-11-28)"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -64,8 +64,10 @@ int is_compressed(char *image)
 {
 	uint32_t *file = (uint32_t *)image;
 	if (ntohl(file[0]) == 0x524e4301)
-		printf("compressed (%x uncompressed)", ntohl(file[1]));
-	return (ntohl(file[0]) == 0x524e4301);
+		printf("rnc compressed (%x uncompressed)", ntohl(file[1]));
+	if (ntohl(file[0]) == 0x5a583001)
+		printf("zx0 compressed (%x uncompressed)", ntohl(file[1]));
+	return (ntohl(file[0]) == 0x524e4301 || ntohl(file[0]) == 0x5a583001);
 }
 
 void inventory(char *filename, struct file *rom)

@@ -46,7 +46,7 @@
 #include "printf.h"
 #define USE_SERIAL_OUTPUT
 #include "port.h"
-#include <clib/debug_protos.h>
+#include <exec/execbase.h>
 
 #include <string.h>
 #include <stdarg.h>
@@ -77,6 +77,69 @@ typedef struct {
     char *buf_cur;
     char *buf_end;
 } buf_t;
+
+/**
+ * udiv64_32() - Software 64-bit by 32-bit unsigned division
+ * @param [out] remainder - Pointer to store remainder
+ * @param [in]  value     - 64-bit dividend
+ * @param [in]  base      - 32-bit divisor
+ *
+ * Performs 64-bit / 32-bit division so we don't need libgcc.
+ * It would be nice to use divul.l but we also want to run on
+ * 68060 CPUs.
+ *
+ * Return: 64-bit quotient
+ */
+static uint64_t
+udiv64_32(uint32_t *remainder, uint64_t value, uint32_t base)
+{
+    uint64_t quotient = 0;
+    uint32_t rem = 0;
+    int i;
+
+    /* Handle division by shifting and subtracting */
+    for (i = 63; i >= 0; i--) {
+        /* Shift remainder left by 1 and bring down next bit */
+        rem = (rem << 1) | ((value >> i) & 1);
+
+        /* If remainder >= divisor, subtract and set quotient bit */
+        if (rem >= base) {
+            rem -= base;
+            quotient |= (1ULL << i);
+        }
+    }
+
+    *remainder = rem;
+    return quotient;
+}
+
+static int KPutChar(int ch)
+{
+    asm volatile (
+        "   move.l  0x4, %%a6 \n"
+        "   jsr     -516(%%a6) \n"
+        : "=d" (ch)
+        : "0" (ch)
+        : "a6", "a0", "cc", "memory"
+    );
+
+    return ch;
+}
+
+/**
+ * KPutS() outputs a null-terminated string to the console by calling KPutChar
+ * for each character. This function corresponds to the KPutS/KPutStr
+ * assembly routine.
+ * * @param [in] str - The null-terminated string to output.
+ * @return None.
+ */
+static void KPutS(const char *str)
+{
+    while (*str != '\0') {
+        KPutChar((int)*str);
+        str++;
+    }
+}
 
 int
 putchar(int ch)
@@ -116,7 +179,7 @@ static void
 put(int ch, buf_t *desc)
 {
     if (desc == NULL) {
-        putchar(ch);
+        KPutChar(ch);
     } else if (desc->buf_cur < desc->buf_end) {
         *(desc->buf_cur)++ = (char) ch;
     }
@@ -179,10 +242,13 @@ kprintn(buf_t *desc, UINTMAX_T value, uint base, int flags, int width, int dot)
         base = 16;
 
     p = buf;
+
     do {
-        uint digit = value % base;
+        uint32_t rem;
+        value = udiv64_32(&rem, value, base);
+        uint digit = (uint)rem;
         *p++ = (char) (digit + ((digit <= 9) ? '0' : hex_a));
-    } while ((value /= base) != 0);
+    } while (value != 0);
 
     q = p;
     if (flags & FMT_ALT && *(p - 1) != '0') {

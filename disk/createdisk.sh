@@ -1,6 +1,6 @@
 
 
-VER=$(awk '/#define DEVICE_/{if (V != "") print V""$NF; else V=$NF"."}' ../version.h)
+VER=$(git describe --tags --dirty | sed -r 's/^release_//')
 DISK=a4091_$VER.adf
 THIRDPARTY=../3rdparty
 
@@ -9,6 +9,8 @@ test ! -x $THIRDPARTY/bffs/dist/bffs16_src.lha || ( echo "Initialize submodules.
 
 echo "Building devtest..."
 make -s -C $THIRDPARTY/devtest || exit 1
+m68k-amigaos-strip -s $THIRDPARTY/devtest/devtest
+
 echo "Extracting rdb..."
 lha xiq2f $THIRDPARTY/bffs/dist/bffs16_src.lha bffs_1.6/bin/rdb
 
@@ -21,10 +23,26 @@ xdftool $DISK write rdb Tools/rdb
 xdftool $DISK write ../a4091 Tools/a4091
 xdftool $DISK write ../a4091d Tools/a4091d
 xdftool $DISK write scsifix Tools/scsifix
+xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
 xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
 xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK makedir Devs
+if [ -r ../a4091.device ]; then
 xdftool $DISK write ../a4091.device Devs/a4091.device
+fi
+if [ -r ../a4092.device ]; then
+xdftool $DISK write ../a4092.device Devs/a4092.device
+fi
+if [ -r ../scsi710.device ]; then
+xdftool $DISK write ../scsi710.device Devs/scsi710.device
+fi
+if [ -r ../scsi770.device ]; then
+xdftool $DISK write ../scsi770.device Devs/scsi770.device
+fi
+if [ -r ../a4092_cdfs.rom ]; then
+xdftool $DISK makedir ROMs
+xdftool $DISK write ../a4092_cdfs.rom ROMs/a4092_cdfs.rom
+fi
 xdftool $DISK write A4091.guide
 xdftool $DISK write A4091.guide.info
 xdftool $DISK write Disk.info

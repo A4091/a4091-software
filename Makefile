@@ -2,6 +2,10 @@ NOW     := $(shell date '+%Y-%m-%d %H:%M:%S')
 DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
+# FULL_VERSION is 42.xx-yy-dirty
+FULL_VERSION ?= $(shell git describe --tags --dirty | sed -r 's/^release_//')
+DEVICE_VERSION := $(shell echo $(FULL_VERSION) | cut -f1 -d\.)
+DEVICE_REVISION := $(shell echo $(FULL_VERSION) | cut -f2 -d\.|cut -f1 -d\-)
 
 # Default to NCR53C770 driver:
 
@@ -18,7 +22,7 @@ DEVNAME=a4091
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4092)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4091 -DNCR53C710=1 -DDEVNAME="a4092" -DNO_CONFIGDEV=0 -DDRIVER_A4092 -DHAVE_ROM=1
+TARGETCFLAGS := -DDRIVER_A4092 -DNCR53C710=1 -DDEVNAME="a4092" -DNO_CONFIGDEV=0 -DHAVE_ROM=1 -DFLASH_SPI=1 # -DFLASH_PARALLEL=1
 TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=a4092
 HAVE_ROM=y
@@ -56,7 +60,7 @@ else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
 endif
 ifeq ($(DEVNAME),a4092)
-SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c
+SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c util/a4092flash/cpu_support.c
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
@@ -67,7 +71,7 @@ OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 OBJSROM := $(OBJDIR)/rom.o
-TOOLS   := $(PROGU) $(PROGD)
+TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -101,16 +105,22 @@ CFLAGS  += -D_KERNEL -DPORT_AMIGA -DA4091 $(TARGETCFLAGS) -I. -I3rdparty/mounter
 #DEBUG  += -DDEBUG_SIOP        # Debug siop.c
 #DEBUG  += -DDEBUG_MOUNTER     # Debug mounter.c
 #DEBUG  += -DDEBUG_BOOTMENU    # Debug bootmenu.c
+#DEBUG  += -DDEBUG_FLASH       # Debug util/a4092flash/*
 #DEBUG  += -DNO_SERIAL_OUTPUT  # Turn off serial debugging for the whole driver
 CFLAGS  += $(DEBUG)
 CFLAGS  += -DENABLE_SEEK  # Not needed for modern drives (~500 bytes)
 #CFLAGS  += -DDISKLABELS  # Enable support for MBR / GPT disklabels
 #CFLAGS  += -DENABLE_QUIRKS
+CFLAGS  += -DENABLE_QUICKINTS # Disable for A4091 Mini
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
 CFLAGS  += -msmall-code
 CFLAGS  += -Wall -Wextra -Wno-pointer-sign
 CFLAGS += -mcpu=68060
+CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
+CFLAGS += -DDEVICE_REVISION=$(DEVICE_REVISION)
+CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
+CFLAGS += -DFULL_VERSION="$(FULL_VERSION)"
 
 CFLAGS_TOOLS := -Wall -Wextra -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
 CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"
@@ -214,7 +224,7 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
 $(PROG): $(OBJS) $(ASMOBJS)
-	@echo Building $@
+	@echo "Building $@ v$(DEVICE_VERSION).$(DEVICE_REVISION) (v$(FULL_VERSION))"
 	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
 	@LEN="`wc -c < $@| sed 's/^ *//'`"; printf "${yellow}$(PROG) is $${LEN} bytes${end}\n"
@@ -222,10 +232,12 @@ $(PROG): $(OBJS) $(ASMOBJS)
 $(PROGU): $(OBJSU)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSU) -o $@
+	$(QUIET)$(STRIP) $@
 
 $(PROGD): $(OBJSD)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) $(LDFLAGS_TOOLS) $(OBJSD) -o $@
+	$(QUIET)$(STRIP) $@
 
 $(OBJDIR)/siop_script.out: siop_script.ss $(SC_ASM)
 	@echo Generating $@
@@ -239,16 +251,23 @@ $(SC_ASM): ncr53cxxx.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) $(HOSTCFLAGS) -o $@ $^
 
-$(OBJDIR)/version.i: version.h
-	$(QUIET)awk '/#define DEVICE_/{print $$2" EQU "$$3}' $< > $@
+$(OBJDIR)/version.i: Makefile $(OBJDIR)
+	$(QUIET)echo 'DEVICE_VERSION EQU $(DEVICE_VERSION)' > $@
+	$(QUIET)echo 'DEVICE_REVISION EQU $(DEVICE_REVISION)' >> $@
+	$(QUIET)echo 'FULL_VERSION_STR MACRO' >> $@
+	$(QUIET)echo '	dc.b "$(FULL_VERSION)"' >> $@
+	$(QUIET)echo '	ENDM' >> $@
+	$(QUIET)echo 'DATE_STR MACRO' >> $@
+	$(QUIET)echo '	dc.b "$(ADATE)"' >> $@
+	$(QUIET)echo '	ENDM' >> $@
 
 $(OBJDIR)/%.o: %.S
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
-%.rnc: % $(OBJDIR)/rnc
+%.zx0: %
 	@printf "Compressing $< ... "
-	$(QUIET)$(OBJDIR)/rnc p $< $@ -m 1 >/dev/null
+	$(QUIET)util/zx0wrap $< $@ >/dev/null
 	@printf "`wc -c < $<` -> `wc -c < $@` bytes${end}\n"
 
 $(OBJDIR)/rom.o: rom.S reloc.S $(OBJDIR)/version.i Makefile
@@ -271,10 +290,6 @@ test: reloctest
 	@echo Running relocation test
 	$(QUIET)vamos reloctest
 
-$(OBJDIR)/rnc: 3rdparty/propack/main.c
-	@echo Building $@
-	$(QUIET)$(HOSTCC) -O3 -flto -Wno-unused-result $^ -o $@
-
 $(OBJDIR)/romtool: romtool.c
 	@echo Building $@
 	$(QUIET)$(HOSTCC) -O2 -Wall $^ -o $@
@@ -284,33 +299,37 @@ $(ROM_ND): $(OBJSROM) rom.ld
 	$(QUIET)$(VLINK) -Trom.ld -brawbin1 -o $@ $(filter %.o, $^)
 	$(QUIET)test `wc -c < $@` -le 32768 && printf "${green}ROM $@ fits in 32k${end}\n" || ( test `wc -c < $@` -gt 65536 && printf "${red}ROM $@ FILE EXCEEDS 64K!${end}\n" || printf "${yellow}ROM $@ fits in 64k${end}\n" )
 
-$(ROM): $(ROM_ND) $(PROG).rnc $(OBJDIR)/romtool
+$(ROM): $(ROM_ND) $(PROG).zx0 $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM) -D $(PROG).rnc
+	$(QUIET)$(OBJDIR)/romtool $(ROM_ND) -o $(ROM) -D $(PROG).zx0
 
-$(ROM_CD): $(ROM) $(CDFS).rnc $(OBJDIR)/romtool
+$(ROM_CD): $(ROM) $(CDFS).zx0 $(OBJDIR)/romtool
 	@echo Building $@
-	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).rnc -T 0x43443031
-	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.rnc -T 0x46443031
+	$(QUIET)$(OBJDIR)/romtool $(ROM) -o $(ROM_CD) -F $(CDFS).zx0 -T 0x43443031
+	$(QUIET)#$(OBJDIR)/romtool $(ROM_CD) --skip -F fat95.zx0 -T 0x46443031
 
-$(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).rnc
+$(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).zx0
 	@echo Building $@
-	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(NDK_PATH) $(TARGETAFLAGS)
+	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(TARGETAFLAGS)
 
 $(OBJDIR):
-	mkdir -p $@
-	mkdir -p $@/3rdparty/mounter
-	mkdir -p $@/util/a4092flash
+	$(QUIET)mkdir -p $@
+	$(QUIET)mkdir -p $@/3rdparty/mounter
+	$(QUIET)mkdir -p $@/util/a4092flash
+
+util/a4092flash/a4092flash:
+	$(QUIET)make -s -C util/a4092flash
 
 clean:
 	@echo Cleaning.
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
-	$(QUIET)rm -f $(PROG).rnc $(CDFS).rnc
+	$(QUIET)rm -f $(PROG).zx0 $(CDFS).zx0
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
+	$(QUIET)make -s -C util/a4092flash clean
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.rnc *.rom *.kick a4091_*.lha
+	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick a4091_*.lha
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
@@ -323,36 +342,48 @@ kickstart:
 $(ROM_DB):
 
 lha:
-	$(QUIET)VER=$$(awk '/#define DEVICE_/{if (V != "") print V"."$$NF; else V=$$NF}' version.h) ;\
+	$(QUIET)VER=$(FULL_VERSION) ;\
 	echo Creating a4091_$$VER.lha ;\
 	mkdir a4091_$$VER ;\
-	cp -p $(PROG) $(PROGU) $(PROGD) $(ROM) $(ROM_DB) $(ROM_ND) $(ROM_CD) $(OBJDIR)/romtool a4091_$$VER ;\
+	cp -p *.device *.rom *.kick $(PROGU) $(PROGD)  util/a4092flash/a4092flash $(OBJDIR)/romtool a4091_$$VER ;\
 	echo Build $$VER $(DATE) $(TIME) >a4091_$$VER/README.txt ;\
 	cat dist.README.txt >>a4091_$$VER/README.txt ;\
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
 	rm -rf a4091_$$VER
 
+disk:
+	@echo "Building Disk image"
+	$(QUIET)$(MAKE) -s -C disk
+
 all-targets:
 	@echo "Cleaning up first"
-	$(QUIET)$(MAKE) DEVICE=A4091 distclean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 distclean
 	@echo "Building A4091 debug image"
-	$(QUIET)$(MAKE) DEVICE=A4091 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
-	$(QUIET)mv $(ROM) $(ROM_DB)
-	$(QUIET)$(MAKE) DEVICE=A4091 clean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv a4091.rom a4091_debug.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4091 clean
 	@echo "Building A4091 driverless, normal and cdboot image"
-	$(QUIET)$(MAKE) DEVICE=A4091 $(ROM_CD)
-	$(QUIET)$(MAKE) DEVICE=A4091 clean
-	@echo "Building scsi710.device"
-	$(QUIET)$(MAKE) DEVICE=A4000T scsi710.device
-	$(QUIET)$(MAKE) DEVICE=A4000T clean
-	@echo "Building scsi770.device"
-	$(QUIET)$(MAKE) DEVICE=A4000T770 scsi770.device
-	$(QUIET)$(MAKE) DEVICE=A4000T770 clean
+	$(QUIET)$(MAKE) -s DEVICE=A4091 a4091_cdfs.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4091 clean
+	@echo "Building A4092 debug image"
+	$(QUIET)$(MAKE) -s DEVICE=A4092 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv a4092.rom a4092_debug.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4092 clean
+	@echo "Building A4092 driverless, normal and cdboot image"
+	$(QUIET)$(MAKE) -s DEVICE=A4092 a4092_cdfs.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4092 clean
+	@echo "Building scsi710.device and scsi710.kick"
+	$(QUIET)$(MAKE) -s DEVICE=A4000T scsi710.kick
+	$(QUIET)$(MAKE) -s DEVICE=A4000T clean
+	@echo "Building scsi770.device and scsi770.kick"
+	$(QUIET)$(MAKE) -s DEVICE=A4000T770 scsi770.kick
+	$(QUIET)$(MAKE) -s DEVICE=A4000T770 clean
 	@echo "Building utilities"
-	$(QUIET)$(MAKE) a4091d
-	$(QUIET)$(MAKE) a4091d
+	$(QUIET)$(MAKE) -s a4091
+	$(QUIET)$(MAKE) -s a4091d
+	$(QUIET)$(MAKE) -s util/a4092flash/a4092flash
 	@echo "Building Disk image"
-	$(QUIET)cd disk && $(MAKE)
-	$(QUIET)$(MAKE) DEVICE=A4091 lha
+	$(QUIET)$(MAKE) -s disk
+	$(QUIET)$(MAKE) -s DEVICE=A4091 lha
 
-.PHONY: verbose all $(OBJDIR)/CDVDFS
+.PHONY: verbose all $(OBJDIR)/CDVDFS disk

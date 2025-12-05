@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper";
+const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper & Stefan Reinauer";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -217,7 +217,7 @@ static const char * const expansion_library_name = "expansion.library";
 typedef struct {
     struct Interrupt *local_isr;   // Temporary interrupt server
     uint32_t reg_addr;             // Base address of device registers
-    volatile uint32_t intcount;    // Total interrupts
+    volatile uint32_t intcount;    // Total interrupts (normal + quick)
     volatile uint8_t ireg_istat;   // ISTAT captured by interrupt handler
     volatile uint8_t ireg_sien;    // SIEN captured by interrupt handler
     volatile uint8_t ireg_sstat0;  // SSTAT0 captured by interrupt handler
@@ -229,6 +229,8 @@ typedef struct {
     struct List      driver_isrs;  // SCSI driver interrupt server list
     struct List      driver_rtask; // SCSI driver ready task list
     struct List      driver_wtask; // SCSI driver waiting task list
+    uint8_t  use_quick_int;        // Using quick interrupts
+    ULONG    quick_vec_num;        // Quick interrupt vector number
 } a4091_save_t;
 
 static a4091_save_t a4091_save;
@@ -857,7 +859,9 @@ a4091_add_local_irq_handler(void)
         a4091_save.local_isr->is_Node.ln_Name = "A4091 test";
         a4091_save.local_isr->is_Data         = &a4091_save;
 #pragma GCC diagnostic push
+#if GCC_VERSION > 60500
 #pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
         a4091_save.local_isr->is_Code         = (void (*)()) a4091_irq_handler;
 #pragma GCC diagnostic pop
 
@@ -878,50 +882,91 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
-#if 0
 /*
+ * Quick Interrupt Support
+ * -----------------------
  * Once quick interrupts are enabled in the A4091, they override
  * conventional signal interrupts until the controller has been reset.
+ *
+ * Quick interrupts are Zorro III direct interrupt vectors that bypass
+ * the normal Amiga interrupt system for lower latency.
  */
-#include <hardware/custom.h>
-#include <hardware/intbits.h>
 
-#define STRX(x) #x
-#define STR(x) STRX(x)
+#include "quickints.c"
 
-/* intenar is one of the Chipset custom registers */
-#define cust_intenar 0x00dff01c  /* Interrupt enable state */
+/*
+ * a4091_quick_irq
+ * -----------------------
+ * Assembly wrapper for quick interrupts that calls the existing
+ * a4091_irq_handler() C function. This reuses all the existing
+ * interrupt handling logic.
+ */
+void __stdargs a4091_quick_irq(void);
+asm (
+    "    .globl _a4091_quick_irq         \n"
+    "_a4091_quick_irq:                   \n"
+    "    move.l  d0,-(sp)                \n"
+    "    move.w  0xdff01c,d0             \n" // Interrupt Enable State
+    "    btst.l  #14,d0                  \n" // Check if pending disable
+    "    bne.s   RealInterrupt           \n"
+    "ExitInt:                            \n"
+    "    move.l  (sp)+,d0                \n"
+    "    rte                             \n"
+    "RealInterrupt:                      \n"
+    "    movem.l d1/a0-a1,-(sp)          \n" // Save registers for C ABI
+    "    lea     _a4091_save,a1          \n" // Load pointer to a4091_save
+    "    jsr     _a4091_irq_handler      \n" // Call C handler (a1 passed in register)
+    "    movem.l (sp)+,d1/a0-a1          \n" // Restore registers
+    "    bra.s   ExitInt                 \n" // Return from interrupt
+);
 
-void
-a4091_quick_irq_handler(void)
+/*
+ * a4091_add_quick_irq_handler
+ * ---------------------------
+ * Set up quick interrupt handling for the A4091 card.
+ */
+static void
+a4091_add_quick_irq_handler(uint32_t a4091_base)
 {
-    register a4091_save_t *save asm("a1");
-    save->qintcount++;
+    ULONG intnum;
+
+    a4091_save.intcount = 0;
+
+    // Obtain a quick interrupt vector
+    intnum = ObtainQuickVector(a4091_quick_irq);
+    if (intnum == 0) {
+        printf("Failed to obtain quick interrupt vector\n");
+        a4091_save.use_quick_int = 0;
+        return;
+    }
+
+    a4091_save.quick_vec_num = intnum;
+
+    // Program the A4091 to use this quick interrupt vector
+    *ADDR8(a4091_base + A4091_OFFSET_QUICKINT) = (uint8_t)intnum;
+
+    if (runtime_flags & FLAG_DEBUG)
+        printf("Quick interrupt vector %lu installed at A4091\n", intnum);
 }
 
-void a4091_quickint(void);
-// asm("
-_a4091_quickint:
-        movem.l  a0/d0,-(sp)            | Save a0 and d0
-        move.w  "STR(cust_intenar)",d0  | Get interrupt enable state
-        btst.l  #"STR(INTB_INTEN)",d0   | Check if pending disable
-        beq.s   a4091_quickint_exit     | Nothing to do
+/*
+ * a4091_remove_quick_irq_handler
+ * ------------------------------
+ * Remove quick interrupt handling and restore the vector.
+ */
+static void
+a4091_remove_quick_irq_handler(void)
+{
+    if (a4091_save.use_quick_int && a4091_save.quick_vec_num != 0) {
+        ReleaseQuickVector(a4091_save.quick_vec_num);
 
-        movem.l a1/d1,-(sp)             | Save other C ABI registers
-        lea     _a4091_save,a1          | global struct
-        bsr     _a4091_quick_irq_handler
-        movem.l (sp)+,a1/d1
-a4091_quickint_exit:
-        movem.l (sp)+,a0/d0             | Restore a0 and d0
-        rte                             | Return from int
-// ");
+        /* Reset quick interrupt in hardware by writing to upper half of INTVEC range */
+        *ADDR8(a4091_base + (A4091_OFFSET_QUICKINT | (1<<17))) = 0x26;
 
-    ULONG intnum = ObtainQuickVector(a4091_quickint);
-    *ADDR8(a4091_reg_base + A4091_OFFSET_QUICKINT) = intnum;
-
-    /* There is no way to release/free a quick interrupt vector?? */
-#endif
-
+        a4091_save.quick_vec_num = 0;
+        a4091_save.use_quick_int = 0;
+    }
+}
 
 static char *
 GetNodeName(struct Node *node)
@@ -948,12 +993,15 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
         const char *name = GetNodeName((struct Node *) s);
         if (runtime_flags & FLAG_IS_A4000T) {
             if ((strcmp(name, "NCR SCSI") != 0) &&
+                (strcmp(name, "scsi710.device") != 0) &&
+                (strcmp(name, "scsi770.device") != 0) &&
                 (strcmp(name, "A4091 test") != 0))
                 continue;  // No match
         } else {
             if ((strcmp(name, "NCR SCSI") != 0) &&
                 (strcmp(name, "A4091 test") != 0) &&
-                (strcmp(name, "a4091.device") != 0))
+                (strcmp(name, "a4091.device") != 0) &&
+                (strcmp(name, "a4092.device") != 0))
                 continue;  // No match
             if (((uint32_t) s->is_Code >= 0x00f00000) &&
                 ((uint32_t) s->is_Code <= 0x00ffffff))
@@ -1034,11 +1082,14 @@ static int
 is_handler_task(const char *name)
 {
     if (runtime_flags & FLAG_IS_A4000T) {
-        if (strcmp(name, "A4000T SCSI handler") != 0)
+        if ((strcmp(name, "A4000T SCSI handler") != 0) &&
+            (strcmp(name, "scsi710.device") != 0) &&
+            (strcmp(name, "scsi770.device") != 0))
             return (0);
     } else {
         if ((strcmp(name, "A3090 SCSI handler") != 0) &&
-            (strcmp(name, "a4091.device") != 0))
+            (strcmp(name, "a4091.device") != 0) &&
+            (strcmp(name, "a4092.device") != 0))
             return (0);
     }
     return (1);
@@ -1224,7 +1275,13 @@ a4091_state_restore(int skip_reset)
             a4091_reset();
         }
         a4091_enable_driver_irq_handler();
-        a4091_remove_local_irq_handler();
+        if (a4091_save.use_quick_int) {
+            a4091_remove_quick_irq_handler();
+        }
+        // Either not configured or failed to activate Quick Int:
+        if (!a4091_save.use_quick_int) {
+            a4091_remove_local_irq_handler();
+        }
         a4091_enable_driver_task();
 
         if ((a4091_save.intcount != 0) & (runtime_flags & FLAG_DEBUG)) {
@@ -1271,7 +1328,11 @@ a4091_state_takeover(int flag_suspend)
          * 3. If running, first suspend the SCRIPTS processor by putting
          *    it in single step mode. Wait for it to stop.
          */
-        a4091_add_local_irq_handler();
+        if (a4091_save.use_quick_int) {
+            a4091_add_quick_irq_handler(a4091_base);
+        } else {
+            a4091_add_local_irq_handler();
+        }
         if (flag_suspend) {
             a4091_show_or_disable_driver_irq_handler(1, 0);
             a4091_show_or_disable_driver_task(1, 0);
@@ -4758,6 +4819,7 @@ usage(void)
            "\t-L  loop until failure\n"
            "\t-P  probe and list all detected A4091 cards\n"
            "\t-q  quiet mode (only show errors)\n"
+           "\t-Q  use Zorro III quick interrupts (lower latency)\n"
            "\t-r  display NCR53C710 registers\n"
            "\t-s  decode device external switches\n"
            "\t-S  attempt to suspend all A4091 drivers while testing\n"
@@ -4782,6 +4844,7 @@ main(int argc, char **argv)
     int      flag_loop      = 0;  /* Loop all tests until failure */
     int      flag_kill      = 0;  /* Kill active A4091 device driver */
     int      flag_list      = 0;  /* List all A4091 cards found */
+    int      flag_quick_int = 0;  /* Use Zorro III quick interrupts */
     int      flag_regs      = 0;  /* Decode device registers */
     int      flag_switches  = 0;  /* Decode device external switches */
     int      flag_test      = 0;  /* Test card */
@@ -4903,6 +4966,9 @@ main(int argc, char **argv)
                     case 'q':
                         flag_verbose = 0;
                         break;
+                    case 'Q':
+                        flag_quick_int = 1;
+                        break;
                     case 'r':
                         flag_regs = 1;
                         break;
@@ -4940,6 +5006,9 @@ main(int argc, char **argv)
     NewList(&a4091_save.driver_rtask);
     NewList(&a4091_save.driver_wtask);
     NewList(&a4091_save.driver_isrs);
+
+    // Set quick interrupt mode based on command line flag
+    a4091_save.use_quick_int = flag_quick_int;
 
     if (!(flag_config | flag_dma | flag_regs | flag_switches | flag_test |
           flag_kill | flag_zautocfg)) {
