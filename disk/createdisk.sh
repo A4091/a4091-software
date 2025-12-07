@@ -14,8 +14,21 @@ m68k-amigaos-strip -s $THIRDPARTY/devtest/devtest
 echo "Extracting rdb..."
 lha xiq2f $THIRDPARTY/bffs/dist/bffs16_src.lha bffs_1.6/bin/rdb
 
-sed s/VERSION/${VER}/ < Startup-Sequence > Startup-Sequence.tmp
+# Create centered version and copyright lines (80 column terminal)
+COLUMNS=80
+YEAR=$(date +%Y)
+VERSION_TEXT="v${VER}"
+COPYRIGHT_TEXT='\xa9'" 2023-${YEAR} Stefan Reinauer \\& Chris Hooper"
+VERSION_SPACES=$(( (${COLUMNS} - ${#VERSION_TEXT}) / 2 ))
+COPYRIGHT_SPACES=$(( (${COLUMNS} - ${#COPYRIGHT_TEXT}) / 2 ))
+VERSION_LINE=$(printf "%*s%s" $VERSION_SPACES "" "$VERSION_TEXT")
+COPYRIGHT_LINE=$(printf "%*s%s" $COPYRIGHT_SPACES "" "$COPYRIGHT_TEXT")
 
+sed -e "s|VERSION_LINE|$VERSION_LINE|" \
+    -e "s|COPYRIGHT_LINE|$COPYRIGHT_LINE|" \
+    < Startup-Sequence > Startup-Sequence.tmp
+
+./system-configuration.sh
 echo "Creating disk..."
 xdftool $DISK format "Amiga4091"
 xdftool $DISK makedir Tools
@@ -27,6 +40,7 @@ xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
 xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
 xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK makedir Devs
+xdftool $DISK write system-configuration Devs/system-configuration
 if [ -r ../a4091.device ]; then
 xdftool $DISK write ../a4091.device Devs/a4091.device
 fi
@@ -49,6 +63,14 @@ xdftool $DISK write Disk.info
 xdftool $DISK makedir S
 xdftool $DISK write Startup-Sequence.tmp S/Startup-Sequence
 xdftool $DISK boot install
+
+printf "Looking for additional files... "
+if [ -x ../../a4091-disk-addon/add-to-disk.sh ]; then
+  echo "found."
+  ../../a4091-disk-addon/add-to-disk.sh "$DISK"
+else
+  echo "not found."
+fi
 
 echo "Cleaning up..."
 make -s -C $THIRDPARTY/devtest clean
