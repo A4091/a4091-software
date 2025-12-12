@@ -288,10 +288,9 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     }
 
     // Calculate flash size from capacity byte
-    // Capacity byte is typically log2(size_in_bits) - 16
-    // For W25Q64: cap=0x17 means 2^23 bits = 8MB
-    ULONG flash_size_bits = 1UL << cap;
-    spi_flash_size = flash_size_bits / 8;
+    // Capacity byte is log2(size_in_bytes)
+    // For W25Q64: cap=0x17 means 2^23 bytes = 8MB
+    spi_flash_size = 1UL << cap;
 
     // Return values
     if (manuf) *manuf = mfg;
