@@ -16,6 +16,8 @@
 
 #define MAX_BOUNCE_SIZE (256 * 1024)
 
+uint32_t get_scripts_dma_addr(const void *scripts, uint32_t size);
+void free_scripts_copy(void);
 
 int sd_readwrite(void *periph, uint64_t blkno, uint b_flags,
                  void *buf, uint buflen, void *ior);

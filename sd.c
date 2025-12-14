@@ -90,6 +90,44 @@ is_zorro_ii_address(APTR address, ULONG length)
     return FALSE;
 }
 
+/*
+ * Get a DMA-safe physical address for the SCSI scripts.
+ *
+ * A Zorro III device like the A4091 cannot perform DMA fetches from
+ * the 24-bit address space of Zorro II RAM. If the scripts are loaded
+ * into Zorro II Fast RAM, we must copy them to Chip RAM where the
+ * 53C710/720 can access them.
+ */
+uint32_t
+get_scripts_dma_addr(const void *scripts, uint32_t size)
+{
+    if (is_zorro_ii_address((APTR)scripts, size)) {
+        void *copy = AllocMem(size, MEMF_CHIP | MEMF_PUBLIC);
+        if (copy != NULL) {
+            CopyMem((APTR)scripts, copy, size);
+            printf("Scripts copied to Chip RAM at %lx\n", (unsigned long)copy);
+            asave->as_scripts_copy = copy;
+            asave->as_scripts_copy_size = size;
+            return (uint32_t)copy;
+        }
+        printf("Failed to allocate Chip RAM for scripts!\n");
+    }
+    return (uint32_t)scripts;
+}
+
+/*
+ * Free the scripts copy if one was allocated.
+ */
+void
+free_scripts_copy(void)
+{
+    if (asave->as_scripts_copy != NULL) {
+        FreeMem(asave->as_scripts_copy, asave->as_scripts_copy_size);
+        asave->as_scripts_copy = NULL;
+        asave->as_scripts_copy_size = 0;
+    }
+}
+
 /* Translate error code to AmigaOS code */
 static int
 translate_xs_error(struct scsipi_xfer *xs)

@@ -118,6 +118,7 @@ __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.44 2019/11/10 21:16:22 chs Exp $");
 #include "sys_queue.h"
 #include "siopreg.h"
 #include "siopvar.h"
+#include "sd.h"
 #include <stdio.h>
 #endif
 
@@ -584,7 +585,8 @@ siopnginitialize(struct siop_softc *sc)
 	 * Also should verify that dev doesn't span non-contiguous
 	 * physical pages.
 	 */
-	sc->sc_scriptspa = kvtop((void *)__UNCONST(siopng_scripts));
+	sc->sc_scriptspa = get_scripts_dma_addr(siopng_scripts,
+	                                        sizeof(siopng_scripts));
 
 	/*
 	 * malloc sc_acb to ensure that DS is on a long word boundary.
@@ -649,6 +651,7 @@ siopngshutdown(struct scsipi_channel *chan)
     siopngreset(sc);
     scsipi_free_all_xs(chan);
     FreeMem(sc->sc_acb, sizeof(struct siop_acb) * SIOP_NACB);
+    free_scripts_copy();
 }
 #endif
 
