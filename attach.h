@@ -45,6 +45,9 @@ typedef struct {
     struct timerequest   *as_timerio;
     struct callout      **as_callout_head;
     struct ConfigDev     *as_cd;
+    /* scripts copy (for Zorro II systems) */
+    void                 *as_scripts_copy;
+    uint32_t              as_scripts_copy_size;
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;
