@@ -674,6 +674,13 @@ siopinitialize(struct siop_softc *sc)
 #ifdef PORT_AMIGA
     sc->sc_acb = AllocMem(sizeof(struct siop_acb) * SIOP_NACB,
                           MEMF_CLEAR | MEMF_PUBLIC);
+    if (sc->sc_acb != NULL &&
+        is_zorro_ii_address(sc->sc_acb, sizeof(struct siop_acb) * SIOP_NACB)) {
+        printf("Zorro II RAM detected for sc_acb, reallocating in Chip RAM\n");
+        FreeMem(sc->sc_acb, sizeof(struct siop_acb) * SIOP_NACB);
+        sc->sc_acb = AllocMem(sizeof(struct siop_acb) * SIOP_NACB,
+                              MEMF_CLEAR | MEMF_CHIP | MEMF_PUBLIC);
+    }
 #else
     sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB);
 #endif
