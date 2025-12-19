@@ -76,6 +76,25 @@ void delay(int usecs);
 #define __UNVOLATILE(x) ((void *)(unsigned long)(volatile void *)(x))
 #define __UNCONST(a) ((void *)(intptr_t)(a))
 
+/* Check if a memory range is likely Zorro II RAM.
+ * This is a simple check based on common Zorro II address ranges.
+ */
+static inline int
+is_zorro_ii_address(void *address, uint32_t length)
+{
+    uint32_t start_addr = (uint32_t)address;
+    uint32_t end_addr = start_addr + length - 1;
+
+    /* 8MB Zorro II space */
+    if (start_addr >= 0x00200000 && end_addr < 0x00a00000)
+        return 1;
+
+    /* A Zorro II card itself (registers) might live at 0x00e8xxxx or
+     * 0x00a0xxxx, but DMA buffers won't live there.
+     */
+    return 0;
+}
+
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
 
