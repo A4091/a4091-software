@@ -1616,7 +1616,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 n = (n - Ent_dataout) / 16;
             else
                 n = (n - Ent_datain) / 16;
-            if (n <= 0 && n > DMAMAXIO)
+            if (n <= 0 || n > DMAMAXIO)
                 printf("TEMP invalid %d\n", n);
             else {
                 acb->iob_curbuf = (u_long)acb->ds.chain[n].databuf;
