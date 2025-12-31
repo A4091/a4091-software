@@ -88,6 +88,7 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define DEBUG_IGNORE_LAST_ID 11
 #define DEBUG_BOGUS_ID       12
 #define DEBUG_QUICK_INT_ID   13
+#define DEBUG_ALLOW_DISC_ID  14
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -748,6 +749,7 @@ static void debug_page(void)
 #ifdef ENABLE_QUICKINTS
     BOOL quick_int = asave->quick_int ? TRUE : FALSE;
 #endif
+    BOOL allow_disc = asave->allow_disc ? TRUE : FALSE;
     SetRGB4(&screen->ViewPort,3,6,8,11);
 
     ng.ng_LeftEdge   = 400;
@@ -773,6 +775,12 @@ static void debug_page(void)
 
     ng.ng_TopEdge    = 108;
 #endif
+    ng.ng_GadgetText = "Al~low Disconnect";
+    ng.ng_GadgetID   = DEBUG_ALLOW_DISC_ID;
+    LastAdded = create_gadget(CHECKBOX_KIND);
+    GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, allow_disc, TAG_DONE);
+
+    ng.ng_TopEdge   += 16;
 #if 0
     ng.ng_GadgetText = "~Zorro III magic speed hack";
     ng.ng_GadgetID   = DEBUG_BOGUS_ID;
@@ -1014,6 +1022,20 @@ static void event_loop(void)
                     }
                     break;
 #endif
+                case 'l':
+                case 'L':
+                    if (current_page == 4) { // Debug page
+                        // Toggle Allow Disconnect checkbox
+                        asave->allow_disc = !asave->allow_disc;
+                        Save_BattMem();
+                        // Find and update the gadget directly instead of redrawing page
+                        struct Gadget *disc_gad = gadgets;
+                        while (disc_gad && disc_gad->GadgetID != DEBUG_ALLOW_DISC_ID)
+                            disc_gad = disc_gad->NextGadget;
+                        if (disc_gad)
+                            GT_SetGadgetAttrs(disc_gad, window, NULL, GTCB_Checked, asave->allow_disc, TAG_DONE);
+                    }
+                    break;
                 case 'z':
                 case 'Z':
                     if (current_page == 4) { // Debug page
@@ -1088,6 +1110,10 @@ static void event_loop(void)
                     Save_BattMem();
                     break;
 #endif
+                case DEBUG_ALLOW_DISC_ID:
+                    asave->allow_disc=gad->Flags&GFLG_SELECTED?TRUE:FALSE;
+                    Save_BattMem();
+                    break;
                 }
             }
         }

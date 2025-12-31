@@ -53,6 +53,7 @@ typedef struct {
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;
+    uint8_t              allow_disc;
 #ifdef ENABLE_QUICKINTS
     uint8_t              quick_int;
     /* quick interrupt support */
@@ -69,6 +70,7 @@ typedef struct {
 } a4091_save_t;
 
 extern a4091_save_t *asave;
+extern u_char siop_allow_disc[8];
 
 int attach(device_t self, uint scsi_target, struct scsipi_periph **periph,
            uint flags);

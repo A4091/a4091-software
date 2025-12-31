@@ -31,6 +31,8 @@ int Nvram_CommitDirty(void);
 #define BATTMEM_A4091_IGNORE_LAST_LEN   1
 #define BATTMEM_A4091_QUICK_INT_ADDR   74
 #define BATTMEM_A4091_QUICK_INT_LEN    1
+#define BATTMEM_A4091_ALLOW_DISC_ADDR  75
+#define BATTMEM_A4091_ALLOW_DISC_LEN   1
 
 #endif
 #endif

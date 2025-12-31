@@ -44,6 +44,7 @@ int Load_BattMem(void)
 #ifdef ENABLE_QUICKINTS
         asave->quick_int   = (osf & BIT(2)) ? 1 : 0;
 #endif
+        asave->allow_disc  = (osf & BIT(3)) ? 1 : 0;
         asave->nvram.os_dirty = 0;
         asave->nvram.switch_dirty = 0;
         printf("Retrieving settings from NVRAM flash\n");
@@ -54,6 +55,7 @@ int Load_BattMem(void)
 #ifdef ENABLE_QUICKINTS
         asave->quick_int   = 0;
 #endif
+        asave->allow_disc  = 0;
         asave->nvram.os_dirty = 0;
         asave->nvram.switch_dirty = 0;
         printf("NVRAM not initialized (res=%d). Using defaults.\n", res);
@@ -63,10 +65,12 @@ int Load_BattMem(void)
 #ifdef ENABLE_QUICKINTS
     printf("  quick_int: %s\n", asave->quick_int?"on":"off");
 #endif
+    printf("  allow_disc: %s\n", asave->allow_disc?"on":"off");
     return 1;
 #else
     UBYTE cdrom_boot = 0,
-          ignore_last = 0;
+          ignore_last = 0,
+          allow_disc = 0;
 #ifdef ENABLE_QUICKINTS
     UBYTE quick_int = 0;
 #endif
@@ -88,6 +92,9 @@ int Load_BattMem(void)
                 BATTMEM_A4091_QUICK_INT_ADDR,
                 BATTMEM_A4091_QUICK_INT_LEN);
 #endif
+    ReadBattMem(&allow_disc,
+                BATTMEM_A4091_ALLOW_DISC_ADDR,
+                BATTMEM_A4091_ALLOW_DISC_LEN);
 
     // CDROM_BOOT defaults to on, hence invert it
     asave->cdrom_boot = !cdrom_boot;
@@ -95,11 +102,13 @@ int Load_BattMem(void)
 #ifdef ENABLE_QUICKINTS
     asave->quick_int = quick_int;
 #endif
+    asave->allow_disc = allow_disc;
     printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
     printf("  ignore_last: %s\n", asave->ignore_last?"on":"off");
 #ifdef ENABLE_QUICKINTS
     printf("  quick_int: %s\n", asave->quick_int?"on":"off");
 #endif
+    printf("  allow_disc: %s\n", asave->allow_disc?"on":"off");
     ReleaseBattSemaphore();
 
     return 1;
@@ -116,6 +125,7 @@ int Save_BattMem(void)
 #ifdef ENABLE_QUICKINTS
     if (asave->quick_int)   osf |= BIT(2);
 #endif
+    if (asave->allow_disc)  osf |= BIT(3);
     asave->nvram.nv.settings.os_flags = osf;
     asave->nvram.os_dirty = 1;
     printf("Staging settings to NVRAM cache\n");
@@ -124,10 +134,12 @@ int Save_BattMem(void)
 #ifdef ENABLE_QUICKINTS
     printf("  quick_int: %s\n", asave->quick_int?"on":"off");
 #endif
+    printf("  allow_disc: %s\n", asave->allow_disc?"on":"off");
     return 1;
 #else
     UBYTE cdrom_boot = !asave->cdrom_boot,
-          ignore_last = asave->ignore_last;
+          ignore_last = asave->ignore_last,
+          allow_disc = asave->allow_disc;
 #ifdef ENABLE_QUICKINTS
     UBYTE quick_int = asave->quick_int;
 #endif
@@ -142,6 +154,7 @@ int Save_BattMem(void)
 #ifdef ENABLE_QUICKINTS
     printf("  quick_int: %s\n", asave->quick_int?"on":"off");
 #endif
+    printf("  allow_disc: %s\n", asave->allow_disc?"on":"off");
     WriteBattMem(&cdrom_boot,
                  BATTMEM_A4091_CDROM_BOOT_ADDR,
                  BATTMEM_A4091_CDROM_BOOT_LEN);
@@ -153,6 +166,9 @@ int Save_BattMem(void)
                  BATTMEM_A4091_QUICK_INT_ADDR,
                  BATTMEM_A4091_QUICK_INT_LEN);
 #endif
+    WriteBattMem(&allow_disc,
+                 BATTMEM_A4091_ALLOW_DISC_ADDR,
+                 BATTMEM_A4091_ALLOW_DISC_LEN);
 
     ReleaseBattSemaphore();
 

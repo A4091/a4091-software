@@ -39,6 +39,7 @@
 #include "device.h"
 
 #include "scsi_all.h"
+#include "scsi_spc.h"
 #include "scsipiconf.h"
 #include "sd.h"
 #include "sys_queue.h"
@@ -586,7 +587,6 @@ init_chan(device_t self, UBYTE *boardnum)
         /* Need to disable synchronous SCSI */
         sc->sc_nosync = ~0;
     }
-    sc->sc_nodisconnect = 0;  /* Mask of targets not allowed to disconnect */
 
     /*
      * A4091 Rear-access DIP switches
@@ -737,6 +737,31 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     }
 
     scsipi_insert_periph(chan, periph);
+
+    /* Check if device supports disconnect/reconnect */
+    if (asave->allow_disc) {
+        struct {
+            struct scsi_mode_parameter_header_6 hdr;
+            struct scsi_disconnect_reconnect_page drp;
+        } modepage;
+
+        int ms_rc = scsipi_mode_sense(periph, SMS_DBD,
+                        SCSI_DISCONNECT_RECONNECT_PAGE,
+                        &modepage.hdr,
+                        sizeof(modepage),
+                        XS_CTL_SIMPLE_TAG,
+                        0,      /* retries */
+                        5000);  /* timeout ms */
+        if (ms_rc == 0 &&
+            (modepage.drp.pg_code & 0x3f) == SCSI_DISCONNECT_RECONNECT_PAGE) {
+            /* Device supports disconnect-reconnect mode page */
+            printf("  Target %d: disconnect/reconnect enabled\n", target);
+            siop_allow_disc[target] = 3;
+        } else {
+            printf("  Target %d: disconnect/reconnect disabled\n", target);
+        }
+    }
+
 #if 0
     /* Might be needed for A3000 / A2091 / A590 */
     scsipi_set_xfer_mode(chan, target, 1);
