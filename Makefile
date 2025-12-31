@@ -80,7 +80,7 @@ VLINK   := vlink
 VASM    := vasmm68k_mot
 
 # Find an appropriate set of NDK includes
-NDK_PATH ?= $(shell realpath $$(dirname $$(which +$(CC)))/../m68k-amigaos/ndk-include)
+NDK_PATH ?= $(shell realpath $$(dirname $$(which $(CC)))/../m68k-amigaos/ndk-include)
 
 # CFLAGS for device driver
 #
