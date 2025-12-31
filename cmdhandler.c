@@ -46,6 +46,7 @@
 #include "cmdhandler.h"
 #include "nsd.h"
 #include "ndkcompat.h"
+#include "version.h"
 
 #ifndef DEBUG_CMDHANDLER
 #undef DEBUG_CMD
@@ -738,6 +739,15 @@ cmd_handler(void)
         msg->io_Error = ERROR_NO_MEMORY;
         goto fail_allocmem;
     }
+    /*
+     * Check if driver is loaded in Zorro II memory space. If so, DMA buffers
+     * must be allocated in Chip RAM since the A4091/A4092 (Zorro III) cannot
+     * DMA to/from Zorro II address space.
+     */
+    asave->need_chip_ram_dma = is_zorro_ii_address((void *)device_id_string, 1);
+    if (asave->need_chip_ram_dma)
+        printf("Zorro II memory detected, using Chip RAM for DMA buffers\n");
+
     asave->as_device_private = AllocMem(sizeof (*asave->as_device_private),
                                         MEMF_CLEAR | MEMF_PUBLIC);
     if (asave->as_device_private == NULL) {

@@ -48,6 +48,8 @@ typedef struct {
     /* scripts copy (for Zorro II systems) */
     void                 *as_scripts_copy;
     uint32_t              as_scripts_copy_size;
+    /* Zorro II DMA workaround flag */
+    uint8_t               need_chip_ram_dma;
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;
