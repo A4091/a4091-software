@@ -85,12 +85,21 @@ switch:
 
 msgin:
 	MOVE FROM ds_MsgIn, WHEN MSG_IN
+	JUMP REL(msg_complete), IF 0x00	; command complete
 	JUMP REL(ext_msg), IF 0x01	; extended message
 	JUMP REL(disc), IF 0x04		; disconnect message
 	JUMP REL(msg_sdp), IF 0x02	; save data pointers
 	JUMP REL(msg_rej), IF 0x07	; message reject
 	JUMP REL(msg_rdp), IF 0x03	; restore data pointers
+	JUMP REL(clear_ack), IF 0x08	; NOP message
 	INT err6			; unrecognized message
+
+; Command Complete received via msgin (can happen after reselect if status
+; was already sent before disconnect)
+msg_complete:
+	CLEAR ACK
+	WAIT DISCONNECT
+	INT ok				; signal completion
 
 msg_rej:
 ; Do we need to interrupt host here to let it handle the reject?
