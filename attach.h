@@ -71,6 +71,7 @@ typedef struct {
 
 extern a4091_save_t *asave;
 extern u_char siop_allow_disc[8];
+extern u_char siopng_allow_disc[16];
 
 int attach(device_t self, uint scsi_target, struct scsipi_periph **periph,
            uint flags);

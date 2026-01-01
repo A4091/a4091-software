@@ -756,7 +756,11 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
             (modepage.drp.pg_code & 0x3f) == SCSI_DISCONNECT_RECONNECT_PAGE) {
             /* Device supports disconnect-reconnect mode page */
             printf("  Target %d: disconnect/reconnect enabled\n", target);
+#if defined(ARCH_710)
             siop_allow_disc[target] = 3;
+#elif defined(ARCH_720)
+            siopng_allow_disc[target] = 3;
+#endif
         } else {
             printf("  Target %d: disconnect/reconnect disabled\n", target);
         }
