@@ -57,6 +57,8 @@ if [ -r ../a4092_cdfs.rom ]; then
 xdftool $DISK makedir ROMs
 xdftool $DISK write ../a4092_cdfs.rom ROMs/a4092_cdfs.rom
 fi
+xdftool $DISK write update_a4092 Tools/update
+xdftool $DISK protect Tools/update sparwed
 xdftool $DISK write A4091.guide
 xdftool $DISK write A4091.guide.info
 xdftool $DISK write Disk.info

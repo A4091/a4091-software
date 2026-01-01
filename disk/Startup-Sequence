@@ -24,5 +24,6 @@ echo "       devtest    - storage device benchmark tool"
 echo "       rdb        - modify your Rigid Disk Block settings"
 echo "       RDBFlags   - Easily toggle LastDisk flag in RDB"
 echo "       a4092flash - Firmware Update Utility for A4092"
+echo "       update     - Update A4092 to the latest firmware"
 echo ""
 
