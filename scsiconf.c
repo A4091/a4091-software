@@ -58,6 +58,9 @@
 #include "scsi_all.h"
 #include "scsipi_all.h"
 #include "scsipiconf.h"
+#include "attach.h"
+#include <exec/memory.h>
+#include <clib/exec_protos.h>
 int
 scsi_probe_device(struct scsipi_channel *chan, int target, int lun, struct scsipi_periph *periph, int *failed);
 #else /* !PORT_AMIGA */
@@ -878,8 +881,12 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #ifndef PORT_AMIGA
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
-#endif
 	struct scsipi_inquiry_data inqbuf;
+#define INQBUF inqbuf
+#else
+	struct scsipi_inquiry_data *inqbuf;
+#define INQBUF (*inqbuf)
+#endif
 	int checkdtype, docontinue, quirks;
 #ifdef ENABLE_QUIRKS
 	const struct scsi_quirk_inquiry_pattern *finger;
@@ -906,6 +913,14 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 
 #ifdef PORT_AMIGA
 	periph->periph_channel = chan;
+
+	/* Allocate inquiry buffer in appropriate memory type for DMA */
+	inqbuf = AllocMem(sizeof(*inqbuf),
+	    (asave->need_chip_ram_dma ? MEMF_CHIP : 0) | MEMF_PUBLIC | MEMF_CLEAR);
+	if (inqbuf == NULL) {
+		*failed = ERROR_NO_MEMORY;
+		return (docontinue);
+	}
 #else
 	periph = scsipi_alloc_periph(M_WAITOK);
 	periph->periph_channel = chan;
@@ -936,9 +951,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #endif /* SCSI_2_DEF */
 
 	/* Now go ask the device all about itself. */
-	memset(&inqbuf, 0, sizeof(inqbuf));
+	memset(&INQBUF, 0, sizeof(INQBUF));
 	{
-		u_int8_t *extension = &inqbuf.flags1;
+		u_int8_t *extension = &INQBUF.flags1;
 		int len = 0;
 		while (len < 3)
 			extension[len++] = '\0';
@@ -954,17 +969,17 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			extension[len++] = ' ';
 	}
 
-	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY | XS_CTL_SILENT)) {
+	if (scsipi_inquire(periph, &INQBUF, XS_CTL_DISCOVERY | XS_CTL_SILENT)) {
 #ifdef PORT_AMIGA
                 *failed = ERROR_INQUIRY_FAILED;
 #endif
 		goto bad;
         }
 
-	periph->periph_type = inqbuf.device & SID_TYPE;
-	if (inqbuf.dev_qual2 & SID_REMOVABLE)
+	periph->periph_type = INQBUF.device & SID_TYPE;
+	if (INQBUF.dev_qual2 & SID_REMOVABLE)
 		periph->periph_flags |= PERIPH_REMOVABLE;
-	periph->periph_version = inqbuf.version & SID_ANSII;
+	periph->periph_version = INQBUF.version & SID_ANSII;
 
 	/*
 	 * Any device qualifier that has the top bit set (qualifier&4 != 0)
@@ -972,7 +987,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	 * All we do here is throw out bad/negative responses.
 	 */
 	checkdtype = 0;
-	switch (inqbuf.device & SID_QUAL) {
+	switch (INQBUF.device & SID_QUAL) {
 	case SID_QUAL_LU_PRESENT:
 		checkdtype = 1;
 		break;
@@ -1032,13 +1047,13 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 
 #if ENABLE_QUIRKS
 	sa.sa_periph = periph;
-	sa.sa_inqbuf.type = inqbuf.device;
-	sa.sa_inqbuf.removable = inqbuf.dev_qual2 & SID_REMOVABLE ?
+	sa.sa_inqbuf.type = INQBUF.device;
+	sa.sa_inqbuf.removable = INQBUF.dev_qual2 & SID_REMOVABLE ?
 	    T_REMOV : T_FIXED;
-	sa.sa_inqbuf.vendor = inqbuf.vendor;
-	sa.sa_inqbuf.product = inqbuf.product;
-	sa.sa_inqbuf.revision = inqbuf.revision;
-	sa.scsipi_info.scsi_version = inqbuf.version;
+	sa.sa_inqbuf.vendor = INQBUF.vendor;
+	sa.sa_inqbuf.product = INQBUF.product;
+	sa.sa_inqbuf.revision = INQBUF.revision;
+	sa.scsipi_info.scsi_version = INQBUF.version;
 	sa.sa_inqptr = &inqbuf;
 
 	finger = scsipi_inqmatch(
@@ -1058,23 +1073,23 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	 * Determine the operating mode capabilities of the device.
 	 */
 	if (periph->periph_version >= 2) {
-		if ((inqbuf.flags3 & SID_CmdQue) != 0 &&
+		if ((INQBUF.flags3 & SID_CmdQue) != 0 &&
 		    (quirks & PQUIRK_NOTAG) == 0)
 			periph->periph_cap |= PERIPH_CAP_TQING;
-		if ((inqbuf.flags3 & SID_Linked) != 0)
+		if ((INQBUF.flags3 & SID_Linked) != 0)
 			periph->periph_cap |= PERIPH_CAP_LINKCMDS;
-		if ((inqbuf.flags3 & SID_Sync) != 0 &&
+		if ((INQBUF.flags3 & SID_Sync) != 0 &&
 		    (quirks & PQUIRK_NOSYNC) == 0)
 			periph->periph_cap |= PERIPH_CAP_SYNC;
-		if ((inqbuf.flags3 & SID_WBus16) != 0 &&
+		if ((INQBUF.flags3 & SID_WBus16) != 0 &&
 		    (quirks & PQUIRK_NOWIDE) == 0)
 			periph->periph_cap |= PERIPH_CAP_WIDE16;
-		if ((inqbuf.flags3 & SID_WBus32) != 0 &&
+		if ((INQBUF.flags3 & SID_WBus32) != 0 &&
 		    (quirks & PQUIRK_NOWIDE) == 0)
 			periph->periph_cap |= PERIPH_CAP_WIDE32;
-		if ((inqbuf.flags3 & SID_SftRe) != 0)
+		if ((INQBUF.flags3 & SID_SftRe) != 0)
 			periph->periph_cap |= PERIPH_CAP_SFTRESET;
-		if ((inqbuf.flags3 & SID_RelAdr) != 0)
+		if ((INQBUF.flags3 & SID_RelAdr) != 0)
 			periph->periph_cap |= PERIPH_CAP_RELADR;
 		/* SPC-2 */
 		if (periph->periph_version >= 3 &&
@@ -1084,7 +1099,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			 * If the device only supports DT, clear these
 			 * flags (DT implies SYNC and WIDE)
 			 */
-			switch (inqbuf.flags4 & SID_Clocking) {
+			switch (INQBUF.flags4 & SID_Clocking) {
 			case SID_CLOCKING_DT_ONLY:
 				periph->periph_cap &=
 				    ~(PERIPH_CAP_SYNC |
@@ -1100,9 +1115,9 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 			}
 		}
 		if (periph->periph_version >= 3) {
-			if (inqbuf.flags4 & SID_IUS)
+			if (INQBUF.flags4 & SID_IUS)
 				periph->periph_cap |= PERIPH_CAP_IUS;
-			if (inqbuf.flags4 & SID_QAS)
+			if (INQBUF.flags4 & SID_QAS)
 				periph->periph_cap |= PERIPH_CAP_QAS;
 		}
 	}
@@ -1175,13 +1190,20 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	}
 #endif  /* !PORT_AMIGA */
 
+#ifdef PORT_AMIGA
+	FreeMem(inqbuf, sizeof(*inqbuf));
+#endif
 	return (docontinue);
 
 bad:
         if (*failed == 0)
             *failed = ERROR_OPEN_FAIL;
+#ifdef PORT_AMIGA
+	FreeMem(inqbuf, sizeof(*inqbuf));
+#else
 #if 0
 	scsipi_free_periph(periph);
+#endif
 #endif
 	return (docontinue);
 }
