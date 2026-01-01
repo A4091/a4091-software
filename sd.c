@@ -1104,6 +1104,40 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
                                1, SD_IO_TIMEOUT, NULL, flags);
     if (__predict_false(xs == NULL))
         return (1);  // out of memory
+
+    /* Check if buffer is in Zorro II memory and needs bounce buffer */
+    if (__predict_false(buflen > 0 && is_zorro_ii_address(buf, buflen))) {
+        struct scsipi_channel *chan = periph->periph_channel;
+        void *bounce_buf;
+
+        /* Unlike sd_readwrite, we can't chunk SCSI direct commands since
+         * we don't understand the CDB structure. Fail if too large.
+         */
+        if (buflen > MAX_BOUNCE_SIZE) {
+            scsipi_put_xs(xs);
+            return (TDERR_NoMem);
+        }
+
+        /* Serialize bounce buffer usage */
+        if (chan->chan_bounce_allocated > 0) {
+            scsipi_put_xs(xs);
+            return (IOERR_UNITBUSY);
+        }
+
+        bounce_buf = AllocMem(buflen, MEMF_CHIP | MEMF_PUBLIC);
+        if (bounce_buf == NULL) {
+            scsipi_put_xs(xs);
+            return (TDERR_NoMem);
+        }
+
+        chan->chan_bounce_allocated += buflen;
+
+        /* For writes, copy data to bounce buffer */
+        if (flags & XS_CTL_DATA_OUT)
+            CopyMem(buf, bounce_buf, buflen);
+        xs->data = bounce_buf;
+    }
+
     xs->amiga_ior = ior;
     xs->xs_callback_arg = scmd;
     xs->xs_done_callback = scsidirect_complete;
@@ -1279,6 +1313,23 @@ scsidirect_complete(struct scsipi_xfer *xs)
 {
     int             rc   = translate_xs_error(xs);
     struct SCSICmd *scmd = xs->xs_callback_arg;
+
+    /* Check if we used a bounce buffer (xs->data differs from original) */
+    if (xs->data != (u_char *)scmd->scsi_Data && xs->datalen > 0) {
+        struct scsipi_channel *chan = xs->xs_periph->periph_channel;
+        void *bounce_buf = xs->data;
+        void *orig_buf = scmd->scsi_Data;
+
+        /* For reads, copy data back from bounce buffer */
+        if (rc == 0 && (xs->xs_control & XS_CTL_DATA_IN))
+            CopyMem(bounce_buf, orig_buf, xs->datalen);
+
+        FreeMem(bounce_buf, xs->datalen);
+        chan->chan_bounce_allocated -= xs->datalen;
+
+        /* Wake up any queued requests waiting for bounce buffer */
+        Signal(chan->chan_task, chan->chan_sig_mask);
+    }
 
     scmd->scsi_Status    = rc;
     scmd->scsi_Actual    = scmd->scsi_Length;
