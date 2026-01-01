@@ -82,7 +82,7 @@ static const int8_t error_code_mapping[] = {
 uint32_t
 get_scripts_dma_addr(const void *scripts, uint32_t size)
 {
-    if (is_zorro_ii_address((APTR)scripts, size)) {
+    if (__predict_false(is_zorro_ii_address((APTR)scripts, size))) {
         void *copy = AllocMem(size, MEMF_CHIP | MEMF_PUBLIC);
         if (copy != NULL) {
             CopyMem((APTR)scripts, copy, size);
@@ -207,7 +207,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
      * cache flush ops against the data buffer won't work properly.
      */
     datap = AllocMem(sizeof (*datap), MEMF_PUBLIC);
-    if (datap != NULL && is_zorro_ii_address(datap, sizeof (*datap))) {
+    if (__predict_false(datap != NULL && is_zorro_ii_address(datap, sizeof (*datap)))) {
         FreeMem(datap, sizeof (*datap));
         datap = AllocMem(sizeof (*datap), MEMF_CHIP | MEMF_PUBLIC);
     }
@@ -650,7 +650,7 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
     cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI2;
 
     inq = AllocMem(sizeof (*inq), MEMF_PUBLIC);
-    if (inq != NULL && is_zorro_ii_address(inq, sizeof (*inq))) {
+    if (__predict_false(inq != NULL && is_zorro_ii_address(inq, sizeof (*inq)))) {
         FreeMem(inq, sizeof (*inq));
         inq = AllocMem(sizeof (*inq), MEMF_CHIP | MEMF_PUBLIC);
     }
@@ -775,7 +775,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
 
     if (modepage == NULL) {
         modepage = AllocMem(sizeof (*modepage), MEMF_PUBLIC | MEMF_CLEAR);
-        if (modepage != NULL && is_zorro_ii_address(modepage, sizeof (*modepage))) {
+        if (__predict_false(modepage != NULL && is_zorro_ii_address(modepage, sizeof (*modepage)))) {
             FreeMem(modepage, sizeof (*modepage));
             modepage = AllocMem(sizeof (*modepage), MEMF_CHIP | MEMF_PUBLIC | MEMF_CLEAR);
         }
