@@ -316,7 +316,7 @@ $(OBJDIR):
 	$(QUIET)mkdir -p $@/util/a4092flash
 
 util/a4092flash/a4092flash:
-	$(QUIET)make -s -C util/a4092flash
+	$(QUIET)make -s -C util/a4092flash DEVICE_VERSION=$(DEVICE_VERSION) DEVICE_REVISION=$(DEVICE_REVISION)
 
 clean:
 	@echo Cleaning.

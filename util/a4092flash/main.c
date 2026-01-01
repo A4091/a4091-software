@@ -234,6 +234,43 @@ static BOOL probeFlash(ULONG romSize);
 static BOOL parse_nvram_params(struct Config* config);
 static void execute_nvram_operations(struct scsiBoard* board);
 
+/**
+ * get_version_from_buffer
+ *
+ * Extract the firmware version string from a buffer
+ * Searches for "A4091 scsidisk" pattern and returns the version string
+ *
+ * @param buffer pointer to the data buffer
+ * @param size size of the buffer
+ * @param version_out output buffer for version string (can be NULL to just check)
+ * @param version_max max size of output buffer
+ * @return true if version found
+ */
+static BOOL get_version_from_buffer(UBYTE *buffer, ULONG size, char *version_out, ULONG version_max)
+{
+  const char *needle = "A4091 scsidisk";
+  size_t needle_len = strlen(needle);
+  ULONG search_size = (size < 4096) ? size : 4096;
+
+  for (size_t i = 0; i <= search_size - needle_len; i++) {
+    if (memcmp(buffer + i, needle, needle_len) == 0) {
+      if (version_out && version_max > 0) {
+        // Copy version string (up to null terminator or max size)
+        size_t j;
+        for (j = 0; j < version_max - 1 && (i + j) < size; j++) {
+          char c = buffer[i + j];
+          if (c == '\0' || c == '\n' || c == '\r')
+            break;
+          version_out[j] = c;
+        }
+        version_out[j] = '\0';
+      }
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 int main(int argc, char *argv[])
 {
 #pragma GCC diagnostic push
@@ -337,14 +374,43 @@ int main(int argc, char *argv[])
         printf(" at Address 0x%06x\n",(int)cd->cd_BoardAddr);
         boards_found++;
 
-        // Ask the user if they wish to update this board
-        if ((config->writeFlash || config->eraseFlash) && !promptUser(config)) continue;
-
         UBYTE manufId,devId;
         ULONG sectorSize;
         ULONG flashSize;
 
         if (flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
+          // Display version information before prompting
+          if (config->writeFlash && driver_buffer) {
+            char flash_version[128];
+            char file_version[128];
+            const ULONG SEARCH_SIZE = 4096;
+            ULONG search_size = (flashSize < SEARCH_SIZE) ? flashSize : SEARCH_SIZE;
+            char *flash_buf = AllocMem(search_size, 0);
+
+            if (flash_buf) {
+              for (int i = 0; i < search_size; i++) {
+                flash_buf[i] = flash_readByte(i);
+              }
+
+              printf("  Installed: ");
+              if (get_version_from_buffer((UBYTE *)flash_buf, search_size, flash_version, sizeof(flash_version))) {
+                printf("%s\n", flash_version);
+              } else {
+                printf("(unknown)\n");
+              }
+              FreeMem(flash_buf, search_size);
+            }
+
+            printf("  Update to: ");
+            if (get_version_from_buffer(driver_buffer, romSize, file_version, sizeof(file_version))) {
+              printf("%s\n", file_version);
+            } else {
+              printf("(unknown)\n");
+            }
+          }
+
+          // Ask the user if they wish to update this board
+          if ((config->writeFlash || config->eraseFlash) && !promptUser(config)) continue;
           ULONG bankSize = 65536; // hardcode A4091/A4092 image size for now
           if (config->eraseFlash) {
             printf("Erasing whole flash.\n");
@@ -626,9 +692,7 @@ static BOOL probeFlash(ULONG romSize)
 {
   BOOL ret = true;
   const ULONG BANK_SIZE = 0x10000; // 64KB
-  const ULONG VERSION_SEARCH_SIZE = 4096; // First 4KB contains version string
-  const char *needle = "A4091 scsidisk";
-  size_t needle_len = strlen(needle);
+  const ULONG SEARCH_SIZE = 4096;
 
   if (romSize == 0) return false;
 
@@ -660,26 +724,16 @@ static BOOL probeFlash(ULONG romSize)
     }
   }
 
-  // Search for version string in first 4KB only
-  ULONG search_size = (romSize < VERSION_SEARCH_SIZE) ? romSize : VERSION_SEARCH_SIZE;
-
+  ULONG search_size = (romSize < SEARCH_SIZE) ? romSize : SEARCH_SIZE;
   char *buffer = AllocMem(search_size, 0);
   if (buffer) {
     for (int i = 0; i < search_size; i++) {
       buffer[i] = flash_readByte(i);
     }
 
-    // Search for version string
-    int offset = -1;
-    for (size_t i = 0; i <= search_size - needle_len; i++) {
-      if (memcmp(buffer + i, needle, needle_len) == 0) {
-        offset = (int)i;
-        break;
-      }
-    }
-
-    if (offset >= 0) {
-      printf("Version: %s\n", buffer + offset);
+    char version[128];
+    if (get_version_from_buffer((UBYTE *)buffer, search_size, version, sizeof(version))) {
+      printf("Version: %s\n", version);
     } else {
       printf("Could not determine version.\n");
     }

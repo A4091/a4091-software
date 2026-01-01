@@ -12,8 +12,8 @@ QUIET?=@
 GIT_REF_NAME = $(shell git branch --show-current)
 GIT_REF := "$(GIT_REF_NAME)-$(shell git rev-parse --short HEAD)"
 BUILD_DATE := $(shell date '+%-d.%-m.%Y')
-DEVICE_VERSION  = 1
-DEVICE_REVISION = 0
+DEVICE_VERSION  ?= 1
+DEVICE_REVISION ?= 0
 
 ifneq ($(DEVICE_VERSION), )
 CFLAGS+=-DDEVICE_VERSION=$(DEVICE_VERSION) -DDEVICE_REVISION=$(DEVICE_REVISION)
