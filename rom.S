@@ -284,9 +284,17 @@ Romtag
 *******  Strings referenced in Diag Copy area  **************************
 *************************************************************************
 DevName
+        IFD DRIVER_A4092
+        dc.b    'a4092.device',0                   ; Name string
+        ELSE
         dc.b    'a4091.device',0                   ; Name string
+        ENDC
 IdString
+        IFD DRIVER_A4092
+        dc.b    'A4092 scsidisk '
+        ELSE
         dc.b    'A4091 scsidisk '
+        ENDC
         FULL_VERSION_STR
         dc.b    0                     ; ID string
 DosName

@@ -238,7 +238,7 @@ static void execute_nvram_operations(struct scsiBoard* board);
  * get_version_from_buffer
  *
  * Extract the firmware version string from a buffer
- * Searches for "A4091 scsidisk" pattern and returns the version string
+ * Searches for "A4092 scsidisk" pattern and returns the version string
  *
  * @param buffer pointer to the data buffer
  * @param size size of the buffer
@@ -248,7 +248,7 @@ static void execute_nvram_operations(struct scsiBoard* board);
  */
 static BOOL get_version_from_buffer(UBYTE *buffer, ULONG size, char *version_out, ULONG version_max)
 {
-  const char *needle = "A4091 scsidisk";
+  const char *needle = "A4092 scsidisk";
   size_t needle_len = strlen(needle);
   ULONG search_size = (size < 4096) ? size : 4096;
 
