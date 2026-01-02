@@ -148,6 +148,20 @@ void siopng_dump_acb(struct siop_acb *);
 
 /* 53C720/770 script */
 
+/* Script interrupt codes - must match siop2_script.ss */
+#define A_ok                    0xff00  /* Command completed successfully */
+#define A_int_disc              0xff01  /* Disconnect (after Save Data Pointers) */
+#define A_int_disc_nosdp        0xff02  /* Disconnect (without Save Data Pointers) */
+#define A_int_resel             0xff03  /* Reselect/reconnect from target */
+#define A_int_sel_fail          0xff04  /* Select failed (not connected) */
+#define A_int_bad_phase         0xff05  /* Unrecognized SCSI phase */
+#define A_int_bad_msg           0xff06  /* Unrecognized message received */
+#define A_int_extmsg_bad        0xff07  /* Extended message not SDTR/WDTR */
+#define A_int_sdp_nodisc        0xff08  /* Save Data Ptrs not followed by Disconnect */
+#define A_int_resel_no_id       0xff09  /* Reselect without IDENTIFY message */
+#define A_int_status_no_msg     0xff0a  /* Status not followed by message */
+#define A_int_nego              0xff0b  /* SDTR/WDTR message - let host handle */
+
 #ifdef PORT_AMIGA
 #include "siop2_script.out"
 #else
@@ -1082,7 +1096,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 	}
 #endif
 	SIOP_TRACE('i',dstat,istat,(istat&SIOP_ISTAT_DIP)?rp->siop_dsps&0xff:sist);
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff00) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_ok) {
 		/* Normal completion status, or check condition */
 #ifdef DEBUG
 		if (rp->siop_dsa != kvtop((void *)&acb->ds)) {
@@ -1144,7 +1158,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 			rp->siop_dcntl |= SIOP_DCNTL_STD;
 		return 1;
 	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0b) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_nego) {
 		target = acb->xs->xs_periph->periph_target;
 		if (acb->msg[1] == MSG_EXT_MESSAGE && acb->msg[2] == 2 &&
 		    acb->msg[3] == MSG_WIDE_REQ) {
@@ -1364,8 +1378,8 @@ siopng_dump(sc);
 		}
 		return (acb != NULL);
 	}
-	if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == 0xff01 ||
-	    rp->siop_dsps == 0xff02)) {
+	if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == A_int_disc ||
+	    rp->siop_dsps == A_int_disc_nosdp)) {
 #ifdef DEBUG
 		if (siopng_debug & 0x100)
 			printf ("%s: ID %02x disconnected TEMP %lx (+%lx) curbuf %lx curlen %lx buf %p len %lx dfifo %x dbc %x sstat1 %x starts %d acb %p\n",
@@ -1426,7 +1440,7 @@ siopng_dump(sc);
 			if (siopng_debug & 0x100)
 				printf ("%s: adjusting DMA chain\n",
 				    device_xname(sc->sc_dev));
-			if (rp->siop_dsps == 0xff02)
+			if (rp->siop_dsps == A_int_disc_nosdp)
 				printf ("%s: ID %02x disconnected without Save Data Pointers\n",
 				    device_xname(sc->sc_dev), 1 << target);
 #endif
@@ -1495,7 +1509,7 @@ siopng_dump(sc);
 #endif
 		return (0);
 	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff03) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_resel) {
 		int reselid = rp->siop_scratcha & 0x7f;
 		int reselun = rp->siop_sfbr & 0x07;
 
@@ -1557,7 +1571,7 @@ siopng_dump(sc);
 		amiga_membarrier();
 		return (0);
 	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff04) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_sel_fail) {
 #ifdef DEBUG
 		u_short ctest2 = rp->siop_ctest2;
 
@@ -1596,7 +1610,7 @@ siopng_dump(sc);
 		amiga_membarrier();
 		return (0);
 	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff06) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_bad_msg) {
 		if (acb == NULL)
 			printf("%s: Bad message-in with no active command?\n",
 			    device_xname(sc->sc_dev));
@@ -1610,7 +1624,7 @@ siopng_dump(sc);
 		amiga_membarrier();
 		return (0);
 	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0a) {
+	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_status_no_msg) {
 		/* Status phase wasn't followed by message in phase? */
 		printf ("%s: Status phase not followed by message in phase? sbcl %x sbdl %x\n",
 			device_xname(sc->sc_dev), rp->siop_sbcl, rp->siop_sbdl);

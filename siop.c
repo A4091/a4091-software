@@ -141,6 +141,20 @@ void siop_dump_acb(struct siop_acb *);
 /* 53C710 script */
 #include "siop_script.out"
 
+/* Script interrupt codes - must match siop_script.ss */
+#define A_ok                    0xff00  /* Command completed successfully */
+#define A_int_disc              0xff01  /* Disconnect (after Save Data Pointers) */
+#define A_int_disc_nosdp        0xff02  /* Disconnect (without Save Data Pointers) */
+#define A_int_resel             0xff03  /* Reselect/reconnect from target */
+#define A_int_sel_fail          0xff04  /* Select failed (not connected) */
+#define A_int_bad_phase         0xff05  /* Unrecognized SCSI phase */
+#define A_int_bad_msg           0xff06  /* Unrecognized message received */
+#define A_int_extmsg_notsdtr    0xff07  /* Extended message not SDTR */
+#define A_int_sdp_nodisc        0xff08  /* Save Data Ptrs not followed by Disconnect */
+#define A_int_resel_no_id       0xff09  /* Reselect without IDENTIFY message */
+#define A_int_status_no_msg     0xff0a  /* Status not followed by message */
+#define A_int_sdtr              0xff0b  /* SDTR message - let host handle */
+
 /* default to not inhibit sync negotiation on any drive */
 u_char siop_inhibit_sync[8] = { 0, 0, 0, 0, 0, 0, 0 }; /* initialize, so patchable */
 u_char siop_allow_disc[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -942,8 +956,16 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
 #endif
     acb->msgout[0] = MSG_IDENTIFY | lun;
     if (siop_allow_disc[target] & 2 ||
-        (siop_allow_disc[target] && len == 0))
-        acb->msgout[0] = MSG_IDENTIFY_DR | lun;
+        (siop_allow_disc[target] && len == 0)) {
+        /*
+         * Don't allow disconnect during device discovery.
+         * Some devices (e.g., AztecMonster CF-to-SCSI bridges) fail to
+         * properly reselect after disconnecting during probe commands.
+         * See Linux kernel commit 7c8ed783c2faa1e3f741844ffac41340338ea0f4.
+         */
+        if (acb->xs == NULL || !(acb->xs->xs_control & XS_CTL_DISCOVERY))
+            acb->msgout[0] = MSG_IDENTIFY_DR | lun;
+    }
     acb->status = 0;
     acb->stat[0] = -1;
     acb->msg[0] = -1;
@@ -1339,7 +1361,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     }
 #endif
 
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff00) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_ok) {
         /* Normal completion status, or check condition */
 #ifdef DEBUG
         if (acb == NULL) {
@@ -1393,7 +1415,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             rp->siop_dcntl |= SIOP_DCNTL_STD;
         return 1;
     }
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0b) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_sdtr) {
 #ifdef DEBUG
         if (acb == NULL) {
             printf("%s: DSTAT_SIR when no active command?\n",
@@ -1582,8 +1604,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             rp->siop_dsp = sc->sc_scriptspa + Ent_wait_reselect;
         return (acb != NULL);
     }
-    if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == 0xff01 ||
-        rp->siop_dsps == 0xff02)) {
+    if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == A_int_disc ||
+        rp->siop_dsps == A_int_disc_nosdp)) {
 #ifdef DEBUG
         if (siop_debug & 0x100)
             printf ("%s: TGT %x disconnected TEMP %lx (+%lx) curbuf %lx curlen %lx buf %p len %lx dfifo %x dbc %x sstat1 %x starts %d acb %p\n",
@@ -1644,11 +1666,11 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             if (siop_debug & 0x100)
                 printf ("%s: adjusting DMA chain\n",
                     device_xname(sc->sc_dev));
-            if (rp->siop_dsps == 0xff02)
+            if (rp->siop_dsps == A_int_disc_nosdp)
                 printf ("%s: TGT %x disconnected without Save Data Pointers\n",
                     device_xname(sc->sc_dev), target);
 #endif
-/* XXX is:      if (rp->siop_dsps != 0xff02) { */
+/* XXX is:      if (rp->siop_dsps != A_int_disc_nosdp) { */
                 /* not disconnected without save data ptr */
             for (i = 0; i < DMAMAXIO; ++i) {
                 if (acb->ds.chain[i].datalen == 0)
@@ -1715,7 +1737,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             siop_sched(sc);
         return (0);
     }
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff03) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_resel) {
         int reselid = rp->siop_scratch & 0x7f;
         int reselun = rp->siop_sfbr & 0x07;
 
@@ -1781,7 +1803,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         rp->siop_dcntl |= SIOP_DCNTL_STD;
         return (0);
     }
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff04) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_sel_fail) {
 #ifdef DEBUG
         u_short ctest2 = rp->siop_ctest2;
 
@@ -1815,7 +1837,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         rp->siop_dsp = sc->sc_scriptspa;
         return (0);
     }
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff06) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_bad_msg) {
         if (acb == NULL) {
             printf("%s: Bad message-in with no active command?\n",
                 device_xname(sc->sc_dev));
@@ -1834,7 +1856,7 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
         return (0);
     }
-    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0a) {
+    if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == A_int_status_no_msg) {
         /* Status phase wasn't followed by message in phase? */
         printf ("%s: Status phase not followed by message in phase? sbcl %x sbdl %x\n",
             device_xname(sc->sc_dev), rp->siop_sbcl, rp->siop_sbdl);
