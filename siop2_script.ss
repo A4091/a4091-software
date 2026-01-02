@@ -47,18 +47,19 @@ ABSOLUTE ds_Data7	= ds_Data6 + 8
 ABSOLUTE ds_Data8	= ds_Data7 + 8
 ABSOLUTE ds_Data9	= ds_Data8 + 8
 
-ABSOLUTE ok		= 0xff00
-ABSOLUTE err1		= 0xff01
-ABSOLUTE err2		= 0xff02
-ABSOLUTE err3		= 0xff03
-ABSOLUTE err4		= 0xff04
-ABSOLUTE err5		= 0xff05
-ABSOLUTE err6		= 0xff06
-ABSOLUTE err7		= 0xff07
-ABSOLUTE err8		= 0xff08
-ABSOLUTE err9		= 0xff09
-ABSOLUTE err10		= 0xff0a
-ABSOLUTE err11		= 0xff0b
+; Interrupt codes - returned to host driver via DSPS register
+ABSOLUTE A_ok			= 0xff00	; Command completed successfully
+ABSOLUTE A_int_disc		= 0xff01	; Disconnect (after Save Data Pointers)
+ABSOLUTE A_int_disc_nosdp	= 0xff02	; Disconnect (without Save Data Pointers)
+ABSOLUTE A_int_resel		= 0xff03	; Reselect/reconnect from target
+ABSOLUTE A_int_sel_fail		= 0xff04	; Select failed (not connected)
+ABSOLUTE A_int_bad_phase	= 0xff05	; Unrecognized SCSI phase
+ABSOLUTE A_int_bad_msg		= 0xff06	; Unrecognized message received
+ABSOLUTE A_int_extmsg_bad	= 0xff07	; Extended message not SDTR/WDTR
+ABSOLUTE A_int_sdp_nodisc	= 0xff08	; Save Data Ptrs not followed by Disconnect
+ABSOLUTE A_int_resel_no_id	= 0xff09	; Reselect without IDENTIFY message
+ABSOLUTE A_int_status_no_msg	= 0xff0a	; Status not followed by message
+ABSOLUTE A_int_nego		= 0xff0b	; SDTR/WDTR message - let host handle
 
 ENTRY	scripts
 ENTRY	switch
@@ -82,7 +83,7 @@ switch:
 	JUMP REL(datain), IF DATA_IN
 	JUMP REL(end), IF STATUS
 
-	INT err5			; Unrecognized phase
+	INT A_int_bad_phase		; Unrecognized phase
 
 msgin:
 	MOVE FROM ds_MsgIn, WHEN MSG_IN
@@ -91,7 +92,7 @@ msgin:
 	JUMP REL(msg_sdp), IF 0x02	; save data pointers
 	JUMP REL(msg_rej), IF 0x07	; message reject
 	JUMP REL(msg_rdp), IF 0x03	; restore data pointers
-	INT err6			; unrecognized message
+	INT A_int_bad_msg		; unrecognized message
 
 msg_rej:
 ; Do we need to interrupt host here to let it handle the reject?
@@ -106,12 +107,12 @@ ext_msg:
 	MOVE FROM ds_ExtMsg, WHEN MSG_IN
 	JUMP REL(neg_msg), IF 0x03	; extended message might be SDTR
 	JUMP REL(neg_msg), IF 0x02	; extended message might be WDTR
-	INT err7			; extended message not SDTR
+	INT A_int_extmsg_bad		; extended message not SDTR/WDTR
 
 neg_msg:
 	CLEAR ACK
 	MOVE FROM ds_NegMsg, WHEN MSG_IN
-	INT err11			; Let host handle the message
+	INT A_int_nego			; Let host handle the message
 ; If we continue from the interrupt, the host has set up a response
 ; message to be sent.  Set ATN, clear ACK, and continue.
 	SET ATN
@@ -124,18 +125,18 @@ disc:
 	CLEAR ACK
 	WAIT DISCONNECT
 
-	INT err2			; signal disconnect w/o save DP
+	INT A_int_disc_nosdp		; signal disconnect w/o save DP
 
 msg_sdp:
 	CLEAR ACK			; acknowledge message
 	JUMP REL(switch), WHEN NOT MSG_IN
 	MOVE FROM ds_ExtMsg, WHEN MSG_IN
-	INT err8, IF NOT 0x04		; interrupt if not disconnect
+	INT A_int_sdp_nodisc, IF NOT 0x04	; interrupt if not disconnect
 	MOVE SCNTL2 & 0x7f TO SCNTL2
 	CLEAR ACK
 	WAIT DISCONNECT
 
-	INT err1			; signal disconnect
+	INT A_int_disc			; signal disconnect
 
 reselect:
 wait_reselect:
@@ -143,16 +144,16 @@ wait_reselect:
 	MOVE SSID & 0x8f to SFBR	; Save reselect ID
 	MOVE SFBR to SCRATCHA0
 
-	INT err9, WHEN NOT MSG_IN	; didn't get IDENTIFY
+	INT A_int_resel_no_id, WHEN NOT MSG_IN	; didn't get IDENTIFY
 	MOVE FROM ds_Msg, WHEN MSG_IN
-	INT err3			; let host know about reconnect
+	INT A_int_resel			; let host know about reconnect
 	CLEAR ACK			; acknowledge the message
 	JUMP REL(switch)
 
 
 select_adr:
 	MOVE SCNTL1 & 0x10 to SFBR	; get connected status
-	INT err4, IF 0x00		; tell host if not connected
+	INT A_int_sel_fail, IF 0x00	; tell host if not connected
 	MOVE CTEST2 & 0x40 to SFBR	; clear Sig_P
 	JUMP REL(wait_reselect)		; and try reselect again
 
@@ -207,11 +208,11 @@ datain:
 
 end:
 	MOVE FROM ds_Status, WHEN STATUS
-	INT err10, WHEN NOT MSG_IN	; status not followed by msg
+	INT A_int_status_no_msg, WHEN NOT MSG_IN	; status not followed by msg
 	MOVE FROM ds_Msg, WHEN MSG_IN
 	MOVE SCNTL2 & 0x7f TO SCNTL2
 	CLEAR ACK
 	WAIT DISCONNECT
 	MOVE GPREG & 0xEF TO GPREG
-	INT ok				; signal completion
+	INT A_ok			; signal completion
 	JUMP REL(wait_reselect)
