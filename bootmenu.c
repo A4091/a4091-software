@@ -93,6 +93,18 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
 
+/* Set bootmenu pen 3 color (Amiga blue or custom color from NVRAM on A4092) */
+static void set_menu_color(struct ViewPort *vp)
+{
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    /* A4092: Use color from NVRAM (default is Amiga blue 6,8,11) */
+    SetRGB4(vp, 3, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
+#else
+    /* A4091/others: Hardcoded Amiga blue */
+    SetRGB4(vp, 3, 6, 8, 11);
+#endif
+}
+
 static const struct TextAttr font_attr =
 {
     "topaz.font",
@@ -428,6 +440,9 @@ static void about_page(void)
     struct NewGadget ng;
     current_page = 3;
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
+
+    SetRGB4(&screen->ViewPort,3,6,8,11);
+
     SetAPen(&screen->RastPort, 1);
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
@@ -864,7 +879,7 @@ static void main_page(void)
     struct NewGadget ng;
 
     current_page = 0;
-    SetRGB4(&screen->ViewPort,3,6,8,11);
+    set_menu_color(&screen->ViewPort);
     page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
     draw_card(card, ARRAY_LENGTH(card));

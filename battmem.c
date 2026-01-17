@@ -39,14 +39,27 @@ int Load_BattMem(void)
     int res = flash_read_nvram(NVRAM_OFFSET, &asave->nvram.nv);
     if (res == NVRAM_OK) {
         UBYTE osf = asave->nvram.nv.settings.os_flags;
+        UBYTE color_rg = asave->nvram.nv.settings.color_rg;
+        UBYTE color_b = asave->nvram.nv.settings.color_b;
         asave->cdrom_boot  = (osf & BIT(0)) ? 1 : 0;
         asave->ignore_last = (osf & BIT(1)) ? 1 : 0;
 #ifdef ENABLE_QUICKINTS
         asave->quick_int   = (osf & BIT(2)) ? 1 : 0;
 #endif
         asave->allow_disc  = (osf & BIT(3)) ? 1 : 0;
+        /* Unpack color: 0,0 means use default Amiga blue */
+        if (color_rg == 0 && color_b == 0) {
+            asave->menu_color_r = 6;
+            asave->menu_color_g = 8;
+            asave->menu_color_b = 11;
+        } else {
+            asave->menu_color_r = (color_rg >> 4) & 0x0F;
+            asave->menu_color_g = color_rg & 0x0F;
+            asave->menu_color_b = color_b & 0x0F;
+        }
         asave->nvram.os_dirty = 0;
         asave->nvram.switch_dirty = 0;
+        asave->nvram.color_dirty = 0;
         printf("Retrieving settings from NVRAM flash\n");
     } else {
         /* Defaults if no valid entry or partition: cdrom boot ON, others OFF */
@@ -56,8 +69,13 @@ int Load_BattMem(void)
         asave->quick_int   = 0;
 #endif
         asave->allow_disc  = 0;
+        /* Default Amiga blue */
+        asave->menu_color_r = 6;
+        asave->menu_color_g = 8;
+        asave->menu_color_b = 11;
         asave->nvram.os_dirty = 0;
         asave->nvram.switch_dirty = 0;
+        asave->nvram.color_dirty = 0;
         printf("NVRAM not initialized (res=%d). Using defaults.\n", res);
     }
     printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
@@ -127,6 +145,10 @@ int Save_BattMem(void)
 #endif
     if (asave->allow_disc)  osf |= BIT(3);
     asave->nvram.nv.settings.os_flags = osf;
+    /* Pack color into NVRAM format */
+    asave->nvram.nv.settings.color_rg = ((asave->menu_color_r & 0x0F) << 4) |
+                                         (asave->menu_color_g & 0x0F);
+    asave->nvram.nv.settings.color_b = asave->menu_color_b & 0x0F;
     asave->nvram.os_dirty = 1;
     printf("Staging settings to NVRAM cache\n");
     printf("  cdrom_boot: %s\n", asave->cdrom_boot?"on":"off");
@@ -181,7 +203,8 @@ int Nvram_CommitDirty(void)
 {
     if (!asave)
         return 0;
-    if (!asave->nvram.os_dirty && !asave->nvram.switch_dirty)
+    if (!asave->nvram.os_dirty && !asave->nvram.switch_dirty &&
+        !asave->nvram.color_dirty)
         return 0;
 
     /* Persist current cached values to flash */
@@ -201,6 +224,7 @@ int Nvram_CommitDirty(void)
     if (res == NVRAM_OK) {
         asave->nvram.os_dirty = 0;
         asave->nvram.switch_dirty = 0;
+        asave->nvram.color_dirty = 0;
         printf("NVRAM settings saved.\n");
         return 1;
     }

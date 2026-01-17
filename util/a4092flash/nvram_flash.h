@@ -41,13 +41,14 @@ struct nvram_partition_hdr {
 struct nvram_t {
     uint32_t checksum;
     union {
-        uint8_t data[2];
+        uint8_t data[4];
 	struct {
 	    uint8_t os_flags;
 	    uint8_t switch_flags;
+	    uint8_t color_rg;    // (R << 4) | G, 0 = use default
+	    uint8_t color_b;     // B in lower 4 bits, 0 = use default
 	} settings;
     };
-    uint8_t _padding[2];
 };
 #pragma pack(pop)
 

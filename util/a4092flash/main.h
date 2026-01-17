@@ -55,10 +55,15 @@ struct nvramParams {
   bool need_write;
   bool read_osflags;
   bool read_switchflags;
+  bool read_color;
   uint8_t write_osflags;
   uint8_t write_switchflags;
+  uint8_t write_color_r;
+  uint8_t write_color_g;
+  uint8_t write_color_b;
   bool write_osflags_set;
   bool write_switchflags_set;
+  bool write_color_set;
 };
 
 ULONG getFileSize(char *);

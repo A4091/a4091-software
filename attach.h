@@ -65,7 +65,12 @@ typedef struct {
         struct nvram_t nv;           /* On-flash layout */
         uint8_t        os_dirty;     /* os_flags dirty */
         uint8_t        switch_dirty; /* switch_flags dirty */
+        uint8_t        color_dirty;  /* color dirty */
     } nvram;
+    /* Cached bootmenu color (unpacked RGB4 values, 0-15 each) */
+    uint8_t          menu_color_r;
+    uint8_t          menu_color_g;
+    uint8_t          menu_color_b;
 #endif
 } a4091_save_t;
 

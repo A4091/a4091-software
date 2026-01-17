@@ -166,7 +166,6 @@ int flash_write_nvram(ULONG partition_address, struct nvram_t* new_entry)
 
     struct nvram_t entry_to_write;
     memcpy(entry_to_write.data, new_entry->data, sizeof(entry_to_write.data));
-    memset(entry_to_write._padding, 0, sizeof(entry_to_write._padding));
     entry_to_write.checksum = calculate_checksum(entry_to_write.data, sizeof(entry_to_write.data));
     
     internal_flash_write(partition_address + free_slot_offset, &entry_to_write, sizeof(entry_to_write));
