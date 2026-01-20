@@ -17,17 +17,22 @@ struct drawing {
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
 // Map Amiga "Pens" to SVG Colors
-// Pen 0: Background/Cutout
+// Pen 0: Background/Cutout (gray)
 // Pen 1: Black (Chips)
 // Pen 2: White/Silver (Silkscreen/Metal)
-// Pen 3: Board Color (Red for A4092)
+// Pen 3: UI Blue (standard Amiga, not used in artwork)
+// Pen 4: PCB color (dark gray, configurable on A4092)
+// Pen 5: Gold (Zorro connector)
+// Pen 6: Red (DIP switches, not used in artwork)
 const char *get_color(int pen) {
     switch(pen) {
-        case 0: return "#b2b2b2"; // Dark Grey hole
+        case 0: return "#b2b2b2"; // Gray background/cutout
         case 1: return "#000000"; // Black chips
         case 2: return "#ffffff"; // Silver/White metal/silk
-        //case 3: return "#CC4444"; // Red PCB (A4092)
-        case 3: return "#0055aa"; // Red PCB (A4092)
+        case 3: return "#6688bb"; // UI blue (standard Amiga)
+        case 4: return "#444444"; // PCB dark gray
+        case 5: return "#ccaa00"; // Gold (Zorro connector)
+        case 6: return "#bb6666"; // Red (DIP switches)
         default: return "#FF00FF";
     }
 }

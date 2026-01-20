@@ -1,6 +1,7 @@
 objs/
 cdfs/
 old/
+attic/
 .cscope*
 *.uaem
 .*.sw[op]

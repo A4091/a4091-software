@@ -10,7 +10,7 @@ Features
 
 Notes
 - Requires Python 3 with Tkinter. For JPEG or robust PNG support, Pillow is recommended.
-- Colors follow `card2svg.c` mapping: pen 0=#b2b2b2, 1=#000000, 2=#ffffff, 3=#0055aa.
+- Colors follow `card2svg.c` mapping: pen 0=#b2b2b2, 1=#000000, 2=#ffffff, 3=#6688bb, 4=#444444, 5=#ccaa00, 6=#bb6666.
 """
 
 import os
@@ -51,8 +51,10 @@ PEN_COLORS = {
     0: "#b2b2b2",  # background/cutout
     1: "#000000",  # black chips
     2: "#ffffff",  # silver/white
-    3: "#6688bb",  # board color
-    #3: "#0055aa",  # board color
+    3: "#6688bb",  # UI blue (standard Amiga, not used in artwork)
+    4: "#444444",  # PCB dark gray (configurable on A4092)
+    5: "#ccaa00",  # gold (Zorro connector)
+    6: "#bb6666",  # red (DIP switches, not used in artwork)
 }
 
 @dataclass

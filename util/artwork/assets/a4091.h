@@ -1,6 +1,6 @@
 static const struct drawing card[] = {
-    { 1, 3,   0,   0, 436, 146 }, // card
-    { 1, 3,  57, 146, 163,  10 }, // zslot
+    { 1, 4,   0,   0, 436, 146 }, // card (PCB color)
+    { 1, 4,  57, 146, 163,  10 }, // zslot (PCB color)
     { 1, 2, 437,  18,   1, 155 }, // bracket
     { 1, 2, 437,  18,  12,   2 },
     { 2, 2, 223,  14, 190, 128 }, // silkscreen
@@ -39,5 +39,5 @@ static const struct drawing card[] = {
     { 1, 1, 189,  48,   8,  12 }, // U310 (lower terminator)
     { 1, 2, 196, 116,   4,  24 }, // power connector
     { 1, 2, 201, 118,   0,  20 },
-    { 3, 2,  57, 146, 163,  10 }  // zorro pins
+    { 3, 5,  57, 146, 163,  10 }  // zorro pins (gold)
 };

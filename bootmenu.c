@@ -93,15 +93,15 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
 
-/* Set bootmenu pen 3 color (Amiga blue or custom color from NVRAM on A4092) */
+/* Set bootmenu pen 4 color (PCB color from NVRAM on A4092, dark gray otherwise) */
 static void set_menu_color(struct ViewPort *vp)
 {
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
-    /* A4092: Use color from NVRAM (default is Amiga blue 6,8,11) */
-    SetRGB4(vp, 3, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
+    /* A4092: Use color from NVRAM for PCB */
+    SetRGB4(vp, 4, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
 #else
-    /* A4091/others: Hardcoded Amiga blue */
-    SetRGB4(vp, 3, 6, 8, 11);
+    /* A4091/others: Default dark gray for PCB */
+    SetRGB4(vp, 4, 4, 4, 4);
 #endif
 }
 
@@ -129,7 +129,7 @@ static void init_bootmenu(void)
     taglist[1].ti_Tag  = TAG_DONE;
 
     screen = OpenScreenTags(NULL,
-        SA_Depth,        2,
+        SA_Depth,        3,
         SA_Font,         &font_attr,
         SA_Type,         CUSTOMSCREEN,
         SA_DisplayID,    monitor_id,
@@ -147,6 +147,18 @@ static void init_bootmenu(void)
         TAG_DONE);
 
     visualInfo = GetVisualInfoA(screen,NULL);
+
+    /* Set up palette for pens 4-6 (pens 0-3 use standard Amiga defaults) */
+    struct ViewPort *vp = &screen->ViewPort;
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    /* A4092: Pen 4 (PCB) from NVRAM, default dark gray */
+    SetRGB4(vp, 4, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
+#else
+    /* A4091/others: Pen 4 (PCB) default dark gray */
+    SetRGB4(vp, 4, 4, 4, 4);
+#endif
+    SetRGB4(vp, 5, 12, 10, 0);  /* Gold for Zorro connector */
+    SetRGB4(vp, 6, 11, 6, 6);   /* Red for DIP switches */
 }
 
 static void close_libraries(void)
@@ -321,7 +333,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     Text(rp, "Off/On",6);
 
     /* Draw red box with raised 3D border (white top/left, black bottom/right) */
-    SetAPen(rp, 3);
+    SetAPen(rp, 6);
     RectFill(rp, x, y+2, x+70, y+90);
     /* Raised - white top edge */
     SetAPen(rp, 2);
@@ -340,7 +352,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
 
     SetAPen(rp, 1);
     for (i=0; i<8; i++) {
-        SetBPen(rp, 3);
+        SetBPen(rp, 6);
         Move(rp, x+6,y+(i*10)+14);
         num[0] = '8' - i;
         Text(rp, (char *)num, 1);
@@ -397,8 +409,6 @@ static void dipswitch_page(void)
     current_page = 2;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - DIP switches", TRUE);
 
-    SetRGB4(&screen->ViewPort,3,11,6,6);
-
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
     ng.ng_Width      = 120;
@@ -440,8 +450,6 @@ static void about_page(void)
     struct NewGadget ng;
     current_page = 3;
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
-
-    SetRGB4(&screen->ViewPort,3,6,8,11);
 
     SetAPen(&screen->RastPort, 1);
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092)
@@ -723,8 +731,6 @@ static void disks_page(void)
     current_page = 1;
     page_header(&ng, BOOTMENU_NAME " Diagnostics - Disks", FALSE);
 
-    SetRGB4(&screen->ViewPort,3,6,8,11);
-
     SetAPen(&screen->RastPort,2);
     Print("Unit  Vendor      Device                Rev.  Type     Blk   Size",52,38,FALSE);
     SetAPen(&screen->RastPort,1);
@@ -765,7 +771,6 @@ static void debug_page(void)
     BOOL quick_int = asave->quick_int ? TRUE : FALSE;
 #endif
     BOOL allow_disc = asave->allow_disc ? TRUE : FALSE;
-    SetRGB4(&screen->ViewPort,3,6,8,11);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 60;
@@ -853,9 +858,11 @@ static void draw_card(const struct drawing c[], int length)
         SetAPen(rp, pen);
         switch (type) {
         case 1:
+	    // filled rectangle
             RectFill(rp, x1, y1, x2, y2);
             break;
         case 2:
+	    // unfilled rectangle
             Move(rp, x1, y1);
             Draw(rp, x2, y1);
             Draw(rp, x2, y2);
@@ -863,7 +870,7 @@ static void draw_card(const struct drawing c[], int length)
             Draw(rp, x1, y1);
             break;
         case 3:
-            SetAPen(rp, 2);
+	    // Zorro pins (uses pen from data for gold color)
             for(j=x1; j<x2; j+=4) {
                 RectFill(rp, j, y1, j+1, y2);
             }
@@ -879,7 +886,6 @@ static void main_page(void)
     struct NewGadget ng;
 
     current_page = 0;
-    set_menu_color(&screen->ViewPort);
     page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
     draw_card(card, ARRAY_LENGTH(card));

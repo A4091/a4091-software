@@ -1,7 +1,7 @@
 static const struct drawing card[] = {
-    { 1, 3,    0,    0,  225,  146 }, // Card Substrate
-    { 1, 3,   57,  146,  163,   10 }, // Zorro Tab
-    { 3, 2,   57,  146,  163,   10 },
+    { 1, 4,    0,    0,  225,  146 }, // Card Substrate (PCB color)
+    { 1, 4,   57,  146,  163,   10 }, // Zorro Tab (PCB color)
+    { 3, 5,   57,  146,  163,   10 }, // Zorro pins (gold)
     { 1, 1,   96,   44,   36,   36 }, // NCR53c710
     { 1, 1,   32,   55,   27,   26 }, // Xilinx XC95144XL
     { 1, 1,   83,    2,   90,   10 }, // SCSI connector
