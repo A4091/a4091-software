@@ -674,6 +674,7 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"patch")==0) {
         if (argi+1 >= argc) { usage(argv[0]); return 1; }
+        if (strlen(argv[argi+1]) > 4096) { fprintf(stderr,"hex input too long\n"); return 2; }
         return cmd_patch(base, argv[argi], argv[argi+1]);
     }
     else if (strcmp(cmd,"status")==0) {
