@@ -719,6 +719,7 @@ cmd_handler(void)
     ULONG                  wait_mask;
     ULONG                  timer_mask;
     uint32_t               mask;
+    int                    soft_sig;
 
     task = (struct Task *) FindTask((char *)NULL);
 
@@ -732,6 +733,14 @@ cmd_handler(void)
     if (msgport == NULL) {
         msg->io_Error = ERROR_NO_MEMORY;
         goto fail_msgport;
+    }
+
+    /* Allocate a signal for software interrupt (chaining/queueing) */
+    soft_sig = AllocSignal(-1);
+    if (soft_sig == -1) {
+        printf("Failed to allocate signal\n");
+        msg->io_Error = ERROR_NO_MEMORY;
+        goto fail_allocmem;
     }
 
     asave = AllocMem(sizeof (*asave), MEMF_CLEAR | MEMF_PUBLIC);
@@ -782,12 +791,6 @@ fail_msgport:
     active     = &sc->sc_channel.chan_active;
     chan       = &sc->sc_channel;
 
-    /* Allocate a signal for software interrupt (chaining/queueing) */
-    int soft_sig = AllocSignal(-1);
-    if (soft_sig == -1) {
-        /* Fallback? Should not happen */
-        printf("Failed to allocate signal\n");
-    }
     chan->chan_sig_mask = 1L << soft_sig;
     chan->chan_task = task;
 
