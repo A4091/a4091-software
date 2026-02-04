@@ -1,18 +1,8 @@
-
+#!/bin/bash
 
 VER=$(git describe --tags --dirty | sed -r 's/^release_//')
-DISK=a4091_$VER.adf
+DISK=scsi_$VER.adf
 THIRDPARTY=../3rdparty
-
-echo "Looking for submodules..."
-test ! -x $THIRDPARTY/bffs/dist/bffs16_src.lha || ( echo "Initialize submodules."; exit 1 )
-
-echo "Building devtest..."
-make -s -C $THIRDPARTY/devtest || exit 1
-m68k-amigaos-strip -s $THIRDPARTY/devtest/devtest
-
-echo "Extracting rdb..."
-lha xiq2f $THIRDPARTY/bffs/dist/bffs16_src.lha bffs_1.6/bin/rdb
 
 # Create centered version and copyright lines (80 column terminal)
 COLUMNS=80
@@ -41,18 +31,9 @@ xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
 xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
 xdftool $DISK makedir Devs
 xdftool $DISK write system-configuration Devs/system-configuration
-if [ -r ../a4091.device ]; then
-xdftool $DISK write ../a4091.device Devs/a4091.device
-fi
-if [ -r ../a4092.device ]; then
-xdftool $DISK write ../a4092.device Devs/a4092.device
-fi
-if [ -r ../scsi710.device ]; then
-xdftool $DISK write ../scsi710.device Devs/scsi710.device
-fi
-if [ -r ../scsi770.device ]; then
-xdftool $DISK write ../scsi770.device Devs/scsi770.device
-fi
+for dev in a4091 a4092 scsi710 scsi770; do
+  [ -r ../${dev}.device ] && xdftool $DISK write ../${dev}.device Devs/${dev}.device
+done
 if [ -r ../a4092_cdfs.rom ]; then
 xdftool $DISK makedir ROMs
 xdftool $DISK write ../a4092_cdfs.rom ROMs/a4092_cdfs.rom
@@ -75,8 +56,6 @@ else
 fi
 
 echo "Cleaning up..."
-make -s -C $THIRDPARTY/devtest clean
-rm rdb
 rm Startup-Sequence.tmp
 
 echo "Done. Please verify disk contents of $DISK below:"
@@ -84,3 +63,23 @@ echo "--------------------------------------------------------------------------
 xdftool $DISK list
 echo "------------------------------------------------------------------------------------------"
 echo "Created $DISK"
+ALL_DEVICES="a4091 a4092 ncr710 ncr770"
+
+make_variant() {
+  local dev=$1 name=$2 label=$3
+  [ -r ../${dev}.device ] || return
+  local VDISK=${DISK/scsi/$name}
+  cp $DISK $VDISK
+  xdftool $VDISK relabel "$label"
+  for other in $ALL_DEVICES; do
+    [ "$other" != "$dev" ] && [ -r ../${other}.device ] && \
+      xdftool $VDISK delete Devs/${other}.device
+  done
+}
+
+make_variant a4091 a4091 "A4091 SCSI"
+make_variant a4092 a4092 "A4092 SCSI"
+make_variant ncr710 a4000t "A4000T SCSI"
+make_variant ncr770 saft4k "SaftA4K SCSI"
+
+exit 0

@@ -36,7 +36,8 @@ jobs:
             *.rom
             *.kick
             *.device
-            disk/a4091_*.adf
+            disk/*_*.adf
+            !disk/scsi_*.adf
           if-no-files-found: error
 
   release:
@@ -64,4 +65,7 @@ jobs:
             artifacts/*.rom
             artifacts/*.kick
             artifacts/*.device
-            artifacts/**/*.adf
+            artifacts/disk/a4091_*.adf
+            artifacts/disk/a4092_*.adf
+            #artifacts/disk/a4000t_*.adf
+            #artifacts/disk/saft4k_*.adf

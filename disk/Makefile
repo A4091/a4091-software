@@ -1,13 +1,26 @@
 AGUIDECHECK=Tools/AGuideCheck/AGuideCheck
+THIRDPARTY=../3rdparty
+DEVTEST=$(THIRDPARTY)/devtest/devtest
 
-disk: scsifix
+disk: scsifix $(DEVTEST) rdb
 	./createdisk.sh
 
+$(DEVTEST): FORCE
+	$(MAKE) -s -C $(THIRDPARTY)/devtest
+	m68k-amigaos-strip -s $@
+
+rdb: $(THIRDPARTY)/bffs/dist/bffs16_src.lha
+	lha xiq2f $< bffs_1.6/bin/rdb
+
 clean:
-	rm -f a4091_??.??.adf
+	rm -f *_??.??.adf
 	rm -f NDK3.2.lha
 	rm -rf Tools
-	rm scsifix.o scsifix
+	rm -f scsifix.o scsifix rdb
+	$(MAKE) -C $(THIRDPARTY)/devtest clean
+
+FORCE:
+.PHONY: clean disk FORCE
 
 check: $(AGUIDECHECK)
 	vamos $(AGUIDECHECK) A4091.guide
