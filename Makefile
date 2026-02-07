@@ -50,7 +50,7 @@ ROM_DB	:= $(DEVNAME)_debug.rom
 ROM_CD	:= $(DEVNAME)_cdfs.rom
 KICK    := $(DEVNAME).kick
 PROG	:= $(DEVNAME).device
-PROGU	:= a4091
+PROGU	:= ncr7xx
 PROGD	:= a4091d
 SRCS    := device.c version.c port.c attach.c cmdhandler.c printf.c
 SRCS    += sd.c scsipi_base.c scsipiconf.c scsiconf.c scsimsg.c 3rdparty/mounter/mounter.c bootmenu.c
@@ -64,7 +64,7 @@ SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S
-SRCSU   := a4091.c
+SRCSU   := ncr7xx.c
 SRCSD   := a4091d.c
 OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
@@ -208,7 +208,7 @@ $(OBJDIR)/siop2.o: $(OBJDIR)/siop2_script.out
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/siop2.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA -Wno-format
-$(OBJDIR)/a4091.o:: CFLAGS_TOOLS += -Wno-format
+$(OBJDIR)/ncr7xx.o:: CFLAGS_TOOLS += -Wno-format
 
 # XXX: Need to generate real dependency files
 $(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
@@ -377,7 +377,7 @@ all-targets:
 	$(QUIET)$(MAKE) -s DEVICE=A4000T770 scsi770.kick
 	$(QUIET)$(MAKE) -s DEVICE=A4000T770 clean
 	@echo "Building utilities"
-	$(QUIET)$(MAKE) -s a4091
+	$(QUIET)$(MAKE) -s ncr7xx
 	$(QUIET)$(MAKE) -s a4091d
 	$(QUIET)$(MAKE) -s util/a4092flash/a4092flash
 	@echo "Building Disk image"

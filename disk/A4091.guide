@@ -151,7 +151,7 @@ Here's what's on this disk
 @{B}Tools@{UB}        Directory.
         This directory contains three tools to test the A4091
 
-        @{"a4091           " link A4091Tool}
+        @{"ncr7xx          " link NCR7XXTool}
         @{"a4091d          " link A4091D}
         @{"devtest         " link devtest}
         @{"rdb             " link rdb}
@@ -170,12 +170,12 @@ You can find the source code at https://github.com/A4091/
 
 @ENDNODE
 
-@NODE A4091Tool "a4091 tool"
+@NODE NCR7XXTool "ncr7xx tool"
 
-1> a4091
-A4091 1.2 (Jun 17 2024) © Chris Hooper
+1> ncr7xx
+ncr7xx 1.2 (Jun 17 2024) © Chris Hooper
 
-This tool will test an installed A4091 SCSI controller for correct operation.
+This tool will test an installed NCR53C7xx SCSI controller for correct operation.
 Options:
 	-a  specify card address (slot or physical address): <addr>
 	-c  decode device autoconfig area
@@ -195,7 +195,7 @@ Options:
 	-?  show individual test steps
 1>
 
-Example:  a4091 -t56
+Example:  ncr7xx -t56
           This will execute both test 5 and test 6.
   -0  Device access: Check ROM header and Zorro config area
   -1  Register access

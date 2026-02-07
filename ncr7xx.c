@@ -1,7 +1,7 @@
 /*
  * A4091 Test Utility
  * ------------------
- * Utility to inspect and test an installed A4091 SCSI controller card
+ * Utility to inspect and test an installed NCR53c7xx based SCSI controller
  * for correct operation.
  *
  * Copyright 2023 Chris Hooper.  This program and source may be used
@@ -4805,7 +4805,7 @@ static void
 usage(void)
 {
     printf("%s\n\n"
-           "This tool will test an installed A4091 SCSI controller for "
+           "This tool will test an installed NCR53C7xx SCSI controller for "
            "correct operation.\n"
            "Options:\n"
            "\t-a  specify card address (slot or physical address): <addr>\n"

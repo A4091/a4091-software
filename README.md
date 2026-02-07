@@ -49,7 +49,7 @@ This will produce several files:
 | `a4091.rom`          | The AutoConfig™ ROM image to be written to an EPROM or EEPROM. This includes the driver. |
 | `a4091_cdfs.rom`     | A ROM image with added CD-ROM boot support.                                          |
 | `a4091_nodriver.rom` | A ROM image without the driver, useful for diagnostics or loading the driver from disk. |
-| `a4091`              | A command-line utility to probe and test the A4091 card.                               |
+| `ncr7xx`             | A command-line utility to probe and test NCR53C7xx-based SCSI cards.                   |
 | `a4091d`             | A debugging tool to inspect the internal state of the running driver.                  |
 
 **Creating a Floppy Disk Image**
@@ -71,7 +71,7 @@ The A4091 floppy disk is bootable and contains several useful tools and document
 | ----------------- | ------------------------------------------------------------------------------ |
 | `A4091.guide`     | Comprehensive AmigaGuide documentation covering installation, configuration, and usage |
 | `a4091.device`    | The AmigaOS device driver that can be loaded from disk if not using ROM version |
-| `a4091`           | Command-line utility for testing and diagnosing the A4091 hardware           |
+| `ncr7xx`          | Command-line utility for testing and diagnosing NCR53C7xx-based hardware     |
 | `a4091d`          | Debug tool to inspect the internal state of the running a4091.device driver  |
 | `devtest`         | Storage device benchmark and testing tool for any Amiga device               |
 | `rdb`             | Utility for modifying Rigid Disk Block (RDB) settings on hard drives        |
@@ -145,7 +145,7 @@ The A4091 driver is a hybrid, combining a robust, battle-tested SCSI core with A
     * `device.c`: The main entry point and interface for the AmigaOS device driver.
     * `attach.c`: Code to handle attaching the driver to the system.
     * `cmdhandler.c`: Manages the command queue for the driver.
-    * `a4091.c` and `a4091d.c`: The source for the `a4091` test utility and `a4091d` debug tool.
+    * `ncr7xx.c` and `a4091d.c`: The source for the `ncr7xx` test utility and `a4091d` debug tool.
     * `mounter.c`: Code to automatically mount filesystems from the ROM.
 
 ### The Mounter
@@ -160,12 +160,12 @@ The mounter is developed as a separate project that is used by other projects (l
 
 ## 🔧 Configuration and Debugging
 
-### Using the `a4091` Test Utility
+### Using the `ncr7xx` Test Utility
 
-The `a4091` utility is a powerful command-line tool for testing and diagnosing the A4091 SCSI controller, especially for verifying a newly built card. To perform a comprehensive hardware test, run this from the Amiga Shell:
+The `ncr7xx` utility is a powerful command-line tool for testing and diagnosing NCR53C7xx-based SCSI controllers, especially for verifying a newly built card. To perform a comprehensive hardware test, run this from the Amiga Shell:
 
 ```bash
-a4091 -t
+ncr7xx -t
 ```
 
 This will test the card's registers, data/address pins, interrupts, and SCSI pins. A successful run is a good sign that the hardware is working correctly.
@@ -173,13 +173,13 @@ This will test the card's registers, data/address pins, interrupts, and SCSI pin
 Additional options:
 
 ```bash
-a4091 -t -L
+ncr7xx -t -L
 ```
 
 Runs all tests in a continuous loop, counting how many passes have completed. This is useful for burn-in testing—500+ passes are recommended for validating new builds.
 
 ```bash
-a4091 -t56
+ncr7xx -t56
 ```
 
 Runs only test numbers 5 and 6. You may specify any subset of test numbers 0 through 8 after `-t`. **Note:** Skipping a failing test may cause subsequent tests to behave unpredictably.

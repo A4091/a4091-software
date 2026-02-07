@@ -23,7 +23,7 @@ echo "Creating disk..."
 xdftool $DISK format "Amiga4091"
 xdftool $DISK makedir Tools
 xdftool $DISK write rdb Tools/rdb
-xdftool $DISK write ../a4091 Tools/a4091
+xdftool $DISK write ../ncr7xx Tools/ncr7xx
 xdftool $DISK write ../a4091d Tools/a4091d
 xdftool $DISK write scsifix Tools/scsifix
 xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
