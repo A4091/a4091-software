@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: true
           fetch-depth: 0
@@ -29,7 +29,7 @@ jobs:
         run: make all-targets
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-artifacts
           path: |
@@ -46,19 +46,19 @@ jobs:
     needs: build
     steps:
       - name: Checkout (required by gh-release)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: release-artifacts
           path: artifacts
 
       - name: Create draft release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           draft: true
           files: |

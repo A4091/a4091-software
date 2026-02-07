@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
 
@@ -13,7 +16,7 @@ jobs:
     container: stefanreinauer/amiga-gcc
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
         fetch-depth: 0
@@ -25,28 +28,28 @@ jobs:
       run: make all-targets
 
     - name: Archive CI artifacts (ROM)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
-          name: Driver (AutoBoot ROM)
-          path: ${{ github.workspace }}/*.rom
+        name: Driver (AutoBoot ROM)
+        path: "*.rom"
 
     - name: Archive CI artifacts (Kickstart Modules)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
-          name: Driver (Kickstart Modules)
-          path: ${{ github.workspace }}/*.kick
+        name: Driver (Kickstart Modules)
+        path: "*.kick"
 
     - name: Archive CI artifacts (DEVICES)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
-          name: Driver (Device Drivers)
-          path: ${{ github.workspace }}/*.device
+        name: Driver (Device Drivers)
+        path: "*.device"
 
     - name: Archive CI artifacts (ADF)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
-          name: Disk Image (ADF)
-          path: |
-            ${{ github.workspace }}/disk/*_*.adf
-            !${{ github.workspace }}/disk/scsi_*.adf
+        name: Disk Image (ADF)
+        path: |
+          disk/*_*.adf
+          !disk/scsi_*.adf
 
