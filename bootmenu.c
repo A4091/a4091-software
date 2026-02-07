@@ -93,18 +93,6 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
 
-/* Set bootmenu pen 4 color (PCB color from NVRAM on A4092, dark gray otherwise) */
-static void set_menu_color(struct ViewPort *vp)
-{
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
-    /* A4092: Use color from NVRAM for PCB */
-    SetRGB4(vp, 4, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
-#else
-    /* A4091/others: Default dark gray for PCB */
-    SetRGB4(vp, 4, 4, 4, 4);
-#endif
-}
-
 static const struct TextAttr font_attr =
 {
     "topaz.font",
