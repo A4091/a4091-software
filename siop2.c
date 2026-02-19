@@ -725,6 +725,7 @@ siopngreset(struct siop_softc *sc)
 	rp->siop_scntl3 = 0x15;			/* SCF/CCF*/
 	rp->siop_stest1 |= SIOP_STEST1_DBLSEL;	/* SCLK doubler select */
 	rp->siop_stest3 &= ~SIOP_STEST3_HSC;	/* Clear Halt SCSI clock */
+	rp->siop_stest3 |= SIOP_STEST3_TE;	/* TolerANT enable */
 	rp->siop_scntl0 = SIOP_ARB_FULL | /*SIOP_SCNTL0_EPC |*/ SIOP_SCNTL0_EPG;
 	rp->siop_dcntl = sc->sc_dcntl;
 	rp->siop_dmode = 0xc0;		/* XXX burst length */

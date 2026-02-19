@@ -200,6 +200,7 @@ typedef struct {
 
 /*4c*/	volatile unsigned char	siop_stest3;	/* ro: Chip test register 3 */
 #define	SIOP_STEST3_HSC		0x20	/* Halt SCSI Clock */
+#define SIOP_STEST3_TE		0x80	/* TolerANT Enable */
 /*4d*/	volatile unsigned char	siop_stest2;	/* ro: Chip test register 2 */
 /*4e*/	volatile unsigned char	siop_stest1;	/* ro: Chip test register 1 */
 #define	SIOP_STEST1_DBLEN	0x08	/* SCLK Double Enable */
