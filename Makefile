@@ -39,7 +39,7 @@ TARGETAFLAGS := -DNCR53C770=1
 DEVNAME=scsi770
 HAVE_ROM=n
 else
-$(error Unknown build target! Please set DEVICE to A4091, A4000T or A4000T770.)
+$(error Unknown build target! Please set DEVICE to A4091, A4092, A4000T or A4000T770.)
 endif
 
 OBJDIR  := objs
