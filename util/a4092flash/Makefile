@@ -43,18 +43,16 @@ SRCS = flash.c \
        spi.c \
        config.c \
        main.c \
-       nvram_flash.c \
-       cpu_support.c
-
+       nvram_flash.c
 
 a4092flash: $(SRCS) *.h
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 	$(QUIET)$(STRIP) -s $@
 
-spiutil: spiutil.c cpu_support.c
+spiutil: spiutil.c
 	@echo Building $@
-	$(QUIET)$(CC) $(CFLAGS) -o $@ spiutil.c cpu_support.c $(LDLIBS)
+	$(QUIET)$(CC) $(CFLAGS) -o $@ spiutil.c $(LDLIBS)
 
 test:
 	@echo Building NVRAM tests

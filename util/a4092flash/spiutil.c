@@ -1,10 +1,10 @@
 /* spiutil.c — AmigaOS CLI SPI flash helper for Zorro-III SPI bridge
  *
  * Bridge protocol description:
- *  - Write BASE+0x7FFFF8 : assert /CS, shift out 1 byte, keep /CS active
- *  - Write BASE+0x7FFFFC : assert /CS, shift out 1 byte, then deassert /CS
- *  - Read  BASE+0x7FFFF8 : assert /CS, shift in 1 byte,  keep /CS active
- *  - Read  BASE+0x7FFFFC : assert /CS, shift in 1 byte,  then deassert /CS
+ *  - Write BASE+0x7FFFC0 : assert /CS, shift out 1 byte, keep /CS active
+ *  - Write BASE+0x7FFFC0 : assert /CS, shift out 1 byte, then deassert /CS
+ *  - Read  BASE+0x7FFFE0 : assert /CS, shift in 1 byte,  keep /CS active
+ *  - Read  BASE+0x7FFFF0 : assert /CS, shift in 1 byte,  then deassert /CS
  *
  * SPI: mode 0, ~25 MHz. Commands: 0x9F, 0x06, 0x05, 0x02, 0x03, 0xD8.
  *
@@ -40,14 +40,14 @@
  * For now however, we disable write-allocation instead of using different
  * addresses.
  */
-#define SPI_PORT_READ_HOLD_OFFS  0x7FFFF8
-#define SPI_PORT_READ_END_OFFS   0x7FFFFC
-#define SPI_PORT_WRITE_HOLD_OFFS 0x7FFFF8 // 0x7FFFF0
-#define SPI_PORT_WRITE_END_OFFS  0x7FFFFC // 0x7FFFF4
+#define SPI_PORT_READ_HOLD_OFFS  0x7FFFE0
+#define SPI_PORT_READ_END_OFFS   0x7FFFF0
+#define SPI_PORT_WRITE_HOLD_OFFS 0x7FFFC0
+#define SPI_PORT_WRITE_END_OFFS  0x7FFFD0
 
 /* A4092 board identification (matches main.c) */
 #define MANUF_ID_COMMODORE_BRAUNSCHWEIG 513
-#define MANUF_ID_COMMODORE             514
+#define MANUF_ID_COMMODORE              514
 #define PROD_ID_A4092                   84
 
 #if __GNUC__ < 11
@@ -58,8 +58,6 @@ struct ExpansionBase *ExpansionBase = NULL;
 #undef FindConfigDev
 // NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
 struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
-
-#include "cpu_support.h"
 
 #define MAX_TRANSFER_SIZE (8 * 1024 * 1024)
 
@@ -642,9 +640,6 @@ int main(int argc, char **argv)
 
     int argi = 1;
     const char *cmd = argv[argi++];
-
-    cpu_disable_write_allocation();
-    atexit(cpu_restore_write_allocation);
 
     if (strcmp(cmd,"id")==0) {
         return cmd_id(base);

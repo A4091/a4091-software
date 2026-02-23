@@ -14,7 +14,6 @@
 #include <stdbool.h>
 #include "spi.h"
 #include "nibble_word.h"
-#include "cpu_support.h"
 
 // This is a stand-in until I get SysBase properly
 extern struct ExecBase *SysBase;
@@ -24,10 +23,10 @@ extern struct ExecBase *SysBase;
  * For now however, we disable write-allocation instead of using different
  * addresses.
  */
-#define SPI_PORT_READ_HOLD_OFFS  0x7FFFF8
-#define SPI_PORT_READ_END_OFFS   0x7FFFFC
-#define SPI_PORT_WRITE_HOLD_OFFS 0x7FFFF8 // 0x7FFFF0
-#define SPI_PORT_WRITE_END_OFFS  0x7FFFFC // 0x7FFFF4
+#define SPI_PORT_WRITE_HOLD_OFFS 0x7FFFC0
+#define SPI_PORT_WRITE_END_OFFS  0x7FFFD0
+#define SPI_PORT_READ_HOLD_OFFS  0x7FFFE0
+#define SPI_PORT_READ_END_OFFS   0x7FFFF0
 
 /* MMIO access helpers using shared nibble_word functions */
 static inline void mmio_write_hold(uint32_t base, uint8_t v)
@@ -274,15 +273,11 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     uint8_t mfg = 0, type = 0, cap = 0;
     spi_base_address = (uint32_t)(uintptr_t)base;
 
-    // Enable SPI access (disable write allocation on 68030)
-    cpu_disable_write_allocation();
-
     // Read JEDEC ID
     spi_read_id(spi_base_address, &mfg, &type, &cap);
 
     // Check if it's a valid SPI flash (manufacturer should not be 0xFF or 0x00)
     if (mfg == 0xFF || mfg == 0x00 || mfg == 0x9F) {
-        cpu_restore_write_allocation();
         spi_base_address = 0;
         return false;
     }
@@ -388,11 +383,10 @@ bool spi_flash_erase_chip(void)
 /**
  * spi_flash_cleanup
  *
- * @brief Cleanup SPI flash (restore CACR on 68030)
+ * @brief Cleanup SPI flash
  */
 void spi_flash_cleanup(void)
 {
-    cpu_restore_write_allocation();
 }
 
 #endif /* FLASH_SPI */
