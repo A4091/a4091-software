@@ -128,14 +128,10 @@ void usage(void) {
     printf("           init - Initialize NVRAM partition\n");
     printf("           osflags - Read os_flags from last entry\n");
     printf("           switchflags - Read switch_flags from last entry\n");
-    printf("           color - Read bootmenu color (R,G,B values 0-15)\n");
     printf("           osflags=<hex> - Write os_flags\n");
     printf("           switchflags=<hex> - Write switch_flags\n");
-    printf("           color=<R>,<G>,<B> - Set bootmenu color (0-15 each)\n");
     printf("       Examples:\n");
     printf("           -F osflags;switchflags - Read both flags\n");
     printf("           -F osflags=ff;switchflags=00 - Write both flags\n");
     printf("           -F init;osflags=ff - Initialize and write osflags\n");
-    printf("           -F color - Read current bootmenu color\n");
-    printf("           -F color=6,8,11 - Set bootmenu color to Amiga blue\n");
 }

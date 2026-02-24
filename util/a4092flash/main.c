@@ -773,10 +773,6 @@ static BOOL parse_nvram_params(struct Config* config) {
             nvramParams.need_read = true;
             nvramParams.read_switchflags = true;
         }
-        else if (strcmp(token, "color") == 0) {
-            nvramParams.need_read = true;
-            nvramParams.read_color = true;
-        }
         else if (equals_pos != NULL) {
             *equals_pos = '\0';
             char *value_str = equals_pos + 1;
@@ -802,20 +798,6 @@ static BOOL parse_nvram_params(struct Config* config) {
                 nvramParams.need_write = true;
                 nvramParams.write_switchflags = (uint8_t)value;
                 nvramParams.write_switchflags_set = true;
-            }
-            else if (strcmp(token, "color") == 0) {
-                unsigned int r, g, b;
-                if (sscanf(value_str, "%u,%u,%u", &r, &g, &b) != 3 ||
-                    r > 15 || g > 15 || b > 15) {
-                    printf("Invalid color value: %s (use R,G,B where each is 0-15)\n", value_str);
-                    FreeMem(cmd_copy, strlen(config->nvramCommand) + 1);
-                    return FALSE;
-                }
-                nvramParams.need_write = true;
-                nvramParams.write_color_r = (uint8_t)r;
-                nvramParams.write_color_g = (uint8_t)g;
-                nvramParams.write_color_b = (uint8_t)b;
-                nvramParams.write_color_set = true;
             }
             else {
                 printf("Unknown NVRAM command: %s\n", token);
@@ -867,20 +849,8 @@ static void execute_nvram_operations(struct scsiBoard* board) {
         if (nvramParams.read_switchflags) {
             printf("switchflags=0x%02x\n", entry.settings.switch_flags);
         }
-        if (nvramParams.read_color) {
-            uint8_t color_rg = entry.settings.color_rg;
-            uint8_t color_b = entry.settings.color_b;
-            if (color_rg == 0 && color_b == 0) {
-                printf("color=6,8,11 (default Amiga blue)\n");
-            } else {
-                printf("color=%u,%u,%u\n",
-                       (color_rg >> 4) & 0x0F,
-                       color_rg & 0x0F,
-                       color_b & 0x0F);
-            }
-        }
     }
-    
+
     if (nvramParams.need_write) {
         struct nvram_t entry = {0};
         int read_result = flash_read_nvram((uintptr_t)board->flashbase + NVRAM_OFFSET, &entry);
@@ -901,12 +871,6 @@ static void execute_nvram_operations(struct scsiBoard* board) {
         if (nvramParams.write_switchflags_set) {
             entry.settings.switch_flags = nvramParams.write_switchflags;
         }
-        if (nvramParams.write_color_set) {
-            entry.settings.color_rg = ((nvramParams.write_color_r & 0x0F) << 4) |
-                                       (nvramParams.write_color_g & 0x0F);
-            entry.settings.color_b = nvramParams.write_color_b & 0x0F;
-        }
-
         int write_result = flash_write_nvram((uintptr_t)board->flashbase + NVRAM_OFFSET, &entry);
         if (write_result == NVRAM_OK) {
             printf("NVRAM entry written successfully.\n");

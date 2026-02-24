@@ -71,6 +71,7 @@ typedef struct {
     uint8_t          menu_color_r;
     uint8_t          menu_color_g;
     uint8_t          menu_color_b;
+    char             mfg_serial[16];     /* e.g. "A4092-00000001" */
 #endif
 } a4091_save_t;
 

@@ -16,8 +16,9 @@ void spi_restore_burst(void);
 
 
 /* ===== SPI commands / constants ===== */
-#define SPI_PAGE_SIZE   256u
-#define SPI_BLOCK_SIZE  65536u
+#define SPI_PAGE_SIZE      256u
+#define SPI_SECTOR_SIZE_4K 4096u
+#define SPI_BLOCK_SIZE     65536u
 
 /* ===== Core SPI functions ===== */
 void spi_read_id(uint32_t base, uint8_t *mfg, uint8_t *type, uint8_t *cap);

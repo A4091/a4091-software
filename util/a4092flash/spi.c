@@ -233,6 +233,9 @@ bool spi_write_buf_pagewise(uint32_t base, uint32_t addr, const uint8_t *in, siz
 
 bool spi_erase_range_blocks(uint32_t base, uint32_t addr, size_t len)
 {
+    if (len & (SPI_BLOCK_SIZE - 1))
+        printf("WARNING: erase size 0x%lX is not a multiple of 64KB\n", (unsigned long)len);
+
     uint32_t start = (addr / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
     uint32_t end   = ((addr + (uint32_t)len - 1) / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
 
@@ -359,14 +362,34 @@ void spi_flash_writeByte(ULONG address, UBYTE data)
 /**
  * spi_flash_erase_sector
  *
- * @brief Erase a sector (rounds up to 64KB block boundaries)
+ * @brief Erase a flash region using the smallest erase granularity that fits.
+ *        Uses 4KB sector erase when size and alignment permit, otherwise 64KB block erase.
  * @param address Starting address
- * @param sectorSize Size of sector to erase
- * @return true if erase and verification successful, false otherwise
+ * @param sectorSize Size of region to erase
+ * @return true on success, false on failure
  */
 bool spi_flash_erase_sector(ULONG address, ULONG sectorSize)
 {
-    return spi_erase_range_blocks(spi_base_address, address, sectorSize);
+    if (sectorSize & (SPI_SECTOR_SIZE_4K - 1))
+        printf("WARNING: erase size 0x%lX is not a multiple of 4KB\n", (unsigned long)sectorSize);
+
+    ULONG end = address + sectorSize;
+
+    while (address < end) {
+        ULONG remaining = end - address;
+
+        if ((address & (SPI_BLOCK_SIZE - 1)) == 0 && remaining >= SPI_BLOCK_SIZE) {
+            if (!spi_block_erase(spi_base_address, address, SPI_CMD_BE_64K))
+                return false;
+            address += SPI_BLOCK_SIZE;
+        } else {
+            if (!spi_sector_erase_4k(spi_base_address, address))
+                return false;
+            address += 4096;
+        }
+    }
+
+    return true;
 }
 
 /**

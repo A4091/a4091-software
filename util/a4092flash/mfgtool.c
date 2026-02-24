@@ -28,6 +28,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h>
+#include <time.h>
+
+#include "mfg_flash.h"
 
 
 #include <dos/dos.h>
@@ -105,6 +108,7 @@ enum {
     SPI_CMD_RDID   = 0x9F,
     SPI_CMD_READ   = 0x03,
     SPI_CMD_PP     = 0x02,
+    SPI_CMD_SE_4K  = 0x20,
     SPI_CMD_BE64K  = 0xD8,
 };
 
@@ -243,6 +247,20 @@ static bool spi_block_erase(uint32_t base, uint32_t baddr)
     spi_tx_end (base,  baddr        & 0xFF);
     return spi_wait_wip_clear(base, 2000000);
 }
+static bool spi_sector_erase_4k(uint32_t base, uint32_t baddr)
+{
+    spi_write_enable(base);
+    if (!spi_wait_wel_set(base, 1000)) {
+        fprintf(stderr, "ERROR: WEL not set before 4K erase at 0x%08lX\n", (unsigned long)baddr);
+        return false;
+    }
+    spi_tx_hold(base, SPI_CMD_SE_4K);
+    spi_tx_hold(base, (baddr >> 16) & 0xFF);
+    spi_tx_hold(base, (baddr >> 8)  & 0xFF);
+    spi_tx_end (base,  baddr        & 0xFF);
+    return spi_wait_wip_clear(base, 2000000);
+}
+
 static bool spi_page_program(uint32_t base, uint32_t addr, const uint8_t *data, size_t len)
 {
     if (!len || len > SPI_PAGE_SIZE) return false;
@@ -412,6 +430,372 @@ static bool parse_size(const char *s, size_t *out)
     *out = (size_t)v; return true;
 }
 
+/* ===== mfg data helpers ===== */
+
+static uint32_t mfg_checksum(const struct mfg_data *mfg)
+{
+    const uint32_t *words = (const uint32_t *)mfg;
+    uint32_t xor = 0;
+    /* XOR first 63 uint32_t values (252 bytes, everything before crc32 field) */
+    for (int i = 0; i < 63; i++)
+        xor ^= words[i];
+    return xor;
+}
+
+static bool mfg_verify_checksum(const struct mfg_data *mfg)
+{
+    const uint32_t *words = (const uint32_t *)mfg;
+    uint32_t xor = 0;
+    /* XOR all 64 uint32_t values; result is 0 if checksum is correct */
+    for (int i = 0; i < 64; i++)
+        xor ^= words[i];
+    return xor == 0;
+}
+
+static bool parse_date(const char *s, uint32_t *ts)
+{
+    int y, m, d;
+    if (sscanf(s, "%d-%d-%d", &y, &m, &d) != 3) return false;
+    struct tm t;
+    memset(&t, 0, sizeof(t));
+    t.tm_year = y - 1900;
+    t.tm_mon  = m - 1;
+    t.tm_mday = d;
+    t.tm_isdst = 0;
+    time_t tt = mktime(&t);
+    if (tt == (time_t)-1) return false;
+    *ts = (uint32_t)tt;
+    return true;
+}
+
+static void format_date(uint32_t ts, char *buf, size_t len)
+{
+    if (ts == 0) { buf[0] = '\0'; return; }
+    time_t tt = (time_t)ts;
+    struct tm *t = gmtime(&tt);
+    if (t)
+        snprintf(buf, len, "%04d-%02d-%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
+    else
+        snprintf(buf, len, "?");
+}
+
+static bool parse_version(const char *s, uint16_t *ver)
+{
+    unsigned maj, min;
+    if (sscanf(s, "%u.%u", &maj, &min) != 2) return false;
+    if (maj > 255 || min > 255) return false;
+    *ver = (uint16_t)((maj << 8) | min);
+    return true;
+}
+
+static void format_version(uint16_t ver, char *buf, size_t len)
+{
+    snprintf(buf, len, "%u.%u", (ver >> 8) & 0xFF, ver & 0xFF);
+}
+
+static bool parse_bcd_datecode(const char *s, uint8_t out[8])
+{
+    memset(out, 0, 8);
+    /* Expected format: "YY/WW" where YY and WW are 2-digit numbers */
+    unsigned yy, ww;
+    if (sscanf(s, "%u/%u", &yy, &ww) != 2) return false;
+    if (yy > 99 || ww > 53) return false;
+    /* Pack each pair of digits into BCD: e.g. 26 -> 0x26 */
+    out[0] = (uint8_t)(((yy / 10) << 4) | (yy % 10));
+    out[1] = (uint8_t)(((ww / 10) << 4) | (ww % 10));
+    return true;
+}
+
+static void format_bcd_datecode(const uint8_t dc[8], char *buf, size_t len)
+{
+    unsigned yy = ((dc[0] >> 4) & 0x0F) * 10 + (dc[0] & 0x0F);
+    unsigned ww = ((dc[1] >> 4) & 0x0F) * 10 + (dc[1] & 0x0F);
+    snprintf(buf, len, "%02u/%02u", yy, ww);
+}
+
+struct color_alias {
+    const char *name;
+    uint8_t r, g, b;
+};
+
+static const struct color_alias color_aliases[] = {
+    { "black",   0x4, 0x4, 0x4 },
+    { "green",   0x1, 0xA, 0x3 },
+    { "purple",  0x6, 0x2, 0xC },
+    { "red",     0xD, 0x2, 0x2 },
+    { "white",   0xD, 0xD, 0xD },
+    { "blue",    0x6, 0x8, 0xB },
+    { NULL, 0, 0, 0 }
+};
+
+static bool parse_color(const char *s, uint8_t *rg, uint8_t *b)
+{
+    /* Check named color aliases first */
+    for (const struct color_alias *a = color_aliases; a->name; a++) {
+        if (strcmp(s, a->name) == 0) {
+            *rg = (uint8_t)((a->r << 4) | a->g);
+            *b  = (uint8_t)(a->b & 0x0F);
+            return true;
+        }
+    }
+
+    /* Otherwise parse #RGB hex */
+    if (*s == '#') s++;
+    if (strlen(s) != 3) return false;
+    unsigned r_val, g_val, b_val;
+    char tmp[2] = {0, 0};
+    tmp[0] = s[0]; r_val = (unsigned)strtoul(tmp, NULL, 16);
+    tmp[0] = s[1]; g_val = (unsigned)strtoul(tmp, NULL, 16);
+    tmp[0] = s[2]; b_val = (unsigned)strtoul(tmp, NULL, 16);
+    *rg = (uint8_t)((r_val << 4) | g_val);
+    *b  = (uint8_t)(b_val & 0x0F);
+    return true;
+}
+
+static void format_color(uint8_t rg, uint8_t b, char *buf, size_t len)
+{
+    unsigned r = (rg >> 4) & 0x0F;
+    unsigned g = rg & 0x0F;
+    unsigned bv = b & 0x0F;
+    snprintf(buf, len, "#%X%X%X", r, g, bv);
+}
+
+/* ===== mfg config file parser ===== */
+
+static char *trim(char *s)
+{
+    while (*s == ' ' || *s == '\t') s++;
+    char *end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r'))
+        end--;
+    *end = '\0';
+    return s;
+}
+
+static bool parse_mfg_config(const char *path, struct mfg_data *mfg, bool *has_serial)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "open '%s': %s\n", path, strerror(errno)); return false; }
+
+    memset(mfg, 0, sizeof(*mfg));
+    mfg->magic = MFG_MAGIC;
+    mfg->struct_version = MFG_VERSION;
+    *has_serial = false;
+    unsigned long raw_serial = 0;
+
+    char line[256];
+    int lineno = 0;
+    while (fgets(line, sizeof(line), f)) {
+        lineno++;
+        char *p = trim(line);
+        if (*p == '#' || *p == '\0') continue;
+
+        char *eq = strchr(p, '=');
+        if (!eq) {
+            fprintf(stderr, "%s:%d: missing '='\n", path, lineno);
+            fclose(f);
+            return false;
+        }
+        *eq = '\0';
+        char *key = trim(p);
+        char *val = trim(eq + 1);
+
+        if (strcmp(key, "card_type") == 0) {
+            strncpy(mfg->card_type, val, sizeof(mfg->card_type) - 1);
+        } else if (strcmp(key, "serial") == 0) {
+            if (*val) {
+                raw_serial = strtoul(val, NULL, 10);
+                *has_serial = true;
+            }
+        } else if (strcmp(key, "hw_revision") == 0) {
+            if (!parse_version(val, &mfg->hw_revision)) {
+                fprintf(stderr, "%s:%d: bad hw_revision '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "pcb_color") == 0) {
+            if (!parse_color(val, &mfg->pcb_color_rg, &mfg->pcb_color_b)) {
+                fprintf(stderr, "%s:%d: bad pcb_color '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "assembler_name") == 0) {
+            strncpy(mfg->assembler_name, val, sizeof(mfg->assembler_name) - 1);
+        } else if (strcmp(key, "assembly_factory") == 0) {
+            strncpy(mfg->assembly_factory, val, sizeof(mfg->assembly_factory) - 1);
+        } else if (strcmp(key, "build_date") == 0) {
+            if (*val && !parse_date(val, &mfg->build_date)) {
+                fprintf(stderr, "%s:%d: bad build_date '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "batch_number") == 0) {
+            mfg->batch_number = (uint16_t)strtoul(val, NULL, 0);
+        } else if (strcmp(key, "siop_datecode") == 0) {
+            if (*val && !parse_bcd_datecode(val, (uint8_t *)mfg->siop_datecode)) {
+                fprintf(stderr, "%s:%d: bad siop_datecode '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "cpld_version") == 0) {
+            if (!parse_version(val, &mfg->cpld_version)) {
+                fprintf(stderr, "%s:%d: bad cpld_version '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "initial_fw_version") == 0) {
+            if (!parse_version(val, &mfg->initial_fw_version)) {
+                fprintf(stderr, "%s:%d: bad initial_fw_version '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "test_date") == 0) {
+            if (*val && !parse_date(val, &mfg->test_date)) {
+                fprintf(stderr, "%s:%d: bad test_date '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "test_fw_version") == 0) {
+            if (!parse_version(val, &mfg->test_fw_version)) {
+                fprintf(stderr, "%s:%d: bad test_fw_version '%s'\n", path, lineno, val);
+                fclose(f); return false;
+            }
+        } else if (strcmp(key, "test_status") == 0) {
+            mfg->test_status = (uint16_t)strtoul(val, NULL, 0);
+        } else if (strcmp(key, "owner_name") == 0) {
+            strncpy(mfg->owner_name, val, sizeof(mfg->owner_name) - 1);
+        } else {
+            fprintf(stderr, "%s:%d: unknown key '%s'\n", path, lineno, key);
+            fclose(f); return false;
+        }
+    }
+
+    fclose(f);
+
+    /* Compose serial after parsing so card_type is always available */
+    if (*has_serial)
+        snprintf(mfg->serial, sizeof(mfg->serial), "%s-%08lu", mfg->card_type, raw_serial);
+
+    return true;
+}
+
+/* ===== mfg config file writer ===== */
+
+static bool write_mfg_config(const char *path, const struct mfg_data *mfg, bool crc_ok)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) { fprintf(stderr, "open '%s' for write: %s\n", path, strerror(errno)); return false; }
+
+    if (!crc_ok)
+        fprintf(f, "# WARNING: checksum mismatch\n");
+    fprintf(f, "# A4092 Manufacturing Data\n");
+
+    /* card_type */
+    fprintf(f, "card_type = %s\n", mfg->card_type);
+
+    /* serial: extract the 8-digit number after the card_type prefix */
+    const char *dash = strchr(mfg->serial, '-');
+    if (dash)
+        fprintf(f, "serial = %s\n", dash + 1);
+    else
+        fprintf(f, "serial = %s\n", mfg->serial);
+
+    /* hw_revision */
+    char vbuf[16];
+    format_version(mfg->hw_revision, vbuf, sizeof(vbuf));
+    fprintf(f, "hw_revision = %s\n", vbuf);
+
+    /* pcb_color */
+    char cbuf[8];
+    format_color(mfg->pcb_color_rg, mfg->pcb_color_b, cbuf, sizeof(cbuf));
+    fprintf(f, "pcb_color = %s\n", cbuf);
+
+    fprintf(f, "assembler_name = %s\n", mfg->assembler_name);
+    fprintf(f, "assembly_factory = %s\n", mfg->assembly_factory);
+
+    char dbuf[16];
+    format_date(mfg->build_date, dbuf, sizeof(dbuf));
+    fprintf(f, "build_date = %s\n", dbuf);
+    fprintf(f, "batch_number = %u\n", mfg->batch_number);
+
+    char dcbuf[16];
+    format_bcd_datecode((const uint8_t *)mfg->siop_datecode, dcbuf, sizeof(dcbuf));
+    fprintf(f, "siop_datecode = %s\n", dcbuf);
+
+    format_version(mfg->cpld_version, vbuf, sizeof(vbuf));
+    fprintf(f, "cpld_version = %s\n", vbuf);
+
+    format_version(mfg->initial_fw_version, vbuf, sizeof(vbuf));
+    fprintf(f, "initial_fw_version = %s\n", vbuf);
+
+    format_date(mfg->test_date, dbuf, sizeof(dbuf));
+    fprintf(f, "test_date = %s\n", dbuf);
+
+    format_version(mfg->test_fw_version, vbuf, sizeof(vbuf));
+    fprintf(f, "test_fw_version = %s\n", vbuf);
+
+    fprintf(f, "test_status = 0x%02X\n", mfg->test_status);
+    fprintf(f, "owner_name = %s\n", mfg->owner_name);
+
+    fclose(f);
+    return true;
+}
+
+/* ===== mfg console dump ===== */
+
+static void print_mfg_data(const struct mfg_data *mfg, bool crc_ok)
+{
+    char buf[64];
+
+    printf("=== Manufacturing Data ===\n");
+    if (!crc_ok)
+        printf("WARNING: checksum mismatch (stored 0x%08lX, computed 0x%08lX)\n",
+               (unsigned long)mfg->crc32, (unsigned long)mfg_checksum(mfg));
+
+    printf("Card type:          %s\n", mfg->card_type);
+    printf("Serial:             %s\n", mfg->serial);
+
+    format_version(mfg->hw_revision, buf, sizeof(buf));
+    printf("HW revision:        %s\n", buf);
+
+    format_color(mfg->pcb_color_rg, mfg->pcb_color_b, buf, sizeof(buf));
+    printf("PCB color:          %s (RGB888: #%02X%02X%02X)\n", buf,
+           PCB_COLOR_R8(mfg), PCB_COLOR_G8(mfg), PCB_COLOR_B8(mfg));
+
+    printf("Assembler:          %s\n", mfg->assembler_name);
+    printf("Assembly factory:   %s\n", mfg->assembly_factory);
+
+    format_date(mfg->build_date, buf, sizeof(buf));
+    printf("Build date:         %s\n", buf);
+    printf("Batch number:       %u\n", mfg->batch_number);
+
+    format_bcd_datecode((const uint8_t *)mfg->siop_datecode, buf, sizeof(buf));
+    printf("SIOP date code:     %s\n", buf);
+
+    format_version(mfg->cpld_version, buf, sizeof(buf));
+    printf("CPLD version:       %s\n", buf);
+
+    format_version(mfg->initial_fw_version, buf, sizeof(buf));
+    printf("Initial FW version: %s\n", buf);
+
+    format_date(mfg->test_date, buf, sizeof(buf));
+    printf("Test date:          %s\n", buf);
+
+    format_version(mfg->test_fw_version, buf, sizeof(buf));
+    printf("Test FW version:    %s\n", buf);
+
+    printf("Test status:        0x%02X", mfg->test_status);
+    if (mfg->test_status) {
+        printf(" (");
+        const char *sep = "";
+        if (mfg->test_status & TEST_PASSED_REGS)  { printf("%sREGS",  sep); sep = " "; }
+        if (mfg->test_status & TEST_PASSED_IRQ)   { printf("%sIRQ",   sep); sep = " "; }
+        if (mfg->test_status & TEST_PASSED_SCSI)  { printf("%sSCSI",  sep); sep = " "; }
+        if (mfg->test_status & TEST_PASSED_DMA)   { printf("%sDMA",   sep); sep = " "; }
+        if (mfg->test_status & TEST_PASSED_FLASH) { printf("%sFLASH", sep); sep = " "; }
+        if (mfg->test_status & TEST_PASSED_CPLD)  { printf("%sCPLD",  sep); sep = " "; }
+        printf(")");
+    }
+    printf("\n");
+
+    printf("Owner:              %s\n", mfg->owner_name);
+    printf("Checksum:           0x%08lX %s\n", (unsigned long)mfg->crc32,
+           crc_ok ? "(OK)" : "(BAD)");
+}
+
 /* ===== usage ===== */
 static void usage(const char *argv0)
 {
@@ -424,12 +808,18 @@ static void usage(const char *argv0)
 "  %s verify <addr> <infile>\n"
 "  %s patch <addr> <hexbytes>\n"
 "  %s status\n"
+"  %s writemfg <config_file>\n"
+"  %s readmfg <config_file>\n"
+"  %s dumpmfg\n"
 "\n"
 "Notes:\n"
 "  - addr/len accept decimal or 0xHEX; len also supports K/M suffix (e.g. 64K).\n"
 "  - 'write' assumes the destination is erased; run 'erase' first.\n"
 "  - 'patch' writes a few bytes (e.g. 0xDE,0xAD,0xBE,0xEF) within an erased area.\n"
-, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
+"  - 'writemfg' programs manufacturing data from a config file.\n"
+"  - 'readmfg' reads manufacturing data from flash to a config file.\n"
+"  - 'dumpmfg' displays manufacturing data on the console.\n"
+, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
 }
 
 /* parse CSV of hex bytes for 'patch' */
@@ -596,6 +986,122 @@ static int cmd_status(uint32_t base)
     return 0;
 }
 
+/* ===== mfg commands ===== */
+
+static int cmd_writemfg(uint32_t base, const char *config_file)
+{
+    struct mfg_data mfg;
+    bool has_serial = false;
+
+    if (!parse_mfg_config(config_file, &mfg, &has_serial))
+        return 2;
+
+    /* Handle serial number: from config or auto-increment from serial.txt */
+    if (!has_serial) {
+        unsigned long serial_num = 1;
+        FILE *sf = fopen("S/serial.txt", "r");
+        if (sf) {
+            if (fscanf(sf, "%lu", &serial_num) != 1)
+                serial_num = 1;
+            fclose(sf);
+        }
+        snprintf(mfg.serial, sizeof(mfg.serial), "%s-%08lu", mfg.card_type, serial_num);
+        printf("Auto-assigned serial: %s\n", mfg.serial);
+
+        /* Write back incremented serial */
+        sf = fopen("S/serial.txt", "w");
+        if (sf) {
+            fprintf(sf, "%lu\n", serial_num + 1);
+            fclose(sf);
+        } else {
+            fprintf(stderr, "WARNING: could not update serial.txt\n");
+        }
+    }
+
+    /* Compute checksum */
+    mfg.crc32 = mfg_checksum(&mfg);
+
+    printf("Writing manufacturing data to flash at 0x%lX...\n", (unsigned long)MFG_FLASH_OFFSET);
+
+    /* Clear block protection */
+    if (!spi_clear_block_protect(base))
+        return 3;
+
+    /* Erase 4KB sector */
+    printf("Erasing 4KB sector at 0x%lX...\n", (unsigned long)MFG_FLASH_OFFSET);
+    if (!spi_sector_erase_4k(base, MFG_FLASH_OFFSET)) {
+        fprintf(stderr, "ERROR: 4K sector erase failed\n");
+        return 3;
+    }
+
+    /* Write 256 bytes */
+    if (!spi_write_buf_pagewise(base, MFG_FLASH_OFFSET, (const uint8_t *)&mfg, sizeof(mfg))) {
+        fprintf(stderr, "ERROR: flash write failed\n");
+        return 3;
+    }
+
+    /* Verify by reading back */
+    struct mfg_data verify;
+    if (!spi_read_buf(base, MFG_FLASH_OFFSET, (uint8_t *)&verify, sizeof(verify))) {
+        fprintf(stderr, "ERROR: flash readback failed\n");
+        return 3;
+    }
+    if (memcmp(&mfg, &verify, sizeof(mfg)) != 0) {
+        fprintf(stderr, "ERROR: flash verify failed - data mismatch\n");
+        return 4;
+    }
+
+    printf("Manufacturing data written and verified OK\n");
+    printf("Serial: %s\n", mfg.serial);
+    return 0;
+}
+
+static int cmd_readmfg(uint32_t base, const char *config_file)
+{
+    struct mfg_data mfg;
+
+    if (!spi_read_buf(base, MFG_FLASH_OFFSET, (uint8_t *)&mfg, sizeof(mfg))) {
+        fprintf(stderr, "ERROR: flash read failed\n");
+        return 3;
+    }
+
+    if (mfg.magic != MFG_MAGIC) {
+        fprintf(stderr, "No manufacturing data found (bad magic: 0x%08lX)\n",
+                (unsigned long)mfg.magic);
+        return 2;
+    }
+
+    bool crc_ok = mfg_verify_checksum(&mfg);
+    if (!crc_ok)
+        fprintf(stderr, "WARNING: checksum mismatch\n");
+
+    if (!write_mfg_config(config_file, &mfg, crc_ok))
+        return 3;
+
+    printf("Manufacturing data written to %s\n", config_file);
+    return 0;
+}
+
+static int cmd_dumpmfg(uint32_t base)
+{
+    struct mfg_data mfg;
+
+    if (!spi_read_buf(base, MFG_FLASH_OFFSET, (uint8_t *)&mfg, sizeof(mfg))) {
+        fprintf(stderr, "ERROR: flash read failed\n");
+        return 3;
+    }
+
+    if (mfg.magic != MFG_MAGIC) {
+        fprintf(stderr, "No manufacturing data found (bad magic: 0x%08lX)\n",
+                (unsigned long)mfg.magic);
+        return 2;
+    }
+
+    bool crc_ok = mfg_verify_checksum(&mfg);
+    print_mfg_data(&mfg, crc_ok);
+    return 0;
+}
+
 /* ===== main ===== */
 int main(int argc, char **argv)
 {
@@ -674,6 +1180,17 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"status")==0) {
         return cmd_status(base);
+    }
+    else if (strcmp(cmd,"writemfg")==0) {
+        if (argi >= argc) { usage(argv[0]); return 1; }
+        return cmd_writemfg(base, argv[argi]);
+    }
+    else if (strcmp(cmd,"readmfg")==0) {
+        if (argi >= argc) { usage(argv[0]); return 1; }
+        return cmd_readmfg(base, argv[argi]);
+    }
+    else if (strcmp(cmd,"dumpmfg")==0) {
+        return cmd_dumpmfg(base);
     }
 
     usage(argv[0]);

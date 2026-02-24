@@ -60,7 +60,7 @@ else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
 endif
 ifeq ($(DEVNAME),a4092)
-SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c
+SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c mfg.c
 endif
 SRCS    += romfile.c battmem.c
 ASMSRCS := reloc.S

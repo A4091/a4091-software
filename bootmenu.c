@@ -455,6 +455,10 @@ static void about_page(void)
 #endif
     Print("years. Original RDB mounter by Toni Wilen.",118,104,FALSE);
     Print("Only Amiga makes it possible.", 204,127,FALSE);
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    if (asave->mfg_serial[0])
+        Print(asave->mfg_serial, 110, 155, FALSE);
+#endif
     Print((char *)device_id_string, 100,178,FALSE);
 
     ng.ng_LeftEdge   = 400;

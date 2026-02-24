@@ -52,6 +52,7 @@
 #include "a4091.h"
 #include "util/a4092flash/flash.h"
 #include "util/a4092flash/nvram_flash.h"
+#include "mfg.h"
 
 /*
  * NewMinList
@@ -535,6 +536,9 @@ init_chan(device_t self, UBYTE *boardnum)
     printf("DIP switches = %02x\n", dip_switches);
 
     Load_BattMem();
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    mfg_read();
+#endif
 
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + HW_OFFSET_REGISTERS);

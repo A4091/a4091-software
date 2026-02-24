@@ -29,6 +29,9 @@ $(AGUIDECHECK):
 	wget http://aminet.net/dev/misc/NDK3.2.lha
 	lha xqf NDK3.2.lha Tools/AGuideCheck/* Tools/AG2HTML/*
 
+daynascsi.lha:
+	wget https://github.com/RobSmithDev/daynaport-amiga/releases/download/1.3/daynascsi.lha
+
 scsifix.o: scsifix.asm
 	vasmm68k_mot -Fhunk -o scsifix.o scsifix.asm
 scsifix: scsifix.o

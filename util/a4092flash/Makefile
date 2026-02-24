@@ -37,7 +37,7 @@ ifeq ($(FLASH_SPI), 1)
 CFLAGS += -DFLASH_SPI=1
 endif
 
-all:	$(PROJECT) spiutil
+all:	$(PROJECT) mfgtool
 
 SRCS = flash.c \
        spi.c \
@@ -50,9 +50,9 @@ a4092flash: $(SRCS) *.h
 	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 	$(QUIET)$(STRIP) -s $@
 
-spiutil: spiutil.c
+mfgtool: mfgtool.c mfg_flash.h
 	@echo Building $@
-	$(QUIET)$(CC) $(CFLAGS) -o $@ spiutil.c $(LDLIBS)
+	$(QUIET)$(CC) $(CFLAGS) -o $@ mfgtool.c $(LDLIBS)
 
 test:
 	@echo Building NVRAM tests
@@ -61,4 +61,4 @@ test:
 	./nvram_test
 
 clean:
-	-rm -rf $(PROJECT) nvram_test spiutil
+	-rm -rf $(PROJECT) nvram_test mfgtool
