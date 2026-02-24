@@ -86,8 +86,11 @@ struct mfg_data {
     /* User-writable */
     char     owner_name[32];            /* Optional: owner can personalize */
 
+    /* Product */
+    char     sku[32];                   /* e.g. "A4092 Black Edition" null-term */
+
     /* Reserved for future expansion */
-    uint8_t  reserved[92];
+    uint8_t  reserved[60];
 
     /* Integrity check - CRC32 over all preceding bytes (252 bytes) */
     uint32_t crc32;

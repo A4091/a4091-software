@@ -657,6 +657,8 @@ static bool parse_mfg_config(const char *path, struct mfg_data *mfg, bool *has_s
             mfg->test_status = (uint16_t)strtoul(val, NULL, 0);
         } else if (strcmp(key, "owner_name") == 0) {
             strncpy(mfg->owner_name, val, sizeof(mfg->owner_name) - 1);
+        } else if (strcmp(key, "sku") == 0) {
+            strncpy(mfg->sku, val, sizeof(mfg->sku) - 1);
         } else {
             fprintf(stderr, "%s:%d: unknown key '%s'\n", path, lineno, key);
             fclose(f); return false;
@@ -729,6 +731,7 @@ static bool write_mfg_config(const char *path, const struct mfg_data *mfg, bool 
 
     fprintf(f, "test_status = 0x%02X\n", mfg->test_status);
     fprintf(f, "owner_name = %s\n", mfg->owner_name);
+    fprintf(f, "sku = %s\n", mfg->sku);
 
     fclose(f);
     return true;
@@ -792,6 +795,7 @@ static void print_mfg_data(const struct mfg_data *mfg, bool crc_ok)
     printf("\n");
 
     printf("Owner:              %s\n", mfg->owner_name);
+    printf("SKU:                %s\n", mfg->sku);
     printf("Checksum:           0x%08lX %s\n", (unsigned long)mfg->crc32,
            crc_ok ? "(OK)" : "(BAD)");
 }
