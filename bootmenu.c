@@ -34,6 +34,7 @@
 #include <graphics/videocontrol.h>
 #include <graphics/rastport.h>
 #include <graphics/gfxmacros.h>
+#include <devices/inputevent.h>
 
 #include <graphics/gfxbase.h>
 #include <clib/intuition_protos.h>
@@ -52,6 +53,11 @@
 #include "version.h"
 #include "mounter.h" // for Port/IOReq wrappers
 #include "a4091.h"
+
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#include "util/a4092flash/mfg_flash.h"
+#include "util/a4092flash/flash.h"
+#endif
 
 #if defined(DRIVER_A4091)
 #define BOOTMENU_NAME "A4091"
@@ -73,7 +79,7 @@ static struct Gadget *gadgets;
 static struct Gadget *DisplayTypeGad;
 static struct Gadget *LastAdded;
 static struct NewGadget *NewGadget;
-static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
+static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug, 5=mfg
 
 #define DISKS_BACK_ID      1
 #define DIPSWITCH_BACK_ID  2
@@ -89,6 +95,7 @@ static int current_page = 0; // 0=main, 1=disks, 2=dipswitch, 3=about, 4=debug
 #define DEBUG_BOGUS_ID       12
 #define DEBUG_QUICK_INT_ID   13
 #define DEBUG_ALLOW_DISC_ID  14
+#define MFG_BACK_ID          15
 
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 #define WIDTH  640
@@ -873,6 +880,260 @@ static void draw_card(const struct drawing c[], int length)
 #define draw_card(x,y)
 #endif
 
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+static const struct Rectangle mfg_table[] =
+{
+    { 40, 20,560,162},
+    { 42, 21,148, 12}, // Label header
+    { 42, 34,148,147}, // Label data
+    {192, 21,406, 12}, // Value header
+    {192, 34,406,147}, // Value data
+};
+
+static void epoch_to_ymd(uint32_t ts, int *year, int *month, int *day)
+{
+    static const int mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    uint32_t days = ts / 86400;
+    int y = 1970;
+    int leap, m;
+
+    for (;;) {
+        leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+        if (days < (uint32_t)(365 + leap))
+            break;
+        days -= 365 + leap;
+        y++;
+    }
+
+    for (m = 0; m < 12; m++) {
+        int md = mdays[m] + (m == 1 && leap);
+        if (days < (uint32_t)md)
+            break;
+        days -= md;
+    }
+
+    *year = y;
+    *month = m + 1;
+    *day = (int)days + 1;
+}
+
+static void mfg_print_row(int row, const char *label, const char *value)
+{
+    struct RastPort *rp = &screen->RastPort;
+    UWORD y = 43 + row * 9;
+    SetAPen(rp, 2);
+    Move(rp, 52, y);
+    Text(rp, label, strlen(label));
+    SetAPen(rp, 1);
+    Move(rp, 202, y);
+    Text(rp, value, strlen(value));
+}
+
+/* Format "major.minor" from a uint16_t version (high byte.low byte) */
+static void fmt_version(char *buf, uint16_t ver)
+{
+    char *p = buf;
+    itoa(ver >> 8, p, 10);
+    p += strlen(p);
+    *p++ = '.';
+    itoa(ver & 0xFF, p, 10);
+}
+
+/* Format "YYYY-MM-DD" from epoch_to_ymd results */
+static void fmt_date(char *buf, int y, int m, int d)
+{
+    buf[0] = '0' + (y / 1000);
+    buf[1] = '0' + ((y / 100) % 10);
+    buf[2] = '0' + ((y / 10) % 10);
+    buf[3] = '0' + (y % 10);
+    buf[4] = '-';
+    buf[5] = '0' + (m / 10);
+    buf[6] = '0' + (m % 10);
+    buf[7] = '-';
+    buf[8] = '0' + (d / 10);
+    buf[9] = '0' + (d % 10);
+    buf[10] = '\0';
+}
+
+/* Copy a fixed-length field into buf with null termination */
+static void mfg_copy_field(char *buf, const char *src, int len)
+{
+    memcpy(buf, src, len);
+    buf[len] = '\0';
+}
+
+static void mfg_page(void)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    struct NewGadget ng;
+    struct mfg_data mfg;
+    uint8_t *p = (uint8_t *)&mfg;
+    uint32_t i;
+    char buf[48];
+    char title[64];
+    BOOL valid, cksum_ok = FALSE;
+    ULONG tag;
+
+    /* Read manufacturing data from flash */
+    for (i = 0; i < sizeof (mfg); i++)
+        p[i] = flash_readByte(MFG_FLASH_OFFSET + i);
+
+    /* Validate magic */
+    valid = (mfg.magic == MFG_MAGIC);
+
+    /* Verify XOR32 checksum */
+    if (valid) {
+        uint32_t *words = (uint32_t *)&mfg;
+        uint32_t xor = 0;
+        for (i = 0; i < sizeof (mfg) / sizeof (uint32_t); i++)
+            xor ^= words[i];
+        cksum_ok = (xor == 0);
+    }
+
+    /* Build title with checksum status */
+    if (!valid)
+        strcpy(title, BOOTMENU_NAME " Diagnostics - Manufacturing");
+    else if (cksum_ok)
+        strcpy(title, BOOTMENU_NAME " Manufacturing - Checksum OK");
+    else
+        strcpy(title, BOOTMENU_NAME " Manufacturing - BAD CHECKSUM");
+
+    current_page = 5;
+    page_header(&ng, title, FALSE);
+
+    /* Draw bevel box table */
+    tag = GTBB_Recessed;
+    for (i = 0; i < ARRAY_LENGTH(mfg_table); i++) {
+        DrawBevelBox(&screen->RastPort,
+                     mfg_table[i].MinX, mfg_table[i].MinY,
+                     mfg_table[i].MaxX + 1,
+                     mfg_table[i].MaxY + 1,
+                     GT_VisualInfo, visualInfo,
+                     tag, TRUE,
+                     TAG_DONE);
+        tag = TAG_IGNORE;
+    }
+
+    /* Column headers */
+    SetAPen(&screen->RastPort, 2);
+    Print("Field", 52, 30, FALSE);
+    Print("Value", 202, 30, FALSE);
+
+    if (!valid) {
+        SetAPen(&screen->RastPort, 1);
+        Print("No manufacturing data found", 0, 110, TRUE);
+    } else {
+        int y, m, d;
+
+        /* Card Type */
+        mfg_copy_field(buf, mfg.card_type, sizeof (mfg.card_type));
+        mfg_print_row(0, "Card Type", buf);
+
+        /* Serial */
+        mfg_copy_field(buf, mfg.serial, sizeof (mfg.serial));
+        mfg_print_row(1, "Serial", buf);
+
+        /* SKU */
+        mfg_copy_field(buf, mfg.sku, sizeof (mfg.sku));
+        mfg_print_row(2, "SKU", buf);
+
+        /* HW Revision */
+        fmt_version(buf, mfg.hw_revision);
+        mfg_print_row(3, "HW Revision", buf);
+
+        /* PCB Color */
+        buf[0] = '#';
+        buf[1] = hex[PCB_COLOR_R(&mfg)];
+        buf[2] = hex[PCB_COLOR_G(&mfg)];
+        buf[3] = hex[PCB_COLOR_GET_B(&mfg)];
+        buf[4] = '\0';
+        mfg_print_row(4, "PCB Color", buf);
+
+        /* Assembler */
+        mfg_copy_field(buf, mfg.assembler_name, sizeof (mfg.assembler_name));
+        mfg_print_row(5, "Assembler", buf);
+
+        /* Factory */
+        mfg_copy_field(buf, mfg.assembly_factory,
+                       sizeof (mfg.assembly_factory));
+        mfg_print_row(6, "Factory", buf);
+
+        /* Build Date */
+        if (mfg.build_date != 0) {
+            epoch_to_ymd(mfg.build_date, &y, &m, &d);
+            fmt_date(buf, y, m, d);
+        } else {
+            strcpy(buf, "-");
+        }
+        mfg_print_row(7, "Build Date", buf);
+
+        /* Batch */
+        itoa(mfg.batch_number, buf, 10);
+        mfg_print_row(8, "Batch", buf);
+
+        /* SIOP Date Code (BCD packed: byte 0 = YY, byte 1 = WW) */
+        {
+            uint8_t *dc = (uint8_t *)mfg.siop_datecode;
+            unsigned yy = ((dc[0] >> 4) & 0x0F) * 10 + (dc[0] & 0x0F);
+            unsigned ww = ((dc[1] >> 4) & 0x0F) * 10 + (dc[1] & 0x0F);
+            buf[0] = '0' + (yy / 10);
+            buf[1] = '0' + (yy % 10);
+            buf[2] = '/';
+            buf[3] = '0' + (ww / 10);
+            buf[4] = '0' + (ww % 10);
+            buf[5] = '\0';
+        }
+        mfg_print_row(9, "SIOP Date Code", buf);
+
+        /* CPLD Version */
+        fmt_version(buf, mfg.cpld_version);
+        mfg_print_row(10, "CPLD Version", buf);
+
+        /* Initial FW */
+        fmt_version(buf, mfg.initial_fw_version);
+        mfg_print_row(11, "Initial FW", buf);
+
+        /* Test Date */
+        if (mfg.test_date != 0) {
+            epoch_to_ymd(mfg.test_date, &y, &m, &d);
+            fmt_date(buf, y, m, d);
+        } else {
+            strcpy(buf, "-");
+        }
+        mfg_print_row(12, "Test Date", buf);
+
+        /* Test FW */
+        fmt_version(buf, mfg.test_fw_version);
+        mfg_print_row(13, "Test FW", buf);
+
+        /* Test Status */
+        buf[0] = '0'; buf[1] = 'x';
+        buf[2] = hex[(mfg.test_status >> 12) & 0xF];
+        buf[3] = hex[(mfg.test_status >> 8) & 0xF];
+        buf[4] = hex[(mfg.test_status >> 4) & 0xF];
+        buf[5] = hex[mfg.test_status & 0xF];
+        strcpy(buf + 6,
+               (mfg.test_status & TEST_PASSED_ALL) == TEST_PASSED_ALL
+               ? " (ALL PASS)" : " (PARTIAL)");
+        mfg_print_row(14, "Test Status", buf);
+
+        /* Owner */
+        mfg_copy_field(buf, mfg.owner_name, sizeof (mfg.owner_name));
+        mfg_print_row(15, "Owner", buf);
+    }
+
+    /* Back button */
+    ng.ng_LeftEdge   = 400;
+    ng.ng_TopEdge    = 185;
+    ng.ng_Width      = 120;
+    ng.ng_GadgetText = "~Back";
+    ng.ng_GadgetID   = MFG_BACK_ID;
+    LastAdded = create_gadget(BUTTON_KIND);
+
+    page_footer();
+}
+#endif
+
 static void main_page(void)
 {
     struct NewGadget ng;
@@ -937,6 +1198,7 @@ static void event_loop(void)
             class = msg->Class;
             icode = msg->Code;
             gad = msg->IAddress;
+            UWORD qual = msg->Qualifier;
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
             WORD mx = msg->MouseX;
             WORD my = msg->MouseY;
@@ -948,6 +1210,10 @@ static void event_loop(void)
                     running = FALSE;
                 break;
             case IDCMP_VANILLAKEY:
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+                if (icode == 0x0D && (qual & IEQUALIFIER_CONTROL))
+                    mfg_page();
+#endif
                 switch (icode) {
                 case 'd':
                 case 'D':
@@ -1104,6 +1370,7 @@ static void event_loop(void)
                 case DIPSWITCH_BACK_ID:
                 case ABOUT_BACK_ID:
                 case DEBUG_BACK_ID:
+                case MFG_BACK_ID:
                     main_page();
                     break;
                 case MAIN_BOOT_ID:
