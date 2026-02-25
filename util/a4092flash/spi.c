@@ -352,8 +352,9 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
  */
 UBYTE spi_flash_readByte(ULONG address)
 {
-    uint8_t byte;
-    spi_read_buf(spi_base_address, address, &byte, 1);
+    uint8_t byte = 0xFF;
+    if (!spi_read_buf(spi_base_address, address, &byte, 1))
+        return 0xFF;
     return byte;
 }
 
