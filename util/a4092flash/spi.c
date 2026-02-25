@@ -64,13 +64,8 @@ enum {
     SPI_CMD_SE_4K   = 0x20, // New
     SPI_CMD_BE_32K  = 0x52, // New
     SPI_CMD_BE_64K  = 0xD8,
+    SPI_CMD_RUID    = 0x4B,
 };
-
-#define SR1_WIP     0x01
-#define SR1_WEL     0x02
-#define SR1_BP_MASK 0x1C
-
-#define SR2_QE      0x02
 
 /* ===== low-level bytewise helpers ===== */
 static inline void spi_tx_hold(uint32_t base, uint8_t v) { mmio_write_hold(base, v); }
@@ -89,12 +84,12 @@ static void spi_write_enable(uint32_t base)
 {
     spi_tx_end(base, SPI_CMD_WREN);
 }
-static uint8_t spi_read_sr1(uint32_t base)
+uint8_t spi_read_sr1(uint32_t base)
 {
     spi_tx_hold(base, SPI_CMD_RDSR1);
     return spi_rx_end(base);
 }
-static uint8_t spi_read_sr2(uint32_t base)
+uint8_t spi_read_sr2(uint32_t base)
 {
     spi_tx_hold(base, SPI_CMD_RDSR2);
     return spi_rx_end(base);
@@ -168,6 +163,17 @@ void spi_read_id(uint32_t base, uint8_t *mfg, uint8_t *type, uint8_t *cap)
     if (cap)  *cap  = spi_rx_end(base);
 }
 
+void spi_read_unique_id(uint32_t base, uint8_t id[8])
+{
+    int i;
+    spi_tx_hold(base, SPI_CMD_RUID);
+    for (i = 0; i < 4; i++)
+        spi_tx_hold(base, 0x00);       /* 4 dummy bytes */
+    for (i = 0; i < 7; i++)
+        id[i] = spi_rx_hold(base);
+    id[7] = spi_rx_end(base);
+}
+
 static bool spi_block_erase(uint32_t base, uint32_t baddr, uint8_t erase_cmd)
 {
     spi_write_enable(base);
@@ -231,27 +237,31 @@ bool spi_write_buf_pagewise(uint32_t base, uint32_t addr, const uint8_t *in, siz
     return true;
 }
 
-bool spi_erase_range_blocks(uint32_t base, uint32_t addr, size_t len)
+bool spi_erase_range_blocks(uint32_t base, uint32_t addr, size_t len,
+                            void (*progress)(size_t done, size_t total))
 {
     if (len & (SPI_BLOCK_SIZE - 1))
         printf("WARNING: erase size 0x%lX is not a multiple of 64KB\n", (unsigned long)len);
 
     uint32_t start = (addr / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
     uint32_t end   = ((addr + (uint32_t)len - 1) / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
+    size_t total = (end - start) / SPI_BLOCK_SIZE + 1, k = 0;
 
-    for (uint32_t b = start; b <= end; b += SPI_BLOCK_SIZE) {
+    for (uint32_t b = start; b <= end; b += SPI_BLOCK_SIZE, ++k) {
+        if (progress) progress(k, total);
         if (!spi_block_erase(base, b, SPI_CMD_BE_64K)) return false;
     }
+    if (progress) progress(total, total);
 
     return true;
 }
 
 bool spi_erase_chip(uint32_t base, ULONG flashSize) {
-    return spi_erase_range_blocks(base, 0, flashSize);
+    return spi_erase_range_blocks(base, 0, flashSize, NULL);
 }
 
 bool spi_erase_bank(uint32_t base, ULONG bankSize) {
-    return spi_erase_range_blocks(base, 0, bankSize);
+    return spi_erase_range_blocks(base, 0, bankSize, NULL);
 }
 
 /* ===== Abstraction layer implementation ===== */
@@ -400,7 +410,7 @@ bool spi_flash_erase_sector(ULONG address, ULONG sectorSize)
  */
 bool spi_flash_erase_chip(void)
 {
-    return spi_erase_range_blocks(spi_base_address, 0, spi_flash_size);
+    return spi_erase_range_blocks(spi_base_address, 0, spi_flash_size, NULL);
 }
 
 /**
