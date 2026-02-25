@@ -737,6 +737,7 @@ static int cmd_patch(uint32_t base, const char *saddr, const char *hexlist)
     uint32_t addr; if (!parse_u32(saddr,&addr)) { fprintf(stderr,"bad addr\n"); return 2; }
     uint8_t *bytes=NULL; size_t n=0;
     if (!parse_hexbytes(hexlist, &bytes, &n) || n==0) { free(bytes); fprintf(stderr,"bad hex bytes\n"); return 2; }
+    if (n > MAX_TRANSFER_SIZE) { free(bytes); fprintf(stderr,"patch too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
     if (!spi_clear_block_protect(base)) { free(bytes); return 3; }
     printf("Patching %zu byte(s) at 0x%08lX (assumes erased)...\n", n, (unsigned long)addr);
     bool ok = spi_write_buf_pagewise(base, addr, bytes, n, NULL);
@@ -951,7 +952,6 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"patch")==0) {
         if (argi+1 >= argc) { usage(argv[0]); return 1; }
-        if (strlen(argv[argi+1]) > 4096) { fprintf(stderr,"hex input too long\n"); return 2; }
         return cmd_patch(base, argv[argi], argv[argi+1]);
     }
     else if (strcmp(cmd,"status")==0) {
