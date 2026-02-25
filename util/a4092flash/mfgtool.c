@@ -28,7 +28,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h>
-#include <time.h>
 
 #include "mfg_flash.h"
 
@@ -195,29 +194,48 @@ static bool mfg_verify_checksum(const struct mfg_data *mfg)
 
 static bool parse_date(const char *s, uint32_t *ts)
 {
+    static const int mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     int y, m, d;
     if (sscanf(s, "%d-%d-%d", &y, &m, &d) != 3) return false;
-    struct tm t;
-    memset(&t, 0, sizeof(t));
-    t.tm_year = y - 1900;
-    t.tm_mon  = m - 1;
-    t.tm_mday = d;
-    t.tm_isdst = 0;
-    time_t tt = mktime(&t);
-    if (tt == (time_t)-1) return false;
-    *ts = (uint32_t)tt;
+    if (y < 1970 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+
+    int leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    if (d > mdays[m - 1] + (m == 2 && leap)) return false;
+
+    uint32_t days = 0;
+    for (int i = 1970; i < y; i++)
+        days += 365 + (i % 4 == 0 && (i % 100 != 0 || i % 400 == 0));
+    for (int i = 0; i < m - 1; i++)
+        days += mdays[i] + (i == 1 && leap);
+    days += d - 1;
+
+    *ts = days * 86400UL;
     return true;
 }
 
 static void format_date(uint32_t ts, char *buf, size_t len)
 {
+    static const int mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     if (ts == 0) { buf[0] = '\0'; return; }
-    time_t tt = (time_t)ts;
-    struct tm *t = gmtime(&tt);
-    if (t)
-        snprintf(buf, len, "%04d-%02d-%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
-    else
-        snprintf(buf, len, "?");
+
+    uint32_t days = ts / 86400;
+    int y = 1970;
+    for (;;) {
+        int leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+        if (days < (uint32_t)(365 + leap))
+            break;
+        days -= 365 + leap;
+        y++;
+    }
+    int leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    int m;
+    for (m = 0; m < 12; m++) {
+        int md = mdays[m] + (m == 1 && leap);
+        if (days < (uint32_t)md)
+            break;
+        days -= md;
+    }
+    snprintf(buf, len, "%04d-%02d-%02d", y, m + 1, (int)days + 1);
 }
 
 static bool parse_version(const char *s, uint16_t *ver)
