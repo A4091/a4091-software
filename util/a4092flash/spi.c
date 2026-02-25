@@ -307,7 +307,10 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     if (sectorSize) *sectorSize = SPI_BLOCK_SIZE;  // 64KB blocks
 
     // Clear block protection
-    spi_clear_block_protect(spi_base_address);
+    if (!spi_clear_block_protect(spi_base_address)) {
+        spi_base_address = 0;
+        return false;
+    }
 
     // Print flash info
     const char *vendor = "Unknown";
