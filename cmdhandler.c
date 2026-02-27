@@ -324,6 +324,7 @@ validate_etd:
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
             blkno = iotd->iotd_Req.io_Offset >> blkshift;
+            iotd->iotd_Req.io_Actual = 0;
 CMD_READ_continue:
             rc = sd_readwrite(iotd->iotd_Req.io_Unit, blkno, B_READ,
                               iotd->iotd_Req.io_Data,
@@ -353,6 +354,7 @@ io_done:
                 goto io_done;
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
             blkno = iotd->iotd_Req.io_Offset >> blkshift;
+            iotd->iotd_Req.io_Actual = 0;
 CMD_WRITE_continue:
             rc = sd_readwrite(iotd->iotd_Req.io_Unit, blkno, B_WRITE,
                               iotd->iotd_Req.io_Data,
@@ -419,6 +421,7 @@ CMD_WRITE_continue:
 
             // 3. Combine the two 32-bit halves into the final 64-bit blkno
             blkno = ((uint64_t)blkno_high << 32) | blkno_low;
+            iotd->iotd_Req.io_Actual = 0;
             goto CMD_READ_continue;
 
         case NSCMD_TD_FORMAT64:
@@ -440,7 +443,7 @@ CMD_WRITE_continue:
             blkno_low = iotd->iotd_Req.io_Actual << (32 - blkshift);
             blkno_low |= (iotd->iotd_Req.io_Offset >> blkshift);
             blkno = ((uint64_t)blkno_high << 32) | blkno_low;
-
+            iotd->iotd_Req.io_Actual = 0;
             goto CMD_WRITE_continue;
 
 #ifdef ENABLE_SEEK
