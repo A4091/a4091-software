@@ -1198,8 +1198,8 @@ static void event_loop(void)
             class = msg->Class;
             icode = msg->Code;
             gad = msg->IAddress;
-            UWORD qual = msg->Qualifier;
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+            UWORD qual = msg->Qualifier;
             WORD mx = msg->MouseX;
             WORD my = msg->MouseY;
 #endif
