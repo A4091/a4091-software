@@ -762,7 +762,7 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
             printf("  Target %d: disconnect/reconnect enabled\n", target);
 #if defined(ARCH_710)
             siop_allow_disc[target] = 3;
-#elif defined(ARCH_720)
+#elif defined(ARCH_720) || defined(ARCH_770)
             siopng_allow_disc[target] = 3;
 #endif
         } else {

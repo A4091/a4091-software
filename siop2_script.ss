@@ -27,7 +27,7 @@
 
 ; NCR 53c770 script
 ;
-ARCH 720
+ARCH 770
 ;
 ABSOLUTE ds_Device	= 0
 ABSOLUTE ds_MsgOut 	= ds_Device + 4
@@ -141,7 +141,7 @@ reselect:
 wait_reselect:
 	WAIT RESELECT REL(select_adr)
 	MOVE SSID & 0x8f to SFBR	; Save reselect ID
-	MOVE SFBR to SCRATCHA0
+	MOVE SFBR to SCRATCHJ0
 
 	INT err9, WHEN NOT MSG_IN	; didn't get IDENTIFY
 	MOVE FROM ds_Msg, WHEN MSG_IN

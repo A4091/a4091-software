@@ -92,6 +92,9 @@ __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.44 2019/11/10 21:16:22 chs Exp $");
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <machine/cpu.h>
+#if !defined(ARCH_720) && !defined(ARCH_770)
+#define ARCH_720
+#endif
 #ifdef __m68k__
 #include <m68k/include/cacheops.h>
 #else
@@ -101,12 +104,9 @@ __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.44 2019/11/10 21:16:22 chs Exp $");
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 
-#define ARCH_720
-
 #include <amiga/dev/siopreg.h>
 #include <amiga/dev/siopvar.h>
 #else
-#define ARCH_720
 #include "scsi_all.h"
 #include "scsipiconf.h"
 #include <string.h>
@@ -1495,10 +1495,14 @@ siopng_dump(sc);
 			rp->siop_dcntl |= SIOP_DCNTL_STD;
 #endif
 		return (0);
-	}
-	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff03) {
-		int reselid = rp->siop_scratcha & 0x7f;
-		int reselun = rp->siop_sfbr & 0x07;
+		}
+		if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff03) {
+#if defined(ARCH_770)
+			int reselid = rp->siop_scratchj & 0x7f;
+#else
+			int reselid = rp->siop_scratcha & 0x7f;
+#endif
+			int reselun = rp->siop_sfbr & 0x07;
 
 		sc->sc_sstat1 = rp->siop_sbcl;	/* XXXX save current SBCL */
 #ifdef DEBUG

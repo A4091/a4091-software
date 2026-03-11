@@ -1952,8 +1952,14 @@ main(int argc, char *argv[])
         printf("  as_device_private=%p\n", asave->as_device_private);
         struct siop_softc *sc = asave->as_device_private;
 //      printf("    sc_siop_si=%p\n", sc->sc_siop_si);
-        printf("    sc_istat=%u sc_dstate=%u sc_sstat0=%u sc_sstat1=%u\n",
+#if defined(ARCH_710)
+        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u sc_sstat1=%u\n",
                sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);
+#else
+        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u sc_sstat1=%u sc_sist=%u\n",
+               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1,
+               sc->sc_sist);
+#endif
         printf("    sc_intcode=%04lx\n", sc->sc_intcode);
         printf("    sc_adapter=%p\n", &sc->sc_adapter);
         printf("    sc_channel=%p\n", &sc->sc_channel);
@@ -1988,19 +1994,36 @@ main(int argc, char *argv[])
             show_sc_tinfo(16, &sc->sc_tinfo[pos]);
         }
         printf("    sc_clock_freq=%d MHz\n", sc->sc_clock_freq);
-        printf("    sc_dcntl=%02x sc_ctest7=%02x sc_tcp[]=%04x %04x "
-               "%04x %04x\n",
-               sc->sc_dcntl, sc->sc_ctest7, sc->sc_tcp[0],
-               sc->sc_tcp[1], sc->sc_tcp[2], sc->sc_tcp[3]);
-        printf("    sc_flags=%02x sc_dien=%02x sc_minsync=%02x "
-               "sc_sien=%02x\n",
+#if defined(ARCH_710)
+        printf("    sc_dcntl=%02x sc_ctest7=%02x",
+               sc->sc_dcntl, sc->sc_ctest7);
+#else
+        printf("    sc_dcntl=%02x sc_ctest0=%02x",
+               sc->sc_dcntl, sc->sc_ctest0);
+#endif
+        printf(" sc_tcp[]=");
+        for (pos = 0; pos < ARRAY_SIZE(sc->sc_tcp); pos++)
+            printf(" %04x", sc->sc_tcp[pos]);
+        printf("\n");
+#if defined(ARCH_710)
+        printf("    sc_flags=%02x sc_dien=%02x sc_minsync=%02x sc_sien=%02x\n",
                sc->sc_flags, sc->sc_dien, sc->sc_minsync, sc->sc_sien);
+#else
+        printf("    sc_flags=%02x sc_dien=%02x sc_minsync=%02x sc_sien=%04x\n",
+               sc->sc_flags, sc->sc_dien, sc->sc_minsync, sc->sc_sien);
+#endif
         printf("    sc_nosync=%x sc_nodisconnect=%x\n",
                sc->sc_nosync, sc->sc_nodisconnect);
         for (pos = 0; pos < ARRAY_SIZE(sc->sc_sync); pos++) {
+#if defined(ARCH_710)
             printf("    sc_sync[%d] state=%u sxfer=%u sbcl=%u\n",
                    pos, sc->sc_sync[pos].state, sc->sc_sync[pos].sxfer,
                    sc->sc_sync[pos].sbcl);
+#else
+            printf("    sc_sync[%d] state=%u sxfer=%u scntl3=%u\n",
+                   pos, sc->sc_sync[pos].state, sc->sc_sync[pos].sxfer,
+                   sc->sc_sync[pos].scntl3);
+#endif
         }
 
         if (is_user_abort())

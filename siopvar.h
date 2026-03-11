@@ -130,13 +130,9 @@ struct	siop_softc {
 
 	u_char	sc_istat;
 	u_char	sc_dstat;
-#ifndef ARCH_720
 	u_char	sc_sstat0;
-#else
-	u_char	sc_sstat0;
-#endif
 	u_char	sc_sstat1;
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 	u_short	sc_sist;
 #endif
 	u_long	sc_intcode;
@@ -154,24 +150,30 @@ struct	siop_softc {
 	struct siop_acb *sc_nexus;	/* current command */
 #define SIOP_NACB 16
 	struct siop_acb *sc_acb;	/* the real command blocks */
-#ifndef ARCH_720
-	struct siop_tinfo sc_tinfo[8];
+#if defined(ARCH_710)
+#define MAX_TARGETS 8
 #else
-	struct siop_tinfo sc_tinfo[16];
+#define MAX_TARGETS 16
 #endif
+	struct siop_tinfo sc_tinfo[MAX_TARGETS];
 
 	u_short	sc_clock_freq;
 	u_char	sc_dcntl;
-#ifndef ARCH_720
+#if defined(ARCH_710)
 	u_char	sc_ctest7;
 #else
 	u_char	sc_ctest0;
 #endif
-	u_short	sc_tcp[4];
+#if defined(ARCH_770)
+#define MAX_SCF_ENTRIES 6
+#else
+#define MAX_SCF_ENTRIES 4
+#endif
+	u_short	sc_tcp[MAX_SCF_ENTRIES];
 	u_char	sc_flags;
 	u_char	sc_dien;
 	u_char	sc_minsync;
-#ifndef ARCH_720
+#if defined(ARCH_710)
 	u_char	sc_sien;
 #else
 	u_short	sc_sien;
@@ -180,17 +182,16 @@ struct	siop_softc {
 	u_char  sc_nosync;              /* no synchronous SCSI (bit / target) */
 	u_char  sc_nodisconnect;        /* no disconnect SCSI (bit / target) */
 #endif
-	/* one for each target */
+	/* sync config, one for each target */
 	struct syncpar {
 		u_char state;
 		u_char sxfer;
-#ifndef ARCH_720
+#if defined(ARCH_710)
 		u_char sbcl;
-	} sc_sync[8];
 #else
 		u_char scntl3;
-	} sc_sync[16];
 #endif
+	} sc_sync[MAX_TARGETS];
 };
 
 /* sc_flags */
@@ -229,7 +230,7 @@ struct	siop_softc {
 #define	STS_INTERMED	0x10	/* Intermediate status sent */
 #define	STS_EXT		0x80	/* Extended status valid */
 
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 void siopng_minphys(struct buf *bp);
 void siopng_scsipi_request(struct scsipi_channel *,
 			scsipi_adapter_req_t, void *);

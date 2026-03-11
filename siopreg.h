@@ -42,7 +42,7 @@
 
 typedef struct {
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 
 /*00*/	volatile unsigned char	siop_sien;	/* rw: SCSI Interrupt Enable */
 /*01*/	volatile unsigned char	siop_sdid;	/* rw: SCSI Destination ID */
@@ -103,14 +103,14 @@ typedef struct {
 
 /*3c*/	volatile unsigned long	siop_adder;
 
-#else
+#elif defined(ARCH_720) || defined(ARCH_770)
 
 /*00*/	volatile unsigned char	siop_scntl3;	/* rw: SCSI control reg 3 */
 /*01*/	volatile unsigned char	siop_scntl2;	/* rw: SCSI control reg 2 */
 /*02*/	volatile unsigned char	siop_scntl1;	/* rw: SCSI control reg 1 */
 /*03*/	volatile unsigned char	siop_scntl0;	/* rw: SCSI control reg 0 */
 
-/*04*/	volatile unsigned char	siop_gpreg;	/* rw: SCSI  */
+/*04*/	volatile unsigned char	siop_gpreg;	/* rw: SCSI general purpose I/O */
 /*05*/	volatile unsigned char	siop_sdid;	/* rw: SCSI Destination ID */
 /*06*/	volatile unsigned char	siop_sxfer;	/* rw: SCSI Transfer reg */
 /*07*/	volatile unsigned char	siop_scid;	/* rw: SCSI Chip ID reg */
@@ -218,6 +218,7 @@ typedef struct {
 /*5a*/	volatile unsigned short	siop_sbdl;	/* ro: SCSI Bus Data Lines */
 
 /*5c*/	volatile unsigned long	siop_scratchb;	/* rw: Scratch Register B */
+#if defined(ARCH_770)
 /*60*/	volatile unsigned long  siop_scratchc;  /* rw: Scratch Register C */
 /*64*/	volatile unsigned long  siop_scratchd;  /* rw: Scratch Register D */
 /*68*/	volatile unsigned long  siop_scratche;  /* rw: Scratch Register E */
@@ -226,6 +227,7 @@ typedef struct {
 /*74*/	volatile unsigned long  siop_scratchh;  /* rw: Scratch Register H */
 /*78*/	volatile unsigned long  siop_scratchi;  /* rw: Scratch Register I */
 /*7c*/	volatile unsigned long  siop_scratchj;  /* rw: Scratch Register J */
+#endif
 
 #endif
 
@@ -252,7 +254,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 #define	SIOP_SCNTL1_EXC		0x80	/* Extra Clock Cycle of data setup */
 #define	SIOP_SCNTL1_ADB		0x40	/* Assert Data Bus */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SCNTL1_ESR		0x20	/* Enable Selection/Reselection */
 #else
 #define	SIOP_SCNTL1_DHP		0x20	/* Disable Halt on Parity or ATN */
@@ -260,7 +262,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #define	SIOP_SCNTL1_CON		0x10	/* Connected */
 #define	SIOP_SCNTL1_RST		0x08	/* Assert RST */
 #define	SIOP_SCNTL1_AESP	0x04	/* Assert even SCSI parity */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SCNTL1_RES0	0x02	/* Reserved */
 #define	SIOP_SCNTL1_RES1	0x01	/* Reserved */
 #else
@@ -270,7 +272,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Scsi control register 3 (scntl3) */
 
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 #define	SIOP_SCNTL3_ULTRA	0x80	/* Ultra Enable */
 #define	SIOP_SCNTL3_SCF		0x70	/* Synch Clock Conversion Factor */
 #define	SIOP_SCNTL3_EWS		0x08	/* Enable Wide SCSI */
@@ -279,7 +281,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Scsi interrupt enable register (sien) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SIEN_M_A		0x80	/* Phase Mismatch or ATN active */
 #define	SIOP_SIEN_FCMP		0x40	/* Function Complete */
 #define	SIOP_SIEN_STO		0x20	/* (Re)Selection timeout */
@@ -293,29 +295,37 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 /* Scsi chip ID (scid) */
 
 #define	SIOP_SCID_VALUE(i)	(1<<i)
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 #define	SIOP_SCID_RRE		0x40	/* Enable Response to Reselection */
 #define	SIOP_SCID_SRE		0x20	/* Enable Response to Selection */
 #endif
 
 /* Scsi transfer register (sxfer) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SXFER_DHP		0x80	/* Disable Halt on Parity error/ ATN asserted */
-#define	SIOP_SXFER_TP		0x70	/* Synch Transfer Period */
+#define	SIOP_SXFER_TP		0x70	/* Synch Transfer Period Mask */
 					/* see specs for formulas:
 						Period = TCP * (4 + XFERP )
 						TCP = 1 + CLK + 1..2;
 					 */
-#define	SIOP_SXFER_MO		0x0f	/* Synch Max Offset */
+#define	SIOP_SXFER_MO		0x0f	/* Synch Offset Mask */
 #	define	SIOP_MAX_OFFSET	8
-#else
-#define	SIOP_SXFER_TP		0xe0	/* Synch Transfer Period */
+#elif defined(ARCH_720)
+#define	SIOP_SXFER_TP		0xe0	/* Synch Transfer Period Mask */
 					/* see specs for formulas:
-						Period = TCP * (4 + XFERP )
+						Period = TCP * XFERP
 						TCP = 1 + CLK + 1..2;
 					 */
-#define	SIOP_SXFER_MO		0x1f	/* Synch Max Offset */
+#define	SIOP_SXFER_MO		0x0f	/* Synch Offset Mask */
+#	define	SIOP_MAX_OFFSET	8
+#elif defined(ARCH_770)
+#define	SIOP_SXFER_TP		0xe0	/* Synch Transfer Period Mask */
+					/* see specs for formulas:
+						Period = TCP * XFERP
+						TCP = 1 + CLK + 1..2;
+					 */
+#define	SIOP_SXFER_MO		0x1f	/* Synch Offset Mask */
 #	define	SIOP_MAX_OFFSET	16
 #endif
 
@@ -345,7 +355,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 /* DMA status register (dstat) */
 
 #define	SIOP_DSTAT_DFE		0x80	/* DMA FIFO empty */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_DSTAT_RES		0x40
 #else
 #define	SIOP_DSTAT_HPE		0x40	/* Host Parity Error */
@@ -359,7 +369,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Scsi status register 0 (sstat0) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SSTAT0_M_A		0x80	/* Phase Mismatch or ATN active */
 #define	SIOP_SSTAT0_FCMP	0x40	/* Function Complete */
 #define	SIOP_SSTAT0_STO		0x20	/* (Re)Selection timeout */
@@ -381,7 +391,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Scsi status register 1 (sstat1) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SSTAT1_ILF		0x80	/* Input latch (sidl) full */
 #define	SIOP_SSTAT1_ORF		0x40	/* output reg (sodr) full */
 #define	SIOP_SSTAT1_OLF		0x20	/* output latch (sodl) full */
@@ -400,7 +410,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Scsi status register 2 (sstat2) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_SSTAT2_FF		0xf0	/* SCSI FIFO flags (bytecount) */
 #	define SIOP_SCSI_FIFO_DEEP	8
 #define	SIOP_SSTAT2_SDP		0x08	/* Latched (on REQ) SCSI SDP */
@@ -420,7 +430,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Chip test register 0 (ctest0) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST0_RES0	0x80
 #define	SIOP_CTEST0_BTD		0x40	/* Byte-to-byte Timer Disable */
 #define	SIOP_CTEST0_GRP		0x20	/* Generate Receive Parity for Passthrough */
@@ -430,7 +440,13 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #define	SIOP_CTEST0_RES1	0x02
 #define	SIOP_CTEST0_DDIR	0x01	/* Xfer direction (1-> from SCSI bus) */
 #else
-#define SIOP_CTEST0_CDIS	0x80	/* Cache burst disable */
+#define	SIOP_CTEST0_CDIS	0x80	/* Cache burst disable */
+#define	SIOP_CTEST0_SC		0x60	/* Snoop Control */
+#define	SIOP_CTEST0_GRP		0x10	/* Generate Receive Parity for Passthrough */
+#define	SIOP_CTEST0_DFP		0x08	/* DMA FIFO Parity */
+#define	SIOP_CTEST0_EHP		0x04	/* Even Host Parity */
+#define	SIOP_CTEST0_TT1		0x02	/* Transfer Type Bit */
+#define	SIOP_CTEST0_C386E	0x01	/* Cache 386 Enable */
 #endif
 
 /* Chip test register 1 (ctest1) */
@@ -440,13 +456,13 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Chip test register 2 (ctest2) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST2_RES		0x80
 #else
-#define	SIOP_CTETS2_DDIR	0x80	/* Data Transfer Direction */
+#define	SIOP_CTEST2_DDIR	0x80	/* Data Transfer Direction */
 #endif
 #define	SIOP_CTEST2_SIGP	0x40	/* Signal process */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST2_SOFF	0x20	/* Synch Offset compare (1-> zero Init, max Tgt */
 #define	SIOP_CTEST2_SFP		0x10	/* SCSI FIFO Parity */
 #else
@@ -460,7 +476,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* Chip test register 3 (ctest3) read-only, top of SCSI FIFO */
 
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 #define	SIOP_CTEST3_V		0xf0	/* Chip revision level */
 #define	SIOP_CTEST3_FLF		0x08	/* Flush DMA FIFO */
 #define	SIOP_CTEST3_CLF		0x04	/* Clear DMA FIFO */
@@ -473,7 +489,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #define	SIOP_CTEST4_MUX		0x80	/* Host bus multiplex mode */
 #define	SIOP_CTEST4_ZMOD	0x40	/* High-impedance outputs */
 #define	SIOP_CTEST4_SZM		0x20	/* ditto, SCSI "outputs" */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST4_SLBE	0x10	/* SCSI loopback enable */
 #define	SIOP_CTEST4_SFWR	0x08	/* SCSI FIFO write enable (from sodl) */
 #else
@@ -487,27 +503,28 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 #define	SIOP_CTEST5_ADCK	0x80	/* Clock Address Incrementor */
 #define	SIOP_CTEST5_BBCK	0x40	/* Clock Byte counter */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST5_ROFF	0x20	/* Reset SCSI offset */
 #else
 #define	SIOP_CTEST5_RES		0x20
 #endif
 #define	SIOP_CTEST5_MASR	0x10	/* Master set/reset pulses (of bits 3-0) */
 #define	SIOP_CTEST5_DDIR	0x08	/* (re)set internal DMA direction */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST5_EOP		0x04	/* (re)set internal EOP */
 #define	SIOP_CTEST5_DREQ	0x02	/* (re)set internal REQ */
 #define	SIOP_CTEST5_DACK	0x01	/* (re)set internal ACK */
-#else
+#endif
+#if defined(ARCH_770)
 #define	SIOP_CTEST5_RAM		0x06	/* SCRIPTS RAM 1-0 */
-#define	SIOP_CTEST5 RAMEN	0x01	/* RAM Base Address Enable */
+#define	SIOP_CTEST5_RAMEN	0x01	/* RAM Base Address Enable */
 #endif
 
 /* Chip test register 6 (ctest6)  DMA FIFO access */
 
 /* Chip test register 7 (ctest7) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_CTEST7_CDIS	0x80	/* Cache burst disable */
 #define	SIOP_CTEST7_SC1		0x40	/* Snoop control 1 */
 #define	SIOP_CTEST7_SC0		0x20	/* Snoop control 0 */
@@ -528,13 +545,13 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #define	SIOP_ISTAT_ABRT		0x80	/* Abort operation */
 #define	SIOP_ISTAT_RST		0x40	/* Software reset */
 #define	SIOP_ISTAT_SIGP		0x20	/* Signal process */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_ISTAT_RES		0x10
 #else
 #define	SIOP_ISTAT_SEM		0x10	/* Semaphore */
 #endif
 #define	SIOP_ISTAT_CON		0x08	/* Connected */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_ISTAT_RES1		0x04
 #else
 #define	SIOP_ISTAT_INTF		0x04	/* Interrupt on the Fly */
@@ -562,7 +579,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 /* DMA interrupt enable register (dien) */
 
 #define	SIOP_DIEN_RES		0xc0
-#ifdef ARCH_720
+#if defined(ARCH_720) || defined(ARCH_770)
 #define	SIOP_DIEN_HPED		0x40	/* Host Parity */
 #endif
 #define	SIOP_DIEN_BF		0x20	/* On Bus Fault */
@@ -574,7 +591,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 
 /* DMA control register (dcntl) */
 
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_DCNTL_CF_MASK	0xc0	/* Clock frequency dividers:
 						0 --> 37.51..50.00 MHz, div=2
 						1 --> 25.01..37.50 MHz, div=1.5
@@ -587,7 +604,7 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 #endif
 #define	SIOP_DCNTL_EA		0x20	/* Enable ack */
 #define	SIOP_DCNTL_SSM		0x10	/* Single step mode */
-#ifndef ARCH_720
+#if defined(ARCH_710)
 #define	SIOP_DCNTL_LLM		0x08	/* Enable SCSI Low-level mode */
 #else
 #define	SIOP_DCNTL_BW16		0x8	/* Bus Width 16 */

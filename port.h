@@ -23,10 +23,6 @@
 #include <exec/memory.h>
 #include <clib/exec_protos.h>
 
-#ifdef NCR53C770
-#define ARCH_720
-#endif
-
 typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 
 #define BIT(x)        (1 << (x))
