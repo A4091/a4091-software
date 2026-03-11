@@ -449,7 +449,7 @@ a4091_validate(uint32_t dev_base)
 #elif defined(DRIVER_A4000T)
     siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
 #elif defined(DRIVER_A4000T770)
-    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x200);
+    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
 #endif
 
     scratch = rp->siop_scratch;
@@ -542,7 +542,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
     sc->sc_dev = self;
     sc->sc_siopp = (siop_regmap_p)((char *)dev_base + HW_OFFSET_REGISTERS);
-    sc->sc_clock_freq = HW_CLOCK_FREQ;     /* SCSI Host Controller Clock */
+    sc->sc_clock_freq = HW_SCLK_CLOCK_FREQ; /* Physical SCLK input */
 #ifdef NCR53C710
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
 #elif NCR53C770
