@@ -114,6 +114,9 @@ irq_handler_core(a4091_save_t *save)
     reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
     sc->sc_sstat0 = reg >> 8;
     sc->sc_dstat  = reg;
+#if defined(ARCH_720) || defined(ARCH_770)
+    sc->sc_sist = rp->siop_sist;
+#endif
 
     if (save->as_svc_task != NULL)
         Signal(save->as_svc_task, BIT(save->as_irq_signal));

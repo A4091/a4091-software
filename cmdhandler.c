@@ -102,6 +102,9 @@ irq_poll(uint got_int, struct siop_softc *sc)
             reg = *ADDR32((uintptr_t) &rp->siop_sstat2);
             sc->sc_sstat0 = reg >> 8;
             sc->sc_dstat  = reg;
+#if defined(ARCH_720) || defined(ARCH_770)
+            sc->sc_sist = rp->siop_sist;
+#endif
 #ifdef NCR53C710
             siopintr(sc);
 #elif NCR53C770
