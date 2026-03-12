@@ -175,6 +175,80 @@ int siopng_cmd_wait = SCSI_CMD_WAIT;
 int siopng_data_wait = SCSI_DATA_WAIT;
 int siopng_init_wait = SCSI_INIT_WAIT;
 
+#define SIOPNG_SXFER_TP_SHIFT 5
+
+#define SIOPNG_SCNTL3_PERSIST (SIOP_SCNTL3_ULTRA | SIOP_SCNTL3_EWS)
+
+static u_int
+siopng_sync_clock_freq(const struct siop_softc *sc)
+{
+#if defined(ARCH_770)
+	if (sc->sc_clock_freq <= 50)
+		return sc->sc_clock_freq * 2;
+#endif
+	return sc->sc_clock_freq;
+}
+
+static int
+siopng_use_clock_doubler(const struct siop_softc *sc)
+{
+#if defined(ARCH_770)
+	return sc->sc_clock_freq <= 50;
+#else
+	return 1;
+#endif
+}
+
+static int
+siopng_use_extra_clock_cycle(const struct siop_softc *sc)
+{
+#if defined(ARCH_770)
+	return !siopng_use_clock_doubler(sc) &&
+	    siopng_sync_clock_freq(sc) >= 100;
+#else
+	return 0;
+#endif
+}
+
+static u_char
+siopng_ccf(const struct siop_softc *sc)
+{
+	u_int sclk = siopng_sync_clock_freq(sc);
+
+	if (sclk <= 25)
+		return 1;
+	if (sclk <= 37)
+		return 2;
+	if (sclk <= 50)
+		return 3;
+#if defined(ARCH_770)
+	if (sclk <= 75)
+		return 4;
+	return 5;
+#else
+	return 0;
+#endif
+}
+
+static u_char
+siopng_async_scntl3(const struct siop_softc *sc)
+{
+	return siopng_ccf(sc);
+}
+
+static u_char
+siopng_sync_scntl3(const struct siop_softc *sc)
+{
+	return siopng_async_scntl3(sc) | 0x10;
+}
+
+static int
+siopng_sync_period(const struct siop_softc *sc, int scf, int tp)
+{
+	return sc->sc_tcp[scf] *
+	    (tp + 4 + (siopng_use_extra_clock_cycle(sc) ? 1 : 0));
+}
+
 /*#define DEBUG_SYNC*/
 
 #ifdef DEBUG
@@ -575,6 +649,7 @@ siopnginitialize(struct siop_softc *sc)
 {
 	int i;
 	u_int inhibit_sync;
+	u_int sync_clock_freq;
 #ifndef PORT_AMIGA
 	extern u_long scsi_nosync;
 	extern int shift_nosync;
@@ -606,26 +681,20 @@ siopnginitialize(struct siop_softc *sc)
 		M_DEVBUF, M_WAITOK);
 #endif
 
-	sc->sc_tcp[1] = 1000 / sc->sc_clock_freq;
-	sc->sc_tcp[2] = 1500 / sc->sc_clock_freq;
-	sc->sc_tcp[3] = 2000 / sc->sc_clock_freq;
+	sync_clock_freq = siopng_sync_clock_freq(sc);
+	sc->sc_tcp[0] = 3000 / sync_clock_freq;
+	sc->sc_tcp[1] = 1000 / sync_clock_freq;
+	sc->sc_tcp[2] = 1500 / sync_clock_freq;
+	sc->sc_tcp[3] = 2000 / sync_clock_freq;
+#if defined(ARCH_770)
+	sc->sc_tcp[4] = 3000 / sync_clock_freq;
+	sc->sc_tcp[5] = 4000 / sync_clock_freq;
+#endif
 	sc->sc_minsync = sc->sc_tcp[1];		/* in 4ns units */
 	if (sc->sc_minsync < 25)
 		sc->sc_minsync = 25;
-	sc->sc_minsync >>= 1;			/* Using clock doubler, allow Ultra */
-	if (sc->sc_clock_freq <= 25) {
-		sc->sc_dcntl |= 0x80;		/* SCLK/1 */
-		sc->sc_tcp[0] = sc->sc_tcp[1];
-	} else if (sc->sc_clock_freq <= 37) {
-		sc->sc_dcntl |= 0x40;		/* SCLK/1.5 */
-		sc->sc_tcp[0] = sc->sc_tcp[2];
-	} else if (sc->sc_clock_freq <= 50) {
-		sc->sc_dcntl |= 0x00;		/* SCLK/2 */
-		sc->sc_tcp[0] = sc->sc_tcp[3];
-	} else {
-		sc->sc_dcntl |= 0xc0;		/* SCLK/3 */
-		sc->sc_tcp[0] = 3000 / sc->sc_clock_freq;
-	}
+	if (siopng_use_clock_doubler(sc) || siopng_use_extra_clock_cycle(sc))
+		sc->sc_minsync >>= 1;
 
 #ifndef PORT_AMIGA
 	if (scsi_nosync) {
@@ -719,12 +788,28 @@ siopngreset(struct siop_softc *sc)
 	/*
 	 * Set up various chip parameters
 	 */
+#if defined(ARCH_770)
+	rp->siop_stest1 &= ~(SIOP_STEST1_DBLEN | SIOP_STEST1_DBLSEL);
+	if (siopng_use_clock_doubler(sc)) {
+		rp->siop_stest1 |= SIOP_STEST1_DBLEN;
+		delay(20);
+		rp->siop_stest3 |= SIOP_STEST3_HSC;
+		rp->siop_scntl3 = siopng_sync_scntl3(sc);
+		rp->siop_stest1 |= SIOP_STEST1_DBLSEL;
+		rp->siop_stest3 &= ~SIOP_STEST3_HSC;
+	} else {
+		rp->siop_scntl3 = siopng_sync_scntl3(sc);
+	}
+	rp->siop_scntl1 = siopng_use_extra_clock_cycle(sc) ?
+	    SIOP_SCNTL1_EXC : 0;
+#else
 	rp->siop_stest1 |= SIOP_STEST1_DBLEN;	/* SCLK doubler enable */
 	delay(20);
 	rp->siop_stest3 |= SIOP_STEST3_HSC;	/* Halt SCSI clock */
 	rp->siop_scntl3 = 0x15;			/* SCF/CCF*/
 	rp->siop_stest1 |= SIOP_STEST1_DBLSEL;	/* SCLK doubler select */
 	rp->siop_stest3 &= ~SIOP_STEST3_HSC;	/* Clear Halt SCSI clock */
+#endif
 	rp->siop_stest3 |= SIOP_STEST3_TE;	/* TolerANT enable */
 	rp->siop_scntl0 = SIOP_ARB_FULL | /*SIOP_SCNTL0_EPC |*/ SIOP_SCNTL0_EPG;
 	rp->siop_dcntl = sc->sc_dcntl;
@@ -739,6 +824,8 @@ siopngreset(struct siop_softc *sc)
 
 	/* will need to re-negotiate sync xfers */
 	memset(&sc->sc_sync, 0, sizeof (sc->sc_sync));
+	for (i = 0; i < MAX_TARGETS; ++i)
+		sc->sc_sync[i].scntl3 = siopng_async_scntl3(sc);
 
 	i = rp->siop_istat;
 	if (i & SIOP_ISTAT_SIP)
@@ -887,8 +974,9 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 #endif
 		}
 		else {
-			sc->sc_sync[target].scntl3 = 0x15 |	/* XXX */
-			    (sc->sc_sync[target].scntl3 & 0x88);	/* XXX */
+			sc->sc_sync[target].scntl3 = siopng_sync_scntl3(sc) |
+			    (sc->sc_sync[target].scntl3 &
+			     SIOPNG_SCNTL3_PERSIST);
 			acb->msg[2] = -1;
 			acb->msgout[1] = MSG_EXT_MESSAGE;
 			acb->msgout[2] = 2;
@@ -906,8 +994,9 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	if (sc->sc_sync[target].state == NEG_SYNC) {
 		if (siopng_inhibit_sync[target]) {
 			sc->sc_sync[target].state = NEG_DONE;
-			sc->sc_sync[target].scntl3 = 5 |		/* XXX */
-			    (sc->sc_sync[target].scntl3 & 0x88);	/* XXX */
+			sc->sc_sync[target].scntl3 = siopng_async_scntl3(sc) |
+			    (sc->sc_sync[target].scntl3 &
+			     SIOPNG_SCNTL3_PERSIST);
 			sc->sc_sync[target].sxfer = 0;
 #ifdef DEBUG
 			if (siopngsync_debug)
@@ -915,8 +1004,9 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 #endif
 		}
 		else {
-			sc->sc_sync[target].scntl3 = 0x15 |	/* XXX */
-			    (sc->sc_sync[target].scntl3 & 0x88);	/* XXX */
+			sc->sc_sync[target].scntl3 = siopng_sync_scntl3(sc) |
+			    (sc->sc_sync[target].scntl3 &
+			     SIOPNG_SCNTL3_PERSIST);
 			acb->msg[2] = -1;
 			acb->msgout[1] = MSG_EXT_MESSAGE;
 			acb->msgout[2] = 3;
@@ -1186,8 +1276,9 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 				    acb->msg[3], acb->msg[4], acb->msg[5]);
 #endif
 			sc->sc_sync[target].sxfer = 0;
-			sc->sc_sync[target].scntl3 = 5 |		/* XXX */
-			    (sc->sc_sync[target].scntl3 & 0x88);	/* XXX */
+			sc->sc_sync[target].scntl3 = siopng_async_scntl3(sc) |
+			    (sc->sc_sync[target].scntl3 &
+			     SIOPNG_SCNTL3_PERSIST);
 			if (acb->msg[2] == 3 &&
 			    acb->msg[3] == MSG_SYNC_REQ &&
 			    acb->msg[5] != 0) {
@@ -1786,61 +1877,46 @@ siopngintr(register struct siop_softc *sc)
 }
 
 /*
- * This is based on the Progressive Peripherals 33 MHz Zeus driver and will
- * not be correct for other 53c710 boards.
- *
+ * Map a negotiated synchronous transfer period to 53C720/770 timing.
  */
 void
 scsi_period_to_siopng(struct siop_softc *sc, int target)
 {
-	int period, offset, sxfer, scntl3 = 0;
+	int period, offset, tp, scf, max_scf;
+	int extra_clock_cycle;
 
 	period = sc->sc_nexus->msg[4];
 	offset = sc->sc_nexus->msg[5];
-#ifdef FIXME
-	for (scntl3 = 1; scntl3 < 4; ++scntl3) {
-		sxfer = (period * 4 - 1) / sc->sc_tcp[scntl3] - 3;
-		if (sxfer >= 0 && sxfer <= 7)
+	max_scf = MAX_SCF_ENTRIES - 1;
+	extra_clock_cycle = siopng_use_extra_clock_cycle(sc);
+
+	for (scf = 1; scf <= max_scf; ++scf) {
+		tp = (period * 4 - 1) / sc->sc_tcp[scf] - 3 -
+		    extra_clock_cycle;
+		if (tp >= 0 && tp <= 7)
 			break;
 	}
-	if (scntl3 > 3) {
-		printf("siopng sync: unable to compute sync params for period %dns\n",
-		    period * 4);
-		/*
-		 * XXX need to pick a value we can do and renegotiate
-		 */
-		sxfer = scntl3 = 0;
-	} else {
-		sxfer = (sxfer << 4) | ((offset <= SIOP_MAX_OFFSET) ?
-		    offset : SIOP_MAX_OFFSET);
-#ifdef DEBUG_SYNC
-		printf("siopng sync: params for period %dns: sxfer %x scntl3 %x",
-		    period * 4, sxfer, scntl3);
-		printf(" actual period %dns\n",
-		    sc->sc_tcp[scntl3] * ((sxfer >> 4) + 4));
-#endif /* DEBUG_SYNC */
+	if (scf > max_scf) {
+		if (period * 4 <= siopng_sync_period(sc, 1, 0)) {
+			scf = 1;
+			tp = 0;
+		} else {
+			scf = max_scf;
+			tp = 7;
+		}
 	}
-#else /* FIXME */
-	sxfer = offset <= SIOP_MAX_OFFSET ? offset : SIOP_MAX_OFFSET;
-	sxfer |= 0x20;		/* XXX XFERP: 5 */
-#ifndef FIXME
-	if (period <= (50 / 4))	/* XXX */
-		scntl3 = 0x95;	/* Ultra, SCF: /1, CCF: /4 */
-	else if (period <= (100 / 4))
-		scntl3 = 0x35;	/* SCF: /2, CCF: /4 */
-	else if (period <= (200 / 4))
-		scntl3 = 0x55;	/* SCF: /4, CCF: /4 */
-	else
-		scntl3 = 0xff;	/* XXX ??? */
-#else
-	scntl3 = 5;
-#endif
-#endif
-	sc->sc_sync[target].sxfer = sxfer;
-	sc->sc_sync[target].scntl3 = scntl3 |
-	    (sc->sc_sync[target].scntl3 & SIOP_SCNTL3_EWS);
+	sc->sc_sync[target].sxfer =
+	    (tp << SIOPNG_SXFER_TP_SHIFT) |
+	    ((offset <= SIOP_MAX_OFFSET) ? offset : SIOP_MAX_OFFSET);
+	sc->sc_sync[target].scntl3 = (scf << 4) |
+	    (sc->sc_sync[target].scntl3 &
+	     (SIOP_SCNTL3_EWS | SIOP_SCNTL3_CCF));
 #ifdef DEBUG_SYNC
-	printf ("siopng sync: siop_sxfr %02x, siop_scntl3 %02x\n", sxfer, scntl3);
+	printf("siopng sync: params for period %dns: tp %x scf %x",
+	    period * 4, tp, scf);
+	printf(" actual period %dns\n", siopng_sync_period(sc, scf, tp));
+	printf("siopng sync: siop_sxfer %02x, siop_scntl3 %02x\n",
+	    sc->sc_sync[target].sxfer, sc->sc_sync[target].scntl3);
 #endif
 }
 
