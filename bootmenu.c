@@ -296,12 +296,23 @@ static char *dipswitch_text(int val, int num)
       case 4: strcat((char *)string, val?"SCSI-2 Fast":"SCSI-1 Slow");
               strcat((char *)string, " Bus Mode");
               break;
+#if defined(DRIVER_A4000T770)
+      case 3: strcat((char *)string, "Reserved");
+              break;
+      case 2: strcat((char *)string, "ULTRA ");
+              strcat((char *)string, val?"Off":"On");
+              break;
+      case 1: strcat((char *)string, "WIDE ");
+              strcat((char *)string, val?"Off":"On");
+              break;
+#else
       case 3:
       case 2:
       case 1: strcat((char *)string, "SCSI Address A? = ?");
               string[14] = num - 1 + '0';
               string[18] = val + '0';
               break;
+#endif
     }
 
     return  string;
@@ -312,7 +323,9 @@ static void draw_dipswitches(UWORD x, UWORD y)
     struct RastPort *rp = &screen->RastPort;
     int i;
     UBYTE dip_switches;
-    char *ret, *num="8", *hostid="Host ID: 7";
+    char *ret;
+    char num[] = "8";
+    char hostid[13];
 
     if (asave) {
         dip_switches = get_dip_switches();
@@ -357,9 +370,9 @@ static void draw_dipswitches(UWORD x, UWORD y)
         Text(rp, (char *)ret, strlen((char *)ret));
     }
 
-    hostid[9]='0'+(dip_switches&7);
+    snprintf(hostid, sizeof(hostid), "Host ID: %u", get_host_id());
     Move(rp, x+280, y+64);
-    Text(rp, (char *)hostid,10);
+    Text(rp, (char *)hostid, strlen(hostid));
     BNDRYOFF(rp);
 }
 
@@ -387,14 +400,19 @@ static void redraw_dip_row(UWORD base_x, UWORD base_y, int row, UBYTE dip_switch
 static void redraw_host_id(UWORD base_x, UWORD base_y, UBYTE dip_switches)
 {
     struct RastPort *rp = &screen->RastPort;
-    char hostid[] = "Host ID: 0";
-    hostid[9] = '0' + (dip_switches & 7);
+    char hostid[13];
+#if defined(DRIVER_A4000T770)
+    (void)dip_switches;
+    snprintf(hostid, sizeof(hostid), "Host ID: %u", get_host_id());
+#else
+    snprintf(hostid, sizeof(hostid), "Host ID: %u", dip_switches & 7);
+#endif
     SetAPen(rp, 1);
     SetBPen(rp, 0);
     Move(rp, base_x + 280, base_y + 64);
     Text(rp, "            ", 12);
     Move(rp, base_x + 280, base_y + 64);
-    Text(rp, hostid, 10);
+    Text(rp, hostid, strlen(hostid));
 }
 #endif
 
@@ -552,10 +570,10 @@ static int scan_disks(void)
         return 0;
     }
 
-    // Get host controller ID from DIP switches and determine max targets and LUNs
+    // Get the host controller ID and determine max targets and LUNs
     if (asave) {
         dip_switches = get_dip_switches();
-        hostid = dip_switches & 7;
+        hostid = get_host_id();
         // Check DIP switch 8 (bit 7): if SET, LUNs are disabled (only LUN 0)
         // if CLEAR, LUNs are enabled (LUNs 0-7)
         max_luns = (dip_switches & BIT(7)) ? 1 : 8;
@@ -567,9 +585,13 @@ static int scan_disks(void)
         max_targets = 8;
 #endif
     } else {
-        // Default when not initialized - assume host at ID 7, 8 targets max, LUNs disabled
+        // Default when not initialized - assume host at ID 7 and LUNs disabled
         hostid = 7;
+#ifdef NCR53C770
+        max_targets = 16;
+#else
         max_targets = 8;
+#endif
         max_luns = 1;
     }
 

@@ -87,6 +87,7 @@ int init_chan(device_t self, UBYTE *boardnum);
 void deinit_chan(device_t self);
 
 uint8_t get_dip_switches(void);
+uint8_t get_host_id(void);
 void decode_unit_number(ULONG unit_num, int *target, int *lun);
 ULONG calculate_unit_number(int target, int lun);
 

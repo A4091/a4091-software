@@ -401,6 +401,31 @@ uint8_t get_dip_switches(void)
     return switches;
 }
 
+static uint8_t
+get_sc_host_id(const struct siop_softc *sc, uint8_t dip_switches)
+{
+#ifdef NCR53C770
+    if (sc != NULL && sc->sc_siopp != NULL)
+        return (~sc->sc_siopp->siop_gpreg) & 0x0f;
+#else
+    (void)sc;
+#endif
+    return dip_switches & 0x07;
+}
+
+uint8_t
+get_host_id(void)
+{
+    uint8_t dip_switches = 0xff;
+    struct siop_softc *sc = NULL;
+
+    if (asave != NULL) {
+        dip_switches = get_dip_switches();
+        sc = asave->as_device_private;
+    }
+    return get_sc_host_id(sc, dip_switches);
+}
+
 static void
 a4091_release(uint32_t as_addr)
 {
@@ -584,7 +609,7 @@ init_chan(device_t self, UBYTE *boardnum)
     memset(chan, 0, sizeof (*chan));
     chan->chan_adapter = adapt;
     chan->chan_nluns = (dip_switches & BIT(7)) ? 1 : 8;  // SCSI LUNs enabled?
-    chan->chan_id = dip_switches & 7;  // SCSI ID from DIP switches
+    chan->chan_id = get_sc_host_id(sc, dip_switches);  // SCSI ID from board straps
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
 
@@ -602,9 +627,17 @@ init_chan(device_t self, UBYTE *boardnum)
      *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync
      *   SW 5 Off  Short Spinup                     ms.slowSpinup
      *   SW 4 Off  SCSI-2 Fast Bus Mode             NOT SUPPORTED YET
+#ifdef NCR53C770
+     *   SW 3 Off  Reserved                         Board strap
+     *   SW 2 Off  ULTRA On                         Board strap
+     *   SW 1 Off  WIDE On                          Board strap
+     *
+     * Host ID comes from GPREG, not from SW 1..3.
+#else
      *   SW 3 Off  ADR2=1                           chan->chan_id
      *   SW 2 Off  ADR1=1                           chan->chan_id
      *   SW 1 Off  ADR0=1  Controller Host ID=7     chan->chan_id
+#endif
      */
 
     scsipi_channel_init(chan);

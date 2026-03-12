@@ -408,15 +408,21 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 {
 	extern char real_device_name[];
 	struct MountStruct ms;
-	ULONG unitNum[8];
 	int i, j = 1, ret = 0;
 	UBYTE dip_switches = get_dip_switches();
-	UBYTE hostid = dip_switches & 7;
+	UBYTE hostid = get_host_id();
+#ifdef NCR53C770
+	ULONG unitNum[16];
+	int max_targets = 16;
+#else
+	ULONG unitNum[8];
+	int max_targets = 8;
+#endif
 	(void)dev;
 
 	/* Produce unitNum at runtime */
-	unitNum[0] = 7;
-	for (i=0; i<8; i++)
+	unitNum[0] = max_targets - 1;
+	for (i=0; i<max_targets; i++)
 		if (hostid != i)
 			unitNum[j++] = i;
 
@@ -435,8 +441,8 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ret = MountDrive(&ms);
 
 	printf("ret = %x\nunitNum = { ", ret);
-	for (i=0; i<8; i++)
-		printf("%x%s", unitNum[i], i<7?", ":" }\n");
+	for (i=0; i<max_targets; i++)
+		printf("%x%s", unitNum[i], i < (max_targets - 1) ? ", " : " }\n");
 
 	list_filesystems();
 	return ret;
