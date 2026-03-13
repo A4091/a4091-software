@@ -228,7 +228,11 @@ static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
 #elif defined(DRIVER_A4000T770)
         Print("Welcome to Amiga 4000D+ UW SCSI Configuration & Diagnostics",0,32,TRUE);
 #endif
-        Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,42,TRUE);
+#if defined(NCR53C710)
+        Print("This project is brought to you by Chris Hooper and Stefan Reinauer",0,44,TRUE);
+#else
+        Print("This project is brought to you by Stefan Reinauer",0,44,TRUE);
+#endif
     }
 }
 
