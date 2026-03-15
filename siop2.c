@@ -614,6 +614,14 @@ siopng_sched(struct siop_softc *sc)
 	if (acb->xs->xs_control & XS_CTL_RESET)
 		siopngreset(sc);
 
+#ifdef PORT_AMIGA
+	/*
+	 * Arm a timeout for every issued transaction so a later command
+	 * cannot run without its own watchdog after an earlier one completes.
+	 */
+	callout_reset(&acb->xs->xs_callout,
+	    mstohz(acb->xs->timeout) + 1, siopng_timeout, acb);
+#endif
 #if 0
 	acb->cmd.bytes[0] |= periph->periph_lun << 5;	/* XXXX */
 #endif
@@ -702,6 +710,19 @@ siopng_scsidone(struct siop_acb *acb, int stat)
 	sc->sc_tinfo[periph->periph_target].cmds++;
 
 	scsipi_done(xs);
+
+#ifdef PORT_AMIGA
+	if (sc->sc_channel.chan_flags & SCSIPI_CHAN_RESET_PEND) {
+		/*
+		 * Delay the bus reset until no issued commands remain on
+		 * the channel so we do not clobber unrelated transactions.
+		 */
+		if ((sc->sc_nexus == NULL) && (sc->nexus_list.tqh_first == NULL)) {
+			siopngreset(sc);
+			sc->sc_channel.chan_tflags |= SCSIPI_CHANT_KICK;
+		}
+	}
+#endif
 
 	if (dosched && sc->sc_nexus == NULL)
 		siopng_sched(sc);
@@ -881,8 +902,14 @@ siopng_timeout(void *arg)
 
 	s = bsd_splbio();
 
+#ifdef PORT_AMIGA
+	sc->sc_channel.chan_flags |= SCSIPI_CHAN_RESET_PEND;
+	acb->xs->error = XS_TIMEOUT;
+	siopng_scsidone(acb, acb->stat[0]);
+#else
 	acb->xs->error = XS_TIMEOUT;
 	siopngreset(sc);
+#endif
 
 	bsd_splx(s);
 }
@@ -1035,6 +1062,10 @@ siopngreset(struct siop_softc *sc)
 			siopng_scsidone(acb, acb->stat[0]);
 		}
 	}
+
+#ifdef PORT_AMIGA
+	sc->sc_channel.chan_flags &= ~SCSIPI_CHAN_RESET_PEND;
+#endif
 
 	sc->sc_flags |= SIOP_ALIVE;
 	sc->sc_flags &= ~(SIOP_INTDEFER|SIOP_INTSOFF);
@@ -1234,8 +1265,10 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	}
 #endif
 	if (sc->nexus_list.tqh_first == NULL) {
+#ifndef PORT_AMIGA
 		callout_reset(&acb->xs->xs_callout,
 		    mstohz(acb->xs->timeout) + 1, siopng_timeout, acb);
+#endif
 		if (rp->siop_istat & SIOP_ISTAT_CON)
 			printf("%s: siopng_select while connected?\n",
 			    device_xname(sc->sc_dev));
