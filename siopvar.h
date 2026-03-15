@@ -199,6 +199,7 @@ struct	siop_softc {
 #define	SIOP_INTDEFER	0x40	/* Level 6 interrupt has been deferred */
 #define SIOP_FORCE_NARROW 0x20	/* board policy disables wide SCSI */
 #define SIOP_FORCE_NON_ULTRA 0x10 /* board policy disables ultra timings */
+#define SIOP_INTERNAL_SCRIPTS 0x02 /* 53C770 internal SCRIPTS RAM active */
 #define	SIOP_ALIVE	0x01	/* controller initialized */
 #define SIOP_SELECTED	0x04	/* bus is in selected state. Needed for
 				   correct abort procedure. */

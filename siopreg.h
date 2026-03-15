@@ -229,6 +229,21 @@ typedef struct {
 /*7c*/	volatile unsigned long  siop_scratchj;  /* rw: Scratch Register J */
 #endif
 
+#ifdef PORT_AMIGA
+/*80*/	volatile unsigned long	siop_pad1[7];   /* shadow 0x00 - 0x1b */
+/*9c*/	volatile unsigned long	siop_temp2;     /* shadow 0x1c */
+/*a0*/	volatile unsigned long	siop_pad2[5];   /* shadow 0x20 - 0x33 */
+/*b4*/	volatile unsigned long	siop_scratcha2; /* shadow 0x34 */
+/*b8*/	volatile unsigned long	siop_pad3[2];   /* shadow 0x38 - 0x3f */
+/*c0*/	volatile unsigned long	siop_pad4[7];   /* shadow 0x40 - 0x5b */
+/*dc*/	volatile unsigned long	siop_scratchb2; /* shadow 0x5c */
+#if defined(ARCH_770)
+/*e0*/	volatile unsigned char	siop_scratchx[32]; /* shadow 0x60 - 0x7f */
+#else
+/*e0*/	volatile unsigned long	siop_pad5[8];   /* shadow 0x60 - 0x7f */
+#endif
+#endif
+
 #endif
 
 } siop_regmap_t;

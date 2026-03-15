@@ -52,11 +52,77 @@ typedef struct
     union scsi_disk_pages pg;
 } scsi_mode_sense_t;
 
+#if defined(SCRIPTS_IN_MAINBOARD_RAM)
+#define MAINBOARD_RAM_START 0x01000000u
+#define MAINBOARD_RAM_SIZE  0x07000000u
+#endif
+
 static void sd_complete(struct scsipi_xfer *xs);
 static void sd_startstop_complete(struct scsipi_xfer *xs);
 static void sd_tur_complete(struct scsipi_xfer *xs);
 static void scsidirect_complete(struct scsipi_xfer *xs);
 static void geom_done_inquiry(struct scsipi_xfer *xs);
+
+#if defined(SCRIPTS_IN_MAINBOARD_RAM)
+static void *
+alloc_mainboard_ram_aligned(uint32_t size, uint32_t align)
+{
+    uintptr_t          best_addr = 0;
+    uint32_t           best_size = 0;
+    uintptr_t          range_end = MAINBOARD_RAM_START + MAINBOARD_RAM_SIZE;
+    struct ExecBase   *eb = SysBase;
+    struct MemHeader  *mem;
+    struct MemChunk   *chunk;
+
+    if ((align == 0) || ((align & (align - 1)) != 0))
+        align = 4;
+
+    Forbid();
+    for (mem = (struct MemHeader *)eb->MemList.lh_Head;
+         mem->mh_Node.ln_Succ != NULL;
+         mem = (struct MemHeader *)mem->mh_Node.ln_Succ) {
+        uintptr_t mem_lower = (uintptr_t)mem->mh_First;
+        uintptr_t mem_upper = (uintptr_t)mem->mh_Upper;
+
+        if ((mem_upper <= MAINBOARD_RAM_START) || (mem_lower >= range_end))
+            continue;
+
+        for (chunk = mem->mh_First; chunk != NULL; chunk = chunk->mc_Next) {
+            uintptr_t chunk_lower = (uintptr_t)chunk;
+            uintptr_t chunk_upper = chunk_lower + chunk->mc_Bytes;
+            uintptr_t candidate;
+
+            if ((chunk_lower < mem_lower) || (chunk_upper > mem_upper))
+                break;
+
+            if (chunk_lower < MAINBOARD_RAM_START)
+                chunk_lower = MAINBOARD_RAM_START;
+            if (chunk_upper > range_end)
+                chunk_upper = range_end;
+            if (chunk_upper <= chunk_lower)
+                continue;
+
+            candidate = (chunk_lower + align - 1) & ~(uintptr_t)(align - 1);
+            if ((candidate >= chunk_upper) || (chunk_upper - candidate < size))
+                continue;
+
+            if ((best_addr == 0) || (chunk->mc_Bytes < best_size)) {
+                best_addr = candidate;
+                best_size = chunk->mc_Bytes;
+            }
+        }
+    }
+
+    if (best_addr != 0) {
+        void *addr = AllocAbs(size, (APTR)best_addr);
+        Permit();
+        return addr;
+    }
+
+    Permit();
+    return NULL;
+}
+#endif
 
 static const int8_t error_code_mapping[] = {
     0,                // 0 XS_NOERROR           No error, (invalid sense)
@@ -95,6 +161,32 @@ get_scripts_dma_addr(const void *scripts, uint32_t size)
     }
     return (uint32_t)scripts;
 }
+
+/*
+ * Copy the SCSI scripts into A3000/A4000 mainboard Fast RAM.
+ *
+ * This keeps the scripts out of Zorro II space while avoiding Chip RAM for
+ * systems where the motherboard memory is DMA-visible to the 53C770.
+ */
+#if defined(SCRIPTS_IN_MAINBOARD_RAM)
+uint32_t
+get_scripts_mainboard_addr(const void *scripts, uint32_t size, uint32_t align)
+{
+    void *copy = alloc_mainboard_ram_aligned(size, align);
+
+    if (copy != NULL) {
+        CopyMem((APTR)scripts, copy, size);
+        printf("Scripts copied to mainboard RAM at %lx\n",
+               (unsigned long)copy);
+        asave->as_scripts_copy = copy;
+        asave->as_scripts_copy_size = size;
+        return (uint32_t)copy;
+    }
+
+    printf("Failed to allocate mainboard RAM for scripts, using default path\n");
+    return get_scripts_dma_addr(scripts, size);
+}
+#endif
 
 /*
  * Free the scripts copy if one was allocated.

@@ -179,6 +179,96 @@ int siopng_init_wait = SCSI_INIT_WAIT;
 
 #define SIOPNG_SCNTL3_PERSIST (SIOP_SCNTL3_ULTRA | SIOP_SCNTL3_EWS)
 
+#if defined(PORT_AMIGA) && defined(ARCH_770) && \
+    defined(NCR53C770_SCRIPTS_RAM_INDIRECT)
+#define SIOP770_SCRIPTS_RAM_BYTES      4096
+#define SIOP770_SCRIPTS_RAM_PAGE_SHIFT 5
+#define SIOP770_SCRIPTS_RAM_PAGE_SIZE  (1U << SIOP770_SCRIPTS_RAM_PAGE_SHIFT)
+#define SIOP770_SCRIPTS_RAM_PAGE_COUNT \
+	(SIOP770_SCRIPTS_RAM_BYTES / SIOP770_SCRIPTS_RAM_PAGE_SIZE)
+#define SIOP770_SCRIPTS_RAM_SELECT 0x02
+
+static u_int
+siop770_scripts_ram_pages(uint32_t size)
+{
+	return (size + SIOP770_SCRIPTS_RAM_PAGE_SIZE - 1) >>
+	    SIOP770_SCRIPTS_RAM_PAGE_SHIFT;
+}
+
+static void
+siop770_enable_scripts_ram(siop_regmap_p rp)
+{
+	rp->siop_ctest5 =
+	    (rp->siop_ctest5 & ~(SIOP_CTEST5_RAM | SIOP_CTEST5_RAMEN)) |
+	    SIOP770_SCRIPTS_RAM_SELECT | SIOP_CTEST5_RAMEN;
+}
+
+static void
+siop770_select_scripts_ram_page(siop_regmap_p rp, u_int page)
+{
+	rp->siop_scratchb2 = page << SIOP770_SCRIPTS_RAM_PAGE_SHIFT;
+}
+
+static int
+siop770_load_scripts_ram(struct siop_softc *sc)
+{
+	const uint8_t *scripts = (const uint8_t *)siopng_scripts;
+	siop_regmap_p rp = sc->sc_siopp;
+	u_int page_count = siop770_scripts_ram_pages(sizeof(siopng_scripts));
+	u_int page;
+
+	if (page_count >= SIOP770_SCRIPTS_RAM_PAGE_COUNT) {
+		printf("%s: scripts image too large for internal SCRIPTS RAM\n",
+		    device_xname(sc->sc_dev));
+		sc->sc_flags &= ~SIOP_INTERNAL_SCRIPTS;
+		return 0;
+	}
+
+	siop770_enable_scripts_ram(rp);
+	for (page = 0; page < SIOP770_SCRIPTS_RAM_PAGE_COUNT; ++page) {
+		u_int byte;
+
+		siop770_select_scripts_ram_page(rp, page);
+		for (byte = 0; byte < SIOP770_SCRIPTS_RAM_PAGE_SIZE; ++byte)
+			rp->siop_scratchx[byte] = 0;
+	}
+
+	for (page = 0; page < page_count; ++page) {
+		size_t base = page * SIOP770_SCRIPTS_RAM_PAGE_SIZE;
+		u_int byte;
+
+		siop770_select_scripts_ram_page(rp, page);
+		for (byte = 0; byte < SIOP770_SCRIPTS_RAM_PAGE_SIZE; ++byte) {
+			size_t pos = base + byte;
+
+			if (pos >= sizeof(siopng_scripts))
+				break;
+			rp->siop_scratchx[byte] = scripts[pos];
+		}
+	}
+
+	siop770_select_scripts_ram_page(rp, page_count);
+	rp->siop_scratcha2 = sc->sc_scriptspa;
+	sc->sc_scriptspa = rp->siop_scratcha;
+	sc->sc_flags |= SIOP_INTERNAL_SCRIPTS;
+	return 1;
+}
+
+static void
+siop770_restore_scripts_ram(struct siop_softc *sc)
+{
+	siop_regmap_p rp = sc->sc_siopp;
+
+	if ((sc->sc_flags & SIOP_INTERNAL_SCRIPTS) == 0)
+		return;
+
+	siop770_enable_scripts_ram(rp);
+	siop770_select_scripts_ram_page(rp,
+	    siop770_scripts_ram_pages(sizeof(siopng_scripts)));
+	rp->siop_scratcha2 = sc->sc_scriptspa;
+}
+#endif
+
 static int
 siopng_ultra_enabled(const struct siop_softc *sc)
 {
@@ -689,8 +779,21 @@ siopnginitialize(struct siop_softc *sc)
 	 * Also should verify that dev doesn't span non-contiguous
 	 * physical pages.
 	 */
+#if defined(PORT_AMIGA) && defined(SCRIPTS_IN_MAINBOARD_RAM)
+	sc->sc_scriptspa = get_scripts_mainboard_addr(siopng_scripts,
+	                                              sizeof(siopng_scripts),
+	                                              4096);
+#else
 	sc->sc_scriptspa = get_scripts_dma_addr(siopng_scripts,
 	                                        sizeof(siopng_scripts));
+#endif
+
+#if defined(PORT_AMIGA) && defined(ARCH_770) && \
+    defined(NCR53C770_SCRIPTS_RAM_INDIRECT)
+	siop770_load_scripts_ram(sc);
+#else
+	sc->sc_flags &= ~SIOP_INTERNAL_SCRIPTS;
+#endif
 
 	/*
 	 * malloc sc_acb to ensure that DS is on a long word boundary.
@@ -852,6 +955,10 @@ siopngreset(struct siop_softc *sc)
 	rp->siop_respid = 1 << sc->sc_channel.chan_id;
 	rp->siop_dwt = 0x00;
 	rp->siop_stime0 = 0x0c;		/* XXXXX check */
+#if defined(PORT_AMIGA) && defined(ARCH_770) && \
+    defined(NCR53C770_SCRIPTS_RAM_INDIRECT)
+	siop770_restore_scripts_ram(sc);
+#endif
 
 	/* will need to re-negotiate sync xfers */
 	memset(&sc->sc_sync, 0, sizeof (sc->sc_sync));

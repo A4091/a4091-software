@@ -51,6 +51,9 @@
 # define HW_OFFSET_SWITCHES      A4000T770_OFFSET_SWITCHES
 # define HW_SCLK_CLOCK_FREQ      40     /* 53C770 SCLK input before doubling */
 # define HW_IS_ZORRO3            0
+/* Experimental 53C770 scripts-placement options. Keep these opt-in. */
+//# define NCR53C770_SCRIPTS_RAM_INDIRECT 1
+//# define SCRIPTS_IN_MAINBOARD_RAM 1
 #endif
 
 #endif /* __A4091_H */
