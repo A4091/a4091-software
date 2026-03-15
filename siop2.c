@@ -179,6 +179,28 @@ int siopng_init_wait = SCSI_INIT_WAIT;
 
 #define SIOPNG_SCNTL3_PERSIST (SIOP_SCNTL3_ULTRA | SIOP_SCNTL3_EWS)
 
+static int
+siopng_ultra_enabled(const struct siop_softc *sc)
+{
+#ifdef PORT_AMIGA
+	return ((sc->sc_flags & SIOP_FORCE_NON_ULTRA) == 0);
+#else
+	(void)sc;
+	return 1;
+#endif
+}
+
+static int
+siopng_wide_enabled(const struct siop_softc *sc)
+{
+#ifdef PORT_AMIGA
+	return ((sc->sc_flags & SIOP_FORCE_NARROW) == 0);
+#else
+	(void)sc;
+	return 1;
+#endif
+}
+
 static u_int
 siopng_sync_clock_freq(const struct siop_softc *sc)
 {
@@ -233,7 +255,14 @@ siopng_ccf(const struct siop_softc *sc)
 static u_char
 siopng_async_scntl3(const struct siop_softc *sc)
 {
-	return siopng_ccf(sc);
+	u_char scntl3;
+
+	scntl3 = siopng_ccf(sc);
+#if defined(ARCH_770)
+	if (siopng_ultra_enabled(sc))
+		scntl3 |= SIOP_SCNTL3_ULTRA;
+#endif
+	return scntl3;
 }
 
 static u_char
@@ -695,6 +724,8 @@ siopnginitialize(struct siop_softc *sc)
 		sc->sc_minsync = 25;
 	if (siopng_use_clock_doubler(sc) || siopng_use_extra_clock_cycle(sc))
 		sc->sc_minsync >>= 1;
+	if (!siopng_ultra_enabled(sc) && sc->sc_minsync < 25)
+		sc->sc_minsync = 25;
 
 #ifndef PORT_AMIGA
 	if (scsi_nosync) {
@@ -867,6 +898,8 @@ siopngreset(struct siop_softc *sc)
 			siopng_inhibit_wide[i] |= 0x80;
 		}
 	}
+	if (!siopng_wide_enabled(sc))
+		sc->sc_channel.chan_ntargets = 8;
 
 	printf("siopng type %s id %d reset V%d\n",
 	    siopng_chips[rp->siop_macntl>>4],
@@ -965,7 +998,7 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	memset(&acb->ds.chain, 0, sizeof (acb->ds.chain));
 
 	if (sc->sc_sync[target].state == NEG_WIDE) {
-		if (siopng_inhibit_wide[target]) {
+		if (!siopng_wide_enabled(sc) || siopng_inhibit_wide[target]) {
 			sc->sc_sync[target].state = NEG_SYNC;
 			sc->sc_sync[target].scntl3 &= ~SIOP_SCNTL3_EWS;
 #ifdef DEBUG
@@ -1889,6 +1922,8 @@ scsi_period_to_siopng(struct siop_softc *sc, int target)
 	offset = sc->sc_nexus->msg[5];
 	max_scf = MAX_SCF_ENTRIES - 1;
 	extra_clock_cycle = siopng_use_extra_clock_cycle(sc);
+	if (!siopng_ultra_enabled(sc) && period < 25)
+		period = 25;
 
 	for (scf = 1; scf <= max_scf; ++scf) {
 		tp = (period * 4 - 1) / sc->sc_tcp[scf] - 3 -
@@ -1911,6 +1946,8 @@ scsi_period_to_siopng(struct siop_softc *sc, int target)
 	sc->sc_sync[target].scntl3 = (scf << 4) |
 	    (sc->sc_sync[target].scntl3 &
 	     (SIOP_SCNTL3_EWS | SIOP_SCNTL3_CCF));
+	if (siopng_ultra_enabled(sc))
+		sc->sc_sync[target].scntl3 |= SIOP_SCNTL3_ULTRA;
 #ifdef DEBUG_SYNC
 	printf("siopng sync: params for period %dns: tp %x scf %x",
 	    period * 4, tp, scf);

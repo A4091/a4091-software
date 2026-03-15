@@ -413,7 +413,7 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	UBYTE hostid = get_host_id();
 #ifdef NCR53C770
 	ULONG unitNum[16];
-	int max_targets = 16;
+	int max_targets = get_target_count();
 #else
 	ULONG unitNum[8];
 	int max_targets = 8;
@@ -432,7 +432,7 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.creatorName = NULL;
 	ms.configDev = cd;
 	ms.SysBase = SysBase;
-	ms.luns = !(dip_switches & BIT(7));        // 1: LUNs enabled 0: LUNs disabled
+	ms.luns = (get_lun_count() > 1);
 	ms.slowSpinup = !(dip_switches & BIT(4));  // 0: Short Spinup 1: Long Spinup
 	ms.cdBoot = asave->cdrom_boot;
 	ms.ignoreLast = asave->ignore_last;

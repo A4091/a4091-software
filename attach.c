@@ -413,6 +413,35 @@ get_sc_host_id(const struct siop_softc *sc, uint8_t dip_switches)
     return dip_switches & 0x07;
 }
 
+static uint8_t
+get_sc_lun_count(uint8_t dip_switches)
+{
+#ifdef DRIVER_A4000T770
+    return (dip_switches & BIT(2)) ? 1 : 8;
+#else
+    return (dip_switches & BIT(7)) ? 1 : 8;
+#endif
+}
+
+static uint8_t
+get_sc_target_count(uint8_t dip_switches)
+{
+#ifdef DRIVER_A4000T770
+    return (dip_switches & BIT(0)) ? 8 : 16;
+#else
+    (void)dip_switches;
+    return 8;
+#endif
+}
+
+#ifdef DRIVER_A4000T770
+static int
+get_sc_ultra_enabled(uint8_t dip_switches)
+{
+    return ((dip_switches & BIT(1)) == 0);
+}
+#endif
+
 uint8_t
 get_host_id(void)
 {
@@ -424,6 +453,26 @@ get_host_id(void)
         sc = asave->as_device_private;
     }
     return get_sc_host_id(sc, dip_switches);
+}
+
+uint8_t
+get_lun_count(void)
+{
+    uint8_t dip_switches = 0xff;
+
+    if (asave != NULL)
+        dip_switches = get_dip_switches();
+    return get_sc_lun_count(dip_switches);
+}
+
+uint8_t
+get_target_count(void)
+{
+    uint8_t dip_switches = 0xff;
+
+    if (asave != NULL)
+        dip_switches = get_dip_switches();
+    return get_sc_target_count(dip_switches);
 }
 
 static void
@@ -608,12 +657,20 @@ init_chan(device_t self, UBYTE *boardnum)
      */
     memset(chan, 0, sizeof (*chan));
     chan->chan_adapter = adapt;
-    chan->chan_nluns = (dip_switches & BIT(7)) ? 1 : 8;  // SCSI LUNs enabled?
+    chan->chan_ntargets = get_sc_target_count(dip_switches);
+    chan->chan_nluns = get_sc_lun_count(dip_switches);
     chan->chan_id = get_sc_host_id(sc, dip_switches);  // SCSI ID from board straps
     TAILQ_INIT(&chan->chan_queue);
     TAILQ_INIT(&chan->chan_complete);
 
     asave->as_callout_head = &callout_head;
+
+#ifdef DRIVER_A4000T770
+    if ((dip_switches & BIT(0)) != 0)
+        sc->sc_flags |= SIOP_FORCE_NARROW;
+    if (!get_sc_ultra_enabled(dip_switches))
+        sc->sc_flags |= SIOP_FORCE_NON_ULTRA;
+#endif
 
     if ((dip_switches & BIT(5)) == 0) {
         /* Need to disable synchronous SCSI */
@@ -621,19 +678,24 @@ init_chan(device_t self, UBYTE *boardnum)
     }
 
     /*
-     * A4091 Rear-access DIP switches
+     * Rear-access DIP switches
+#ifdef NCR53C770
+     *   SW 8 Off  Termination High On              Handled by hardware
+     *   SW 7 Off  Termination Low On               Handled by hardware
+     *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync
+     *   SW 5 Off  Short Spinup                     ms.slowSpinup
+     *   SW 4 Off  SCSI-2 Fast Bus Mode             NOT SUPPORTED YET
+     *   SW 3 Off  SCSI LUNs Enabled                chan->chan_nluns
+     *   SW 2 Off  Ultra transfers enabled          Board-wide policy
+     *   SW 1 Off  Wide SCSI enabled                chan->chan_ntargets
+     *
+     * Host ID comes from GPREG, not from SW 1..3.
+#else
      *   SW 8 Off  SCSI LUNs Enabled                chan->chan_nluns
      *   SW 7 Off  Internal Termination On          Handled by hardware
      *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync
      *   SW 5 Off  Short Spinup                     ms.slowSpinup
      *   SW 4 Off  SCSI-2 Fast Bus Mode             NOT SUPPORTED YET
-#ifdef NCR53C770
-     *   SW 3 Off  Reserved                         Board strap
-     *   SW 2 Off  ULTRA On                         Board strap
-     *   SW 1 Off  WIDE On                          Board strap
-     *
-     * Host ID comes from GPREG, not from SW 1..3.
-#else
      *   SW 3 Off  ADR2=1                           chan->chan_id
      *   SW 2 Off  ADR1=1                           chan->chan_id
      *   SW 1 Off  ADR0=1  Controller Host ID=7     chan->chan_id
