@@ -43,7 +43,7 @@ else
 $(error Unknown build target! Please set DEVICE to A4091, A4092, A4000T or A4000T770.)
 endif
 
-OBJDIR  := objs
+OBJDIR  ?= objs-$(DEVICE)
 
 ROM	:= $(DEVNAME).rom
 ROM_ND	:= $(DEVNAME)_nodriver.rom
