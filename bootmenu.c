@@ -326,6 +326,21 @@ static char *dipswitch_text(int val, int num)
     return  string;
 }
 
+#if !defined(DRIVER_A4000T770) || defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+static void format_host_id(char *buf, UBYTE host_id)
+{
+    strcpy(buf, "Host ID: ");
+    if (host_id >= 10) {
+        buf[9] = '0' + (host_id / 10);
+        buf[10] = '0' + (host_id % 10);
+        buf[11] = 0;
+    } else {
+        buf[9] = '0' + host_id;
+        buf[10] = 0;
+    }
+}
+#endif
+
 static void draw_dipswitches(UWORD x, UWORD y)
 {
     struct RastPort *rp = &screen->RastPort;
@@ -381,7 +396,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
     }
 
 #if !defined(DRIVER_A4000T770)
-    snprintf(hostid, sizeof(hostid), "Host ID: %u", get_host_id());
+    format_host_id(hostid, get_host_id());
     Move(rp, x+280, y+64);
     Text(rp, (char *)hostid, strlen(hostid));
 #endif
@@ -415,9 +430,9 @@ static void redraw_host_id(UWORD base_x, UWORD base_y, UBYTE dip_switches)
     char hostid[13];
 #if defined(DRIVER_A4000T770)
     (void)dip_switches;
-    snprintf(hostid, sizeof(hostid), "Host ID: %u", get_host_id());
+    format_host_id(hostid, get_host_id());
 #else
-    snprintf(hostid, sizeof(hostid), "Host ID: %u", dip_switches & 7);
+    format_host_id(hostid, dip_switches & 7);
 #endif
     SetAPen(rp, 1);
     SetBPen(rp, 0);
