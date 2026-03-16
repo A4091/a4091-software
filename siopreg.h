@@ -340,8 +340,22 @@ typedef volatile siop_regmap_t *siop_regmap_p;
 						Period = TCP * XFERP
 						TCP = 1 + CLK + 1..2;
 					 */
+					/*
+					 * The 53C720 uses a 4-bit MO field.
+					 * The 53C770 encoding extends MO to 5 bits.
+					 *
+					 * Keep the narrower 4-bit/15-offset mode
+					 * selectable at build time for A4000T770
+					 * testing while this board-specific question
+					 * is still being evaluated.
+					 */
+#if defined(SIOP_770_USE_4BIT_OFFSET) && SIOP_770_USE_4BIT_OFFSET
+#define	SIOP_SXFER_MO		0x0f	/* Synch Offset Mask */
+#	define	SIOP_MAX_OFFSET	15
+#else
 #define	SIOP_SXFER_MO		0x1f	/* Synch Offset Mask */
 #	define	SIOP_MAX_OFFSET	16
+#endif
 #endif
 
 /* Scsi output data latch register (sodl) */
