@@ -66,7 +66,7 @@
 #elif defined(DRIVER_A4000T)
 #define BOOTMENU_NAME "NCR53C710"
 #elif defined(DRIVER_A4000T770)
-#define BOOTMENU_NAME "NCR53C770"
+#define BOOTMENU_NAME "A4000D+"
 #endif
 
 struct GfxBase *GfxBase;
