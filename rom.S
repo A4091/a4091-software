@@ -34,6 +34,12 @@ ER_FLAGS       EQU    (ZORRO_III_IO|ZORRO_III_EXT|ZORRO_III_RSVD)
 
 ROM_VECTOR     EQU     $0200      ; $80 in the ROM maps to $200 in the system
 
+CIAA_PRA       EQU     $bfe001
+CIAA_PRA_PA6   EQU     6
+POTGOR         EQU     $dff016
+POTGO          EQU     $dff034
+POTGOR_DATLY   EQU     10
+
         CODE
 
 
@@ -150,8 +156,32 @@ DiagEntry
         ; Check ROM for a4091.device. If it is not there, this
         ; is a nodevice rom
         ;----------------------------------------------------------
-        move.l  #(_device-RomStart),d0
         link    a4,#FP_SIZE     ; Allocate ReadHandle frame pointer
+
+        ; Skip loading the driver only if the left mouse button is
+        ; pressed and the right mouse button is not.
+        moveq.l #0,d0
+        move.b  CIAA_PRA,d0
+        btst    #CIAA_PRA_PA6,d0
+        bne.s   .probe_rom
+
+        move.w  #$0f00,POTGO
+        move.w  #$0400,d1
+.wait_rmb
+        dbra    d1,.wait_rmb
+
+        moveq.l #7,d1
+.check_rmb
+        moveq.l #0,d0
+        move.w  POTGOR,d0
+        btst    #POTGOR_DATLY,d0
+        beq.s   .probe_rom
+        dbra    d1,.check_rmb
+
+        bra     .no_resident
+
+.probe_rom
+        move.l  #(_device-RomStart),d0
         bsr InitHandle
 
         move.l #(65536-4),d0
