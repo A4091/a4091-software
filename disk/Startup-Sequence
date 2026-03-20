@@ -76,8 +76,12 @@ echo "       rdb        - Modify your Rigid Disk Block settings"
 echo "       RDBFlags   - Easily toggle LastDisk flag in RDB"
 IF EXISTS devs:a4092.device
 echo "       a4092flash - Firmware Update Utility for A4092"
-echo "       update     - Update A4092 to the latest firmware"
+echo "       update     - Flash the bundled ROM image onto the controller"
+ELSE
+IF EXISTS devs:a4770.device
+echo "       a4092flash - Firmware Update Utility for A4770"
+echo "       update     - Flash the bundled ROM image onto the controller"
+ENDIF
 ENDIF
 echo "       scsifix    - Redirects scsi.device access for convenience."
 echo ""
-

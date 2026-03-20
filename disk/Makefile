@@ -3,7 +3,7 @@ THIRDPARTY=../3rdparty
 DEVTEST=$(THIRDPARTY)/devtest/devtest
 
 disk: scsifix $(DEVTEST) rdb
-	./createdisk.sh
+	DEVICE=$(DEVICE) DEVNAME=$(DEVNAME) ./createdisk.sh
 
 $(DEVTEST): FORCE
 	$(MAKE) -s -C $(THIRDPARTY)/devtest
