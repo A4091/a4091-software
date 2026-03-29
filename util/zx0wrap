@@ -31,6 +31,7 @@ fi
 # Create temp file and ensure cleanup on exit
 TEMP=$(mktemp)
 trap 'rm -f "$TEMP"' EXIT
+SALVADOR=3rdparty/salvador/salvador
 
 # Function to write a 32-bit integer as big-endian binary
 write_be32() {
@@ -50,14 +51,29 @@ printf 'ZX0\001' > "$OUTPUT"
 USIZE=$(get_file_size "$INPUT")
 write_be32 "$USIZE" >> "$OUTPUT"
 
-if [ ! -x 3rdparty/salvador/salvador ]; then
+need_build=0
+
+if [ ! -x "$SALVADOR" ]; then
+  need_build=1
+else
+  if "$SALVADOR" >/dev/null 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 100 ]; then
+    need_build=1
+  fi
+fi
+
+if [ "$need_build" -ne 0 ]; then
   echo "Building salvador"
-  ( cd 3rdparty/salvador && make -s )
+  ( cd 3rdparty/salvador && make -s clean all )
   echo "done"
 fi
 
 # Compress to temp file
-3rdparty/salvador/salvador "$INPUT" "$TEMP"
+"$SALVADOR" "$INPUT" "$TEMP"
 
 CSIZE=$(get_file_size "$TEMP")
 write_be32 "$CSIZE" >> "$OUTPUT"
