@@ -9,8 +9,21 @@ LDLIBS=-lamiga -lgcc
 QUIET?=@
 .PHONY:	clean all
 
-GIT_REF_NAME = $(shell git branch --show-current)
-GIT_REF := "$(GIT_REF_NAME)-$(shell git rev-parse --short HEAD)"
+GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_REF_NAME := $(shell git branch --show-current 2>/dev/null)
+GIT_EXACT_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
+
+ifeq ($(strip $(GIT_REF_NAME)),)
+ifneq ($(filter release_%,$(GIT_EXACT_TAG)),)
+GIT_REF_NAME := release
+endif
+endif
+
+ifneq ($(strip $(GIT_REF_NAME)),)
+GIT_REF := "$(GIT_REF_NAME)-$(GIT_HASH)"
+else
+GIT_REF := "$(GIT_HASH)"
+endif
 BUILD_DATE := $(shell date '+%-d.%-m.%Y')
 DEVICE_VERSION  ?= 1
 DEVICE_REVISION ?= 0
