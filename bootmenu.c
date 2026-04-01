@@ -17,6 +17,8 @@
 
 #include "port.h"
 #include <stdio.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <exec/execbase.h>
@@ -57,6 +59,19 @@
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
 #include "util/a4092flash/mfg_flash.h"
 #include "util/a4092flash/flash.h"
+#endif
+
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#include "util/a4092flash/oem_flash.h"
+extern void zx0_decompress(const void *src, void *dst);
+static bool oem_bundle_valid = false;
+static int oem_selected_slot = -1;
+static struct oem_header oem_hdr;
+static UBYTE *oem_bitmap_data = NULL;
+static ULONG oem_bitmap_size = 0;
+static struct BitMap oem_bitmap;
+static WORD oem_draw_x = 0;
+static WORD oem_draw_y = 0;
 #endif
 
 #if defined(DRIVER_A4091)
@@ -108,7 +123,7 @@ static const struct TextAttr font_attr =
      FPF_ROMFONT
 };
 
-static void init_bootmenu(void)
+static bool open_bootmenu_screen(UWORD depth)
 {
     UWORD pens = 0xffff;
     struct TagItem taglist[2];
@@ -124,7 +139,7 @@ static void init_bootmenu(void)
     taglist[1].ti_Tag  = TAG_DONE;
 
     screen = OpenScreenTags(NULL,
-        SA_Depth,        3,
+        SA_Depth,        depth,
         SA_Font,         &font_attr,
         SA_Type,         CUSTOMSCREEN,
         SA_DisplayID,    monitor_id,
@@ -134,26 +149,190 @@ static void init_bootmenu(void)
         SA_Pens,         &pens,
         SA_VideoControl, taglist,
         TAG_DONE);
+    if (!screen)
+        return false;
 
     window = OpenWindowTags(NULL,
         WA_IDCMP,         (IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | BUTTONIDCMP | LISTVIEWIDCMP | MXIDCMP),
         WA_CustomScreen,  screen,
         WA_Flags,         (WFLG_NOCAREREFRESH | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP),
         TAG_DONE);
+    if (!window) {
+        CloseScreen(screen);
+        screen = NULL;
+        return false;
+    }
 
     visualInfo = GetVisualInfoA(screen,NULL);
+    if (!visualInfo) {
+        CloseWindow(window);
+        window = NULL;
+        CloseScreen(screen);
+        screen = NULL;
+        return false;
+    }
+    return true;
+}
 
-    /* Set up palette for pens 4-6 (pens 0-3 use standard Amiga defaults) */
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+static uint32_t oem_checksum(const struct oem_header *h)
+{
+    const uint32_t *words = (const uint32_t *)h;
+    uint32_t xor = 0;
+
+    for (size_t i = 0; i < (offsetof(struct oem_header, checksum) / 4); i++)
+        xor ^= words[i];
+    return xor;
+}
+
+static bool oem_variant_present(int slot)
+{
+    return slot >= 0 &&
+           slot < OEM_VARIANT_SLOTS &&
+           oem_hdr.variant[slot].compressed_size != 0;
+}
+
+static UWORD oem_variant_depth(int slot)
+{
+    return (UWORD)OEM_VARIANT_DEPTH(slot);
+}
+
+static const struct oem_variant *oem_selected_variant(void)
+{
+    return oem_variant_present(oem_selected_slot) ? &oem_hdr.variant[oem_selected_slot] : NULL;
+}
+
+static bool oem_validate_bundle(const struct oem_header *h, ULONG available_size)
+{
+    int present = 0;
+
+    if (!h || available_size < sizeof(*h) || !OEM_IS_VALID(h))
+        return false;
+    if (available_size < h->total_size)
+        return false;
+    if (oem_checksum(h) != h->checksum)
+        return false;
+
+    for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
+        const struct oem_variant *variant = &h->variant[slot];
+        UWORD depth = oem_variant_depth(slot);
+
+        if (variant->compressed_size == 0) {
+            if (variant->width != 0 ||
+                variant->height != 0 ||
+                variant->uncompressed_size != 0 ||
+                variant->data_offset != 0)
+                return false;
+            continue;
+        }
+
+        present++;
+
+        if (variant->width == 0 || variant->height == 0)
+            return false;
+        if (variant->data_offset < sizeof(*h))
+            return false;
+        if (variant->data_offset > h->total_size)
+            return false;
+        if (variant->compressed_size > (h->total_size - variant->data_offset))
+            return false;
+        if (variant->uncompressed_size != oem_expected_uncompressed_size(variant, depth))
+            return false;
+    }
+
+    return present > 0 && present == h->variant_count;
+}
+
+static WORD oem_resolve_coord(UWORD value, WORD span, UWORD size)
+{
+    if (value == OEM_COORD_CENTER)
+        return (span - (WORD)size) / 2;
+    return (WORD)value;
+}
+
+static void oem_free_cache(void)
+{
+    if (oem_bitmap_data) {
+        FreeMem(oem_bitmap_data, oem_bitmap_size);
+        oem_bitmap_data = NULL;
+    }
+    oem_bitmap_size = 0;
+    memset(&oem_bitmap, 0, sizeof(oem_bitmap));
+    oem_draw_x = 0;
+    oem_draw_y = 0;
+}
+
+static void probe_oem_bundle(void)
+{
+    const struct oem_header *h = NULL;
+    ULONG available_size = 0;
+
+    oem_bundle_valid = false;
+    oem_selected_slot = -1;
+    oem_free_cache();
+    if (!h && flash_get_type() != FLASH_TYPE_NONE) {
+        if (flash_readBuf(OEM_FLASH_OFFSET, (UBYTE *)&oem_hdr, sizeof(oem_hdr))) {
+            h = &oem_hdr;
+            available_size = OEM_FLASH_SIZE;
+        }
+    }
+    if (h && oem_validate_bundle(h, available_size)) {
+        if (h != &oem_hdr)
+            oem_hdr = *h;
+        oem_bundle_valid = true;
+    }
+}
+#endif
+
+static void set_bootmenu_palette(void)
+{
     struct ViewPort *vp = &screen->ViewPort;
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    const struct oem_variant *variant = oem_selected_variant();
+    if (variant) {
+        int num_colors = 1 << oem_variant_depth(oem_selected_slot);
+        for (int i = 0; i < num_colors; i++) {
+            uint16_t rgb = variant->palette[i];
+            SetRGB4(vp, i, (rgb >> 8) & 0xF, (rgb >> 4) & 0xF, rgb & 0xF);
+        }
+        return;
+    }
+#endif
+
+    /* Set up palette */
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
     /* A4092: Pen 4 (PCB) from NVRAM, default dark gray */
     SetRGB4(vp, 4, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
 #else
-    /* A4091/others: Pen 4 (PCB) default dark gray */
     SetRGB4(vp, 4, 4, 4, 4);
+#endif
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    oem_selected_slot = -1;
 #endif
     SetRGB4(vp, 5, 12, 10, 0);  /* Gold for Zorro connector */
     SetRGB4(vp, 6, 11, 6, 6);   /* Red for DIP switches */
+}
+
+static bool init_bootmenu(void)
+{
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    if (oem_bundle_valid) {
+        for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
+            if (!oem_variant_present(slot))
+                continue;
+            if (open_bootmenu_screen(oem_variant_depth(slot))) {
+                oem_selected_slot = slot;
+                break;
+            }
+        }
+    }
+#endif
+
+    if (!screen && !open_bootmenu_screen(3))
+        return false;
+
+    set_bootmenu_palette();
+    return true;
 }
 
 static void close_libraries(void)
@@ -165,10 +344,26 @@ static void close_libraries(void)
 
 static void cleanup_bootmenu(void)
 {
-    CloseWindow(window);
-    FreeVisualInfo(visualInfo);
-    CloseScreen(screen);
-    FreeGadgets(gadgets);
+    if (window) {
+        CloseWindow(window);
+        window = NULL;
+    }
+    if (visualInfo) {
+        FreeVisualInfo(visualInfo);
+        visualInfo = NULL;
+    }
+    if (screen) {
+        CloseScreen(screen);
+        screen = NULL;
+    }
+    if (gadgets) {
+        FreeGadgets(gadgets);
+        gadgets = NULL;
+    }
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    oem_free_cache();
+    oem_selected_slot = -1;
+#endif
     close_libraries();
 }
 
@@ -890,6 +1085,7 @@ struct drawing {
 #define HAVE_ARTWORK
 #else
 #undef HAVE_ARTWORK
+#define ART_Y_OFFSET 50
 #endif
 
 #ifdef HAVE_ARTWORK
@@ -927,6 +1123,86 @@ static void draw_card(const struct drawing c[], int length)
 #else
 #define draw_card(x,y)
 #endif
+
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+static bool prepare_oem_image(void)
+{
+    const struct oem_variant *variant = oem_selected_variant();
+    const UBYTE *comp_src = NULL;
+    UBYTE *comp_buf = NULL;
+    int bpr;
+
+    if (!variant)
+        return false;
+    if (oem_bitmap_data)
+        return true;
+
+    if (!comp_src) {
+        comp_buf = (UBYTE *)AllocMem(variant->compressed_size, MEMF_PUBLIC);
+        if (!comp_buf)
+            return false;
+        if (!flash_readBuf(OEM_FLASH_OFFSET + variant->data_offset,
+                           comp_buf, variant->compressed_size)) {
+            FreeMem(comp_buf, variant->compressed_size);
+            return false;
+        }
+        comp_src = comp_buf;
+    }
+
+    if (!comp_src)
+        return false;
+
+    /* BltBitMap may use the blitter, so source planes must be chip-accessible. */
+    oem_bitmap_data = (UBYTE *)AllocMem(variant->uncompressed_size,
+                                        MEMF_PUBLIC | MEMF_CHIP);
+    if (!oem_bitmap_data) {
+        if (comp_buf)
+            FreeMem(comp_buf, variant->compressed_size);
+        return false;
+    }
+    oem_bitmap_size = variant->uncompressed_size;
+
+    zx0_decompress(comp_src, oem_bitmap_data);
+    if (comp_buf)
+        FreeMem(comp_buf, variant->compressed_size);
+
+    /* Set up a non-interleaved source BitMap pointing into decompressed data */
+    memset(&oem_bitmap, 0, sizeof(oem_bitmap));
+    InitBitMap(&oem_bitmap, oem_variant_depth(oem_selected_slot),
+               variant->width, variant->height);
+    bpr = oem_bitmap.BytesPerRow;
+
+    for (int i = 0; i < oem_variant_depth(oem_selected_slot); i++) {
+        oem_bitmap.Planes[i] = (PLANEPTR)(oem_bitmap_data +
+                                          i * bpr * variant->height);
+    }
+
+    oem_draw_x = oem_resolve_coord(variant->x, screen->Width, variant->width);
+    oem_draw_y = oem_resolve_coord(variant->y, screen->Height, variant->height);
+    return true;
+}
+
+static bool display_oem_image(void)
+{
+    const struct oem_variant *variant = oem_selected_variant();
+
+    if (!variant)
+        return false;
+    if (!prepare_oem_image()) {
+        oem_selected_slot = -1;
+        oem_free_cache();
+        set_bootmenu_palette();
+        return false;
+    }
+
+    BltBitMap(&oem_bitmap, 0, 0,
+              screen->RastPort.BitMap,
+              oem_draw_x, oem_draw_y,
+              variant->width, variant->height,
+              0xC0, 0xFF, NULL);
+    WaitBlit();
+    return true;
+}
 
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
 static const struct Rectangle mfg_table[] =
@@ -1181,6 +1457,7 @@ static void mfg_page(void)
     page_footer();
 }
 #endif
+#endif
 
 static void main_page(void)
 {
@@ -1189,7 +1466,13 @@ static void main_page(void)
     current_page = 0;
     page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
-    draw_card(card, ARRAY_LENGTH(card));
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    if (!display_oem_image()) {
+#endif
+        draw_card(card, ARRAY_LENGTH(card));
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    }
+#endif
 
     ng.ng_LeftEdge   = 140;
     ng.ng_TopEdge    = 150;
@@ -1502,7 +1785,16 @@ void boot_menu(void)
     GadToolsBase  = OpenLibrary("gadtools.library",36);
 
     printf("Bootmenu: enter\n");
-    init_bootmenu();
+
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+    probe_oem_bundle();
+#endif
+
+    if (!init_bootmenu()) {
+        cleanup_bootmenu();
+        printf("Bootmenu: failed to open screen\n");
+        return;
+    }
     main_page();
     event_loop();
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
