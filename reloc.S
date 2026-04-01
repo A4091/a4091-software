@@ -534,5 +534,14 @@ InitHandle
 
 ; ----------------------------------------------------------------------
 
+        ; C callers pass arguments on the stack, but the depacker expects
+        ; a0=src and a1=dst on entry.
+        public  _zx0_decompress
+_zx0_decompress
+        move.l  4(sp),a0
+        move.l  8(sp),a1
+        bra     zx0_decompress
+
+        ; Internal assembly callers branch directly here with a0/a1 preset.
         INCLUDE "3rdparty/salvador/asm/68000/unzx0_68000.S"
         CODE
