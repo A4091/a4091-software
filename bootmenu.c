@@ -24,6 +24,7 @@
 #include <exec/execbase.h>
 #include <exec/types.h>
 #include <exec/libraries.h>
+#include <exec/resident.h>
 
 #include <proto/exec.h>
 #include <intuition/intuition.h>
@@ -61,7 +62,7 @@
 #include "util/a4092flash/flash.h"
 #endif
 
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
 #include "util/a4092flash/oem_flash.h"
 extern void zx0_decompress(const void *src, void *dst);
 static bool oem_bundle_valid = false;
@@ -72,6 +73,9 @@ static ULONG oem_bitmap_size = 0;
 static struct BitMap oem_bitmap;
 static WORD oem_draw_x = 0;
 static WORD oem_draw_y = 0;
+#ifdef OEM_KICKMODULE
+static const UBYTE *oem_blob_base = NULL; /* points to OEM bundle in ROM */
+#endif
 #endif
 
 #if defined(DRIVER_A4091)
@@ -174,7 +178,7 @@ static bool open_bootmenu_screen(UWORD depth)
     return true;
 }
 
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
 static uint32_t oem_checksum(const struct oem_header *h)
 {
     const uint32_t *words = (const uint32_t *)h;
@@ -270,15 +274,32 @@ static void probe_oem_bundle(void)
     oem_bundle_valid = false;
     oem_selected_slot = -1;
     oem_free_cache();
+#ifdef OEM_KICKMODULE
+    oem_blob_base = NULL;
+    {
+        struct Resident *res = FindResident("scsi_assets.resource");
+        if (res && res->rt_Init) {
+            h = (const struct oem_header *)res->rt_Init;
+            available_size = (ULONG)((const UBYTE *)res->rt_EndSkip -
+                                     (const UBYTE *)res->rt_Init);
+        }
+    }
+#endif
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
     if (!h && flash_get_type() != FLASH_TYPE_NONE) {
         if (flash_readBuf(OEM_FLASH_OFFSET, (UBYTE *)&oem_hdr, sizeof(oem_hdr))) {
             h = &oem_hdr;
             available_size = OEM_FLASH_SIZE;
         }
     }
+#endif
     if (h && oem_validate_bundle(h, available_size)) {
         if (h != &oem_hdr)
             oem_hdr = *h;
+#ifdef OEM_KICKMODULE
+        if (h != &oem_hdr)
+            oem_blob_base = (const UBYTE *)h;
+#endif
         oem_bundle_valid = true;
     }
 }
@@ -287,7 +308,7 @@ static void probe_oem_bundle(void)
 static void set_bootmenu_palette(void)
 {
     struct ViewPort *vp = &screen->ViewPort;
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     const struct oem_variant *variant = oem_selected_variant();
     if (variant) {
         int num_colors = 1 << oem_variant_depth(oem_selected_slot);
@@ -306,7 +327,7 @@ static void set_bootmenu_palette(void)
 #else
     SetRGB4(vp, 4, 4, 4, 4);
 #endif
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     oem_selected_slot = -1;
 #endif
     SetRGB4(vp, 5, 12, 10, 0);  /* Gold for Zorro connector */
@@ -315,7 +336,7 @@ static void set_bootmenu_palette(void)
 
 static bool init_bootmenu(void)
 {
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     if (oem_bundle_valid) {
         for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
             if (!oem_variant_present(slot))
@@ -360,7 +381,7 @@ static void cleanup_bootmenu(void)
         FreeGadgets(gadgets);
         gadgets = NULL;
     }
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     oem_free_cache();
     oem_selected_slot = -1;
 #endif
@@ -1124,7 +1145,7 @@ static void draw_card(const struct drawing c[], int length)
 #define draw_card(x,y)
 #endif
 
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
 static bool prepare_oem_image(void)
 {
     const struct oem_variant *variant = oem_selected_variant();
@@ -1137,6 +1158,11 @@ static bool prepare_oem_image(void)
     if (oem_bitmap_data)
         return true;
 
+#ifdef OEM_KICKMODULE
+    if (oem_blob_base)
+        comp_src = oem_blob_base + variant->data_offset;
+#endif
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
     if (!comp_src) {
         comp_buf = (UBYTE *)AllocMem(variant->compressed_size, MEMF_PUBLIC);
         if (!comp_buf)
@@ -1148,6 +1174,7 @@ static bool prepare_oem_image(void)
         }
         comp_src = comp_buf;
     }
+#endif
 
     if (!comp_src)
         return false;
@@ -1466,11 +1493,11 @@ static void main_page(void)
     current_page = 0;
     page_header(&ng, BOOTMENU_NAME " Early Startup Menu", TRUE);
 
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     if (!display_oem_image()) {
 #endif
         draw_card(card, ARRAY_LENGTH(card));
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     }
 #endif
 
@@ -1786,7 +1813,7 @@ void boot_menu(void)
 
     printf("Bootmenu: enter\n");
 
-#if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
+#if defined(FLASH_PARALLEL) || defined(FLASH_SPI) || defined(OEM_KICKMODULE)
     probe_oem_bundle();
 #endif
 

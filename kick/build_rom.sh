@@ -88,13 +88,21 @@ fi
   cp "${CURRWD}/${SCSIDEV%.device}.kick" "${SCSIDEV}"
   sed "s/DEVICE/${SCSIDEV}/" "${KICKDIR}/capitoline.script" > capitoline.script
 
+  # Include scsi_assets.resource if scsi_assets.kick was built
+  if [ -f "${CURRWD}/scsi_assets.kick" ]; then
+    cp "${CURRWD}/scsi_assets.kick" "scsi_assets.resource"
+    sed -i'' -e "/^add ${SCSIDEV}$/a\\
+add scsi_assets.resource" capitoline.script
+    echo "→ Including scsi_assets.resource in ROM"
+  fi
+
   echo "→ Running Capitoline (${CAPITOLINE})…"
   ./"${CAPITOLINE}" < capitoline.script > "${CURRWD}/capitoline.log"
 
   cat ROMs/A4000T.E0 ROMs/A4000T.F8 > \
     "${CURRWD}/A4000T_${SCSIDEV%.device}.rom"
 
-  rm -f ROMs/A4000T.E0 ROMs/A4000T.F8 "${SCSIDEV}"
+  rm -f ROMs/A4000T.E0 ROMs/A4000T.F8 "${SCSIDEV}" scsi_assets.resource
 )
 
 echo "✓   ROM created: ${CURRWD}/A4000T_${SCSIDEV%.device}.rom"

@@ -29,13 +29,13 @@ DEVNAME=a4092
 HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
-TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DARCH_710 -DDEVNAME="scsi710" -DNO_CONFIGDEV=1 -DHAVE_ROM=0
+TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DARCH_710 -DDEVNAME="scsi710" -DNO_CONFIGDEV=1 -DHAVE_ROM=0 -DOEM_KICKMODULE=1
 TARGETAFLAGS := -DNCR53C710=1
 DEVNAME=scsi710
 HAVE_ROM=n
 else ifeq ($(DEVICE),A4000T770)
 TARGET  := NCR53C770
-TARGETCFLAGS := -DDRIVER_A4000T770 -DNCR53C770=1 -DARCH_770 -DDEVNAME="scsi770" -DNO_CONFIGDEV=1 -DHAVE_ROM=0 -DSIOP_770_USE_4BIT_OFFSET=$(SIOP_770_USE_4BIT_OFFSET)
+TARGETCFLAGS := -DDRIVER_A4000T770 -DNCR53C770=1 -DARCH_770 -DDEVNAME="scsi770" -DNO_CONFIGDEV=1 -DHAVE_ROM=0 -DSIOP_770_USE_4BIT_OFFSET=$(SIOP_770_USE_4BIT_OFFSET) -DOEM_KICKMODULE=1
 TARGETAFLAGS := -DNCR53C770=1
 DEVNAME=scsi770
 HAVE_ROM=n
@@ -311,6 +311,10 @@ $(KICK): kickmodule.S reloc.S $(OBJDIR)/version.i Makefile $(PROG).zx0
 	@echo Building $@
 	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) $(TARGETAFLAGS)
 
+scsi_assets.kick: kickmodule.S $(OBJDIR)/version.i Makefile oem.bin
+	@echo Building $@
+	$(QUIET)$(VASM) -nosym -quiet -m68020 -Fhunkexe -o $@ $< -I $(OBJDIR) -I $(NDK_PATH) -DOEM_KICKMODULE=1
+
 $(OBJDIR):
 	$(QUIET)mkdir -p $@
 	$(QUIET)mkdir -p $@/3rdparty/mounter
@@ -328,7 +332,7 @@ clean:
 
 distclean: clean
 	@echo Cleaning really good.
-	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick a4091_*.lha
+	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick scsi_assets.kick a4091_*.lha
 	$(QUIET)rm -rf $(OBJDIR)
 
 $(OBJDIR)/CDVDFS:
@@ -336,6 +340,7 @@ $(OBJDIR)/CDVDFS:
 	$(QUIET)cp 3rdparty/CDVDFS/src/cdrom-handler $@
 
 kickstart:
+	$(QUIET)if [ -f oem.bin ]; then $(MAKE) -s scsi_assets.kick; fi
 	$(QUIET)kick/build_rom.sh $(PROG)
 
 $(ROM_DB):

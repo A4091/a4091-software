@@ -27,6 +27,44 @@
     INCLUDE "lvo/exec_lib.i"
     INCLUDE "version.i"
 
+    IFD OEM_KICKMODULE
+******* SCSI Assets Resource ****************************************
+**********************************************************************
+* A simple data-only Resident containing asset blobs (e.g. OEM boot
+* image).  No init function — RT_INIT points to the asset data so the
+* driver can locate it via FindResident() + res->rt_Init.
+*
+    rts
+res:
+    dc.w    RTC_MATCHWORD   ; Magic cookie $4AFC
+    dc.l    res             ; Pointer to self
+    dc.l    end_wrapper     ; Pointer to end of this module
+    dc.b    0               ; No auto-init (not RTF_COLDSTART)
+    dc.b    42              ; Version
+    dc.b    NT_RESOURCE     ; Resource, not a device
+    dc.b    0               ; Priority 0
+    dc.l    name_string     ; Pointer to the name
+    dc.l    id_string       ; Pointer to the ID string
+    dc.l    asset_data      ; RT_INIT = pointer to asset data (not a function)
+
+name_string:
+    dc.b    'scsi_assets.resource',0
+
+id_string:
+    dc.b    'SCSI Assets '
+    FULL_VERSION_STR
+    dc.b    ' ('
+    DATE_STR
+    dc.b    ')',0
+    CNOP    0,4
+
+asset_data:
+    incbin "oem.bin"
+    CNOP    0,4
+
+end_wrapper:
+
+    ELSE
 ******* Resident Structure *******************************************
 **********************************************************************
 * This makes the wrapper visible to the OS at boot time.
@@ -134,4 +172,6 @@ device_data:
     CNOP    0,4
 
 end_wrapper:
+    ENDC
+
     END
