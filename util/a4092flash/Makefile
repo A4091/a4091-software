@@ -63,7 +63,7 @@ a4092flash: $(SRCS) *.h
 	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 	$(QUIET)$(STRIP) -s $@
 
-mfgtool: mfgtool.c mfg_flash.h spi.c spi.h nibble_word.h
+mfgtool: mfgtool.c mfg_flash.h oem_flash.h spi.c spi.h nibble_word.h
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -o $@ mfgtool.c spi.c $(LDLIBS)
 

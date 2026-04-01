@@ -6,12 +6,14 @@
  * field support.
  *
  * Flash layout (512 KB W25X40):
- *   0x00000 - 0x7CFFF  (500 KB)  Firmware/ROM Image
+ *   0x00000 - 0x5FFFF  (384 KB)  Firmware/ROM Image
+ *   0x60000 - 0x7CFFF  (116 KB)  OEM Data (boot image)
  *   0x7D000 - 0x7EFFF  (8 KB)    NVRAM/Settings
  *   0x7F000 - 0x7FFFF  (4 KB)    Manufacturing Data
  *
  * Copyright (C) 2025 Stefan Reinauer
- * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifndef MFG_DATA_H

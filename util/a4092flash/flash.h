@@ -37,6 +37,7 @@ flash_type_t flash_get_type(void);
 /* Unified flash API - automatically dispatches to SPI or Parallel implementation */
 bool flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
 UBYTE flash_readByte(ULONG address);
+bool flash_readBuf(ULONG address, UBYTE *buf, ULONG len);
 void flash_writeByte(ULONG address, UBYTE data);
 bool flash_erase_chip(void);
 bool flash_erase_sector(ULONG address, ULONG sectorSize);

@@ -1,4 +1,5 @@
 // spi.h - Header for SPI flash functions
+// SPDX-License-Identifier: BSD-2-Clause
 
 #ifndef SPI_H
 #define SPI_H
@@ -47,6 +48,7 @@ bool spi_erase_bank(uint32_t base, ULONG bankSize);
 /* ===== Abstraction layer interface (called from flash.c) ===== */
 bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *size, ULONG *sectorSize);
 UBYTE spi_flash_readByte(ULONG address);
+bool spi_flash_readBuf(ULONG address, UBYTE *buf, ULONG len);
 void spi_flash_writeByte(ULONG address, UBYTE data);
 bool spi_flash_erase_sector(ULONG address, ULONG sectorSize);
 bool spi_flash_erase_chip(void);

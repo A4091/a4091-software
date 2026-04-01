@@ -362,6 +362,20 @@ UBYTE spi_flash_readByte(ULONG address)
 }
 
 /**
+ * spi_flash_readBuf
+ *
+ * @brief Bulk read from SPI flash
+ * @param address Starting byte address
+ * @param buf Buffer to read into
+ * @param len Number of bytes to read
+ * @return true on success
+ */
+bool spi_flash_readBuf(ULONG address, UBYTE *buf, ULONG len)
+{
+    return spi_read_buf(spi_base_address, address, buf, len);
+}
+
+/**
  * spi_flash_writeByte
  *
  * @brief Write a single byte to SPI flash

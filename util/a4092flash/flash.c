@@ -449,6 +449,32 @@ UBYTE flash_readByte(ULONG address)
 }
 
 /**
+ * flash_readBuf
+ *
+ * @brief Bulk read from flash (dispatches to SPI or parallel)
+ * @param address Starting address
+ * @param buf Buffer to read into
+ * @param len Number of bytes to read
+ * @return true on success
+ */
+bool flash_readBuf(ULONG address, UBYTE *buf, ULONG len)
+{
+#ifdef FLASH_SPI
+  if (current_flash_type == FLASH_TYPE_SPI) {
+    return spi_flash_readBuf(address, buf, len);
+  }
+#endif
+#ifdef FLASH_PARALLEL
+  if (current_flash_type == FLASH_TYPE_PARALLEL) {
+    for (ULONG i = 0; i < len; i++)
+      buf[i] = parallel_flash_readByte(address + i);
+    return true;
+  }
+#endif
+  return false;
+}
+
+/**
  * flash_writeByte
  *
  * @brief Write a byte to flash (dispatches to SPI or parallel)

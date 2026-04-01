@@ -26,10 +26,12 @@
 #include <proto/dos.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <errno.h>
 #include <limits.h>
 
 #include "mfg_flash.h"
+#include "oem_flash.h"
 
 
 #include <dos/dos.h>
@@ -575,6 +577,10 @@ static void usage(const char *argv0)
 "  %s writemfg <config_file>\n"
 "  %s readmfg <config_file>\n"
 "  %s dumpmfg\n"
+"  %s writeoem <infile> [--verify]\n"
+"  %s readoem <outfile>\n"
+"  %s eraseoem\n"
+"  %s dumpoem\n"
 "\n"
 "Notes:\n"
 "  - addr/len accept decimal or 0xHEX; len also supports K/M suffix (e.g. 64K).\n"
@@ -583,7 +589,11 @@ static void usage(const char *argv0)
 "  - 'writemfg' programs manufacturing data from a config file.\n"
 "  - 'readmfg' reads manufacturing data from flash to a config file.\n"
 "  - 'dumpmfg' displays manufacturing data on the console.\n"
-, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
+"  - 'writeoem' writes a pre-built OEM image blob (from mkoemblob.py) to flash.\n"
+"  - 'readoem' reads the OEM image blob from flash to a file.\n"
+"  - 'eraseoem' erases the OEM image section.\n"
+"  - 'dumpoem' displays OEM image header on the console.\n"
+, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
 }
 
 /* parse CSV of hex bytes for 'patch' */
@@ -876,6 +886,320 @@ static int cmd_dumpmfg(uint32_t base)
     return 0;
 }
 
+/* ===== oem commands ===== */
+
+static uint32_t oem_checksum(const struct oem_header *h)
+{
+    const uint32_t *words = (const uint32_t *)h;
+    uint32_t xor = 0;
+
+    for (size_t i = 0; i < (offsetof(struct oem_header, checksum) / 4); i++)
+        xor ^= words[i];
+    return xor;
+}
+
+static bool oem_verify_checksum(const struct oem_header *h)
+{
+    return oem_checksum(h) == h->checksum;
+}
+
+static bool oem_variant_present(const struct oem_variant *v)
+{
+    return v->compressed_size != 0;
+}
+
+static int oem_variant_depth(int slot)
+{
+    return OEM_VARIANT_DEPTH(slot);
+}
+
+static bool oem_validate_bundle(const struct oem_header *h, size_t available_size,
+                                char *error, size_t error_len)
+{
+    int present = 0;
+
+    if (available_size < sizeof(*h)) {
+        snprintf(error, error_len, "file too small for OEM header (%zu bytes)", available_size);
+        return false;
+    }
+    if (h->magic != OEM_MAGIC) {
+        snprintf(error, error_len, "bad OEM magic (0x%08lX)", (unsigned long)h->magic);
+        return false;
+    }
+    if (!OEM_IS_VALID(h)) {
+        snprintf(error, error_len, "unsupported OEM bundle header");
+        return false;
+    }
+    if (!oem_verify_checksum(h)) {
+        snprintf(error, error_len, "OEM header checksum mismatch");
+        return false;
+    }
+    if (available_size < h->total_size) {
+        snprintf(error, error_len, "blob shorter than total_size (%zu < %lu)",
+                 available_size, (unsigned long)h->total_size);
+        return false;
+    }
+
+    for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
+        const struct oem_variant *variant = &h->variant[slot];
+        int depth = oem_variant_depth(slot);
+
+        if (!oem_variant_present(variant)) {
+            if (variant->width != 0 ||
+                variant->height != 0 ||
+                variant->uncompressed_size != 0 ||
+                variant->data_offset != 0) {
+                snprintf(error, error_len, "variant slot %d has partial metadata but no payload", slot);
+                return false;
+            }
+            continue;
+        }
+
+        present++;
+
+        if (variant->width == 0 || variant->height == 0) {
+            snprintf(error, error_len, "variant slot %d has invalid dimensions %ux%u",
+                     slot, variant->width, variant->height);
+            return false;
+        }
+        if (variant->data_offset < sizeof(*h) || variant->data_offset > h->total_size) {
+            snprintf(error, error_len, "variant slot %d has invalid data offset 0x%08lX",
+                     slot, (unsigned long)variant->data_offset);
+            return false;
+        }
+        if (variant->compressed_size > (h->total_size - variant->data_offset)) {
+            snprintf(error, error_len, "variant slot %d payload overruns blob", slot);
+            return false;
+        }
+        if (variant->uncompressed_size != oem_expected_uncompressed_size(variant, depth)) {
+            snprintf(error, error_len,
+                     "variant slot %d uncompressed size mismatch (%lu != %lu)",
+                     slot,
+                     (unsigned long)variant->uncompressed_size,
+                     (unsigned long)oem_expected_uncompressed_size(variant, depth));
+            return false;
+        }
+    }
+
+    if (present == 0) {
+        snprintf(error, error_len, "bundle contains no variants");
+        return false;
+    }
+    if (present != h->variant_count) {
+        snprintf(error, error_len, "variant count mismatch (%u != %d)", h->variant_count, present);
+        return false;
+    }
+    return true;
+}
+
+static int cmd_writeoem(uint32_t base, const char *infile, bool do_verify)
+{
+    uint8_t *blob = NULL;
+    size_t blob_len = 0;
+    char error[160];
+
+    if (!read_file(infile, &blob, &blob_len))
+        return 2;
+
+    struct oem_header *h = (struct oem_header *)blob;
+    if (!oem_validate_bundle(h, blob_len, error, sizeof(error))) {
+        fprintf(stderr, "ERROR: %s\n", error);
+        free(blob);
+        return 2;
+    }
+    if (blob_len != h->total_size) {
+        fprintf(stderr, "ERROR: file size mismatch (header says %lu bytes, file is %zu)\n",
+                (unsigned long)h->total_size, blob_len);
+        free(blob);
+        return 2;
+    }
+
+    printf("OEM bundle: %u variant(s), %lu bytes total\n",
+           h->variant_count, (unsigned long)h->total_size);
+    for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
+        const struct oem_variant *variant = &h->variant[slot];
+        int depth = oem_variant_depth(slot);
+
+        if (!oem_variant_present(variant))
+            continue;
+
+        printf("  %d bitplanes: %ux%u at x=",
+               depth, variant->width, variant->height);
+        if (variant->x == OEM_COORD_CENTER)
+            printf("center");
+        else
+            printf("%u", variant->x);
+        printf(" y=");
+        if (variant->y == OEM_COORD_CENTER)
+            printf("center");
+        else
+            printf("%u", variant->y);
+        printf(", %lu -> %lu bytes\n",
+               (unsigned long)variant->uncompressed_size,
+               (unsigned long)variant->compressed_size);
+    }
+
+    if (!spi_clear_block_protect(base)) { free(blob); return 3; }
+
+    /* Erase OEM region in 4KB sectors */
+    printf("Erasing OEM region (0x%X, %u KB)...\n", OEM_FLASH_OFFSET, OEM_FLASH_SIZE / 1024);
+    for (uint32_t addr = OEM_FLASH_OFFSET; addr < OEM_FLASH_OFFSET + OEM_FLASH_SIZE; addr += SPI_SECTOR_SIZE_4K) {
+        if (!spi_sector_erase_4k(base, addr)) {
+            fprintf(stderr, "ERROR: erase failed at 0x%08lX\n", (unsigned long)addr);
+            free(blob);
+            return 3;
+        }
+        bar_progress(addr - OEM_FLASH_OFFSET + SPI_SECTOR_SIZE_4K, OEM_FLASH_SIZE, "erase");
+    }
+
+    /* Write blob */
+    printf("Writing %zu bytes to 0x%X...\n", blob_len, OEM_FLASH_OFFSET);
+    size_t done = 0;
+    while (done < blob_len) {
+        size_t chunk = (blob_len - done) > 4096 ? 4096 : (blob_len - done);
+        if (!spi_write_buf_pagewise(base, OEM_FLASH_OFFSET + done, blob + done, chunk, NULL)) {
+            fprintf(stderr, "ERROR: write failed at +0x%zx\n", done);
+            free(blob);
+            return 3;
+        }
+        done += chunk;
+        bar_progress(done, blob_len, "write");
+    }
+
+    if (do_verify) {
+        printf("Verifying...\n");
+        bool ok = spi_verify_buf(base, OEM_FLASH_OFFSET, blob, blob_len, bar_cb_verify);
+        free(blob);
+        if (!ok) { fprintf(stderr, "Verify FAILED\n"); return 4; }
+        printf("Verify OK\n");
+    } else {
+        free(blob);
+    }
+
+    printf("Write OK\n");
+    return 0;
+}
+
+static int cmd_readoem(uint32_t base, const char *outfile)
+{
+    struct oem_header h;
+    char error[160];
+
+    if (!spi_read_buf(base, OEM_FLASH_OFFSET, (uint8_t *)&h, sizeof(h))) {
+        fprintf(stderr, "ERROR: flash read failed\n");
+        return 3;
+    }
+    if (h.magic != OEM_MAGIC) {
+        fprintf(stderr, "No OEM data found (bad magic: 0x%08lX)\n", (unsigned long)h.magic);
+        return 2;
+    }
+    if (!oem_validate_bundle(&h, OEM_FLASH_SIZE, error, sizeof(error))) {
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 2;
+    }
+
+    size_t blob_len = h.total_size;
+    uint8_t *buf = (uint8_t *)malloc(blob_len);
+    if (!buf) { fprintf(stderr, "OOM\n"); return 2; }
+
+    if (!spi_read_buf(base, OEM_FLASH_OFFSET, buf, blob_len)) {
+        fprintf(stderr, "ERROR: flash read failed\n");
+        free(buf);
+        return 3;
+    }
+
+    if (!write_file(outfile, buf, blob_len)) {
+        free(buf);
+        return 3;
+    }
+
+    free(buf);
+    printf("OEM data (%zu bytes) written to %s\n", blob_len, outfile);
+    return 0;
+}
+
+static int cmd_eraseoem(uint32_t base)
+{
+    if (!spi_clear_block_protect(base))
+        return 3;
+
+    printf("Erasing OEM region (0x%X, %u KB)...\n", OEM_FLASH_OFFSET, OEM_FLASH_SIZE / 1024);
+    for (uint32_t addr = OEM_FLASH_OFFSET; addr < OEM_FLASH_OFFSET + OEM_FLASH_SIZE; addr += SPI_SECTOR_SIZE_4K) {
+        if (!spi_sector_erase_4k(base, addr)) {
+            fprintf(stderr, "ERROR: erase failed at 0x%08lX\n", (unsigned long)addr);
+            return 3;
+        }
+        bar_progress(addr - OEM_FLASH_OFFSET + SPI_SECTOR_SIZE_4K, OEM_FLASH_SIZE, "erase");
+    }
+
+    printf("Verifying erase...\n");
+    bool ok = spi_verify_erased(base, OEM_FLASH_OFFSET, OEM_FLASH_SIZE, bar_cb_erase_verify);
+    if (!ok) { fprintf(stderr, "Erase verify FAILED\n"); return 4; }
+
+    printf("Erase OK\n");
+    return 0;
+}
+
+static int cmd_dumpoem(uint32_t base)
+{
+    struct oem_header h;
+    char error[160];
+
+    if (!spi_read_buf(base, OEM_FLASH_OFFSET, (uint8_t *)&h, sizeof(h))) {
+        fprintf(stderr, "ERROR: flash read failed\n");
+        return 3;
+    }
+
+    if (h.magic != OEM_MAGIC) {
+        fprintf(stderr, "No OEM data found (bad magic: 0x%08lX)\n", (unsigned long)h.magic);
+        return 2;
+    }
+    if (!oem_validate_bundle(&h, OEM_FLASH_SIZE, error, sizeof(error))) {
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 2;
+    }
+
+    printf("=== OEM Image Bundle ===\n");
+    printf("Version:            %u\n", h.version);
+    printf("Variants present:   %u\n", h.variant_count);
+    printf("Total size:         %lu bytes\n", (unsigned long)h.total_size);
+    printf("Checksum:           0x%08lX (OK)\n", (unsigned long)h.checksum);
+
+    for (int slot = 0; slot < OEM_VARIANT_SLOTS; slot++) {
+        const struct oem_variant *variant = &h.variant[slot];
+        int depth = oem_variant_depth(slot);
+        int num_colors = 1 << depth;
+
+        if (!oem_variant_present(variant))
+            continue;
+
+        printf("\n[%d bitplanes]\n", depth);
+        printf("Dimensions:         %ux%u\n", variant->width, variant->height);
+        printf("X:                  %s", variant->x == OEM_COORD_CENTER ? "center" : "");
+        if (variant->x != OEM_COORD_CENTER)
+            printf("%u", variant->x);
+        printf("\n");
+        printf("Y:                  %s", variant->y == OEM_COORD_CENTER ? "center" : "");
+        if (variant->y != OEM_COORD_CENTER)
+            printf("%u", variant->y);
+        printf("\n");
+        printf("Data offset:        0x%08lX\n", (unsigned long)variant->data_offset);
+        printf("Compressed size:    %lu bytes\n", (unsigned long)variant->compressed_size);
+        printf("Uncompressed size:  %lu bytes\n", (unsigned long)variant->uncompressed_size);
+        printf("Compression ratio:  %lu%%\n",
+               (unsigned long)(variant->compressed_size * 100 / variant->uncompressed_size));
+        printf("Palette:");
+        for (int i = 0; i < num_colors; i++) {
+            if (i % 8 == 0)
+                printf("\n  ");
+            printf("#%03X ", variant->palette[i] & 0xFFF);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
+
 /* ===== main ===== */
 int main(int argc, char **argv)
 {
@@ -967,6 +1291,22 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"dumpmfg")==0) {
         return cmd_dumpmfg(base);
+    }
+    else if (strcmp(cmd,"writeoem")==0) {
+        if (argi >= argc) { usage(argv[0]); return 1; }
+        bool verify = false;
+        if (argi+1 < argc && strcmp(argv[argi+1],"--verify")==0) verify = true;
+        return cmd_writeoem(base, argv[argi], verify);
+    }
+    else if (strcmp(cmd,"readoem")==0) {
+        if (argi >= argc) { usage(argv[0]); return 1; }
+        return cmd_readoem(base, argv[argi]);
+    }
+    else if (strcmp(cmd,"eraseoem")==0) {
+        return cmd_eraseoem(base);
+    }
+    else if (strcmp(cmd,"dumpoem")==0) {
+        return cmd_dumpoem(base);
     }
 
     usage(argv[0]);
