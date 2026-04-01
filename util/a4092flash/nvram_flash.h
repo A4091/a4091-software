@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 #ifndef NVRAM_FLASH_H
 #define NVRAM_FLASH_H
 

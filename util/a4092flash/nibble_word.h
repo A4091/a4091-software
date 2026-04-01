@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: BSD-2-Clause
 /* A4092 nibble word format utilities
  *
  * The A4092 uses a custom 32-bit word mapping for flash access:
