@@ -28,8 +28,25 @@
 #define A4000T770_OFFSET_REGISTERS 0x00000000
 #define A4000T770_OFFSET_SWITCHES  0x00003000
 
-#define ZORRO_MFG_COMMODORE     0x0202
-#define ZORRO_PROD_A4091        0x0054
+#define ZORRO_MFG_COMMODORE 0x0202
+#define ZORRO_PROD_A4091    0x0054
+
+#define ZORRO_MFG_A4092       0xC0DE
+#define ZORRO_PROD_A4092      0x0001
+
+#define ZORRO_IS_LEGACY_A409X_ID(mfg, prod) \
+    (((mfg) == ZORRO_MFG_COMMODORE) && ((prod) == ZORRO_PROD_A4091))
+
+#define ZORRO_IS_A4092_ID(mfg, prod) \
+    (((mfg) == ZORRO_MFG_A4092) && ((prod) == ZORRO_PROD_A4092))
+
+#if defined(DRIVER_A4092)
+# define ZORRO_MFG_ID  ZORRO_MFG_A4092
+# define ZORRO_PROD_ID ZORRO_PROD_A4092
+#else
+# define ZORRO_MFG_ID  ZORRO_MFG_COMMODORE
+# define ZORRO_PROD_ID ZORRO_PROD_A4091
+#endif
 
 #define A4091_INTPRI 30
 #define A4091_IRQ    3

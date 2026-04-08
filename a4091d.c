@@ -55,7 +55,9 @@ static int      global_opened = 0;
 struct IOExtTD *global_tio;
 struct MsgPort *global_mp;
 
-#define DEVICE_NAME "a4091.device"
+#define STR(s) #s
+#define XSTR(s) STR(s)
+#define DEVICE_NAME XSTR(DEVNAME) ".device"
 
 static void
 close_exit(void)

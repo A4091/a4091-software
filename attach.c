@@ -328,7 +328,7 @@ a4091_find(UBYTE *boardnum)
         }
     } else {
         do {
-            cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+            cdev = FindConfigDev(cdev, ZORRO_MFG_ID, ZORRO_PROD_ID);
             if ((cdev != NULL) && (cdev->cd_Flags & CDB_CONFIGME)) {
                 cdev->cd_Flags &= ~CDB_CONFIGME;
                 as_addr = (uint32_t) (cdev->cd_BoardAddr);
@@ -339,7 +339,7 @@ a4091_find(UBYTE *boardnum)
         } while (cdev != NULL);
 
         if (cdev == NULL) {
-            cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
+            cdev = FindConfigDev(cdev, ZORRO_MFG_ID, ZORRO_PROD_ID);
             if (cdev != NULL) {
                 /* Just take the first board found */
                 as_addr = (uint32_t) (cdev->cd_BoardAddr);

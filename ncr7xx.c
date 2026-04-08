@@ -14,7 +14,7 @@
  * THE AUTHOR ASSUMES NO LIABILITY FOR ANY DAMAGE ARISING OUT OF THE USE
  * OR MISUSE OF THIS UTILITY OR INFORMATION REPORTED BY THIS UTILITY.
  */
-const char *version = "\0$VER: A4091 1.3 ("AMIGA_DATE") \xa9 Chris Hooper & Stefan Reinauer";
+const char *version = "\0$VER: ncr7xx 1.3 ("AMIGA_DATE") \xa9 Chris Hooper & Stefan Reinauer";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -213,6 +213,40 @@ static void a4091_state_restore(int skip_reset);
 
 static uint               runtime_flags = 0;
 static const char * const expansion_library_name = "expansion.library";
+static const char        *current_board_name = "A4091/A4092";
+
+typedef enum {
+    NCR_BOARD_NONE = 0,
+    NCR_BOARD_A4091,
+    NCR_BOARD_A4092,
+} ncr_board_type_t;
+
+static ncr_board_type_t
+ncr_board_type(const struct ConfigDev *cdev)
+{
+    if (cdev == NULL)
+        return (NCR_BOARD_NONE);
+    if (ZORRO_IS_A4092_ID(cdev->cd_Rom.er_Manufacturer,
+                          cdev->cd_Rom.er_Product))
+        return (NCR_BOARD_A4092);
+    if (ZORRO_IS_LEGACY_A409X_ID(cdev->cd_Rom.er_Manufacturer,
+                                 cdev->cd_Rom.er_Product))
+        return (NCR_BOARD_A4091);
+    return (NCR_BOARD_NONE);
+}
+
+static const char *
+ncr_board_name(ncr_board_type_t board_type)
+{
+    switch (board_type) {
+        case NCR_BOARD_A4091:
+            return ("A4091");
+        case NCR_BOARD_A4092:
+            return ("A4092");
+        default:
+            return ("A4091/A4092");
+    }
+}
 
 typedef struct {
     struct Interrupt *local_isr;   // Temporary interrupt server
@@ -406,8 +440,9 @@ decode_autoconfig(void)
     int      byte;
     const char * const *sizes = z2_config_sizes;
 
-    printf("A4091 Autoconfig area\n"
-           "  Reg Data Decode\n");
+    printf("%s Autoconfig area\n"
+           "  Reg Data Decode\n",
+           current_board_name);
     value = ~show_creg(0x00);
     switch (value >> 6) {
         case 0:
@@ -946,7 +981,8 @@ a4091_add_quick_irq_handler(uint32_t a4091_base)
     *ADDR8(a4091_base + A4091_OFFSET_QUICKINT) = (uint8_t)intnum;
 
     if (runtime_flags & FLAG_DEBUG)
-        printf("Quick interrupt vector %lu installed at A4091\n", intnum);
+        printf("Quick interrupt vector %lu installed at %s\n",
+               intnum, current_board_name);
 }
 
 /*
@@ -1043,7 +1079,7 @@ a4091_enable_driver_irq_handler(void)
         struct Node *node;
         struct Node *next;
         if (runtime_flags & FLAG_DEBUG)
-            printf("Restoring A4091 driver IRQ handler\n");
+            printf("Restoring driver IRQ handler\n");
         for (node = a4091_save.driver_isrs.lh_Head;
              node->ln_Succ != NULL; node = next) {
             next = node->ln_Succ;
@@ -1061,7 +1097,7 @@ a4091_enable_driver_task(void)
         struct Node *next;
 
         if (runtime_flags & FLAG_DEBUG)
-            printf("Restoring A4091 SCSI driver task\n");
+            printf("Restoring driver task\n");
         Disable();
         for (node = a4091_save.driver_rtask.lh_Head;
              node->ln_Succ != NULL; node = next) {
@@ -1209,14 +1245,15 @@ a4091_remove_driver_from_devlist(void)
     }
 
     do {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if (cdev != NULL) {
-            count++;
-            if ((pos == 0) || (pos == count)) {
-                addr = (uint32_t) cdev->cd_BoardAddr;
-                printf("found %08x %p %p\n", addr, cdev, cdev->cd_Driver);
-                break;
-            }
+        cdev = FindConfigDev(cdev, -1, -1);
+        if (ncr_board_type(cdev) == NCR_BOARD_NONE)
+            continue;
+
+        count++;
+        if ((pos == 0) || (pos == count)) {
+            addr = (uint32_t) cdev->cd_BoardAddr;
+            printf("found %08x %p %p\n", addr, cdev, cdev->cd_Driver);
+            break;
         }
     } while (cdev != NULL);
 
@@ -1957,7 +1994,7 @@ decode_switches(void)
         switches = *ADDR32(addr);
     } else {
         addr = a4091_switch_base;
-        printf("A4091");
+        printf("%s", current_board_name);
         switches = *ADDR8(addr);
     }
     printf(" Rear-access DIP switches\n");
@@ -3715,7 +3752,7 @@ test_bus_access(uint extended)
      */
     rc = execute_script((uint32_t *) a4091_rom_base, 0x10, 1);
     if (rc != 0) {
-        printf("SCRIPTS fetch from A4091 ROM %08x failed\n", a4091_rom_base);
+        printf("SCRIPTS fetch from controller ROM %08x failed\n", a4091_rom_base);
     }
 
     /* Try to execute a script from each power-of-2 address */
@@ -4553,7 +4590,7 @@ show_test_numbers(void)
 {
     printf("Numbers may be appended to the -t test command to run a specific "
            "unit test.\n"
-           "Example:  a4091 -t56\n"
+           "Example:  ncr7xx -t56\n"
            "          This will execute both test 5 and test 6.\n"
            "  -0  Device access: Check ROM header and Zorro config area\n"
            "  -1  Register access\n"
@@ -4594,7 +4631,7 @@ static const test_funcs_t test_funcs[] = {
 /*
  * test_card
  * ---------
- * Tests the specified A4091 card.
+ * Tests the specified A4091/A4092 card.
  */
 static int
 test_card(uint test_flags, uint extended)
@@ -4628,7 +4665,7 @@ test_card(uint test_flags, uint extended)
 /*
  * a4901_list
  * ----------
- * Display list of all A4091 cards found during autoconfig.
+ * Display list of all A4091/A4092 cards found during autoconfig.
  */
 static int
 a4091_list(uint32_t addr)
@@ -4645,40 +4682,44 @@ a4091_list(uint32_t addr)
     }
 
     do {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if (cdev != NULL) {
-            count++;
-            if (((addr > 0x10) && ((uint32_t) cdev->cd_BoardAddr != addr)) ||
-                ((addr > 0) && (addr <= 0x10) && (count != addr))) {
-                continue;
-            }
-            if (did_header == 0) {
-                did_header++;
-                printf("  Index Address  Size     Flags\n");
-            }
-            printf("  %-3d   %08x %08"PRIx32,
-                   count, (uint32_t) cdev->cd_BoardAddr,
-                   cdev->cd_BoardSize);
-            if (cdev->cd_Flags & CDF_SHUTUP)
-                printf(" ShutUp");
-            if (cdev->cd_Flags & CDF_CONFIGME)
-                printf(" ConfigMe");
-            if (cdev->cd_Flags & CDF_BADMEMORY)
-                printf(" BadMemory");
-            cbind.cb_ConfigDev = cdev;
-            if (GetCurrentBinding(&cbind, sizeof (cbind)) >= sizeof (cbind)) {
-                printf(" Bound");
-                if (cbind.cb_FileName != NULL)
-                    printf(" to %s", cbind.cb_FileName);
-                if (cbind.cb_ProductString != NULL)
-                    printf(" prod %s", cbind.cb_ProductString);
-            }
-            printf("\n");
+        ncr_board_type_t board_type;
+
+        cdev = FindConfigDev(cdev, -1, -1);
+        board_type = ncr_board_type(cdev);
+        if (board_type == NCR_BOARD_NONE)
+            continue;
+
+        count++;
+        if (((addr > 0x10) && ((uint32_t) cdev->cd_BoardAddr != addr)) ||
+            ((addr > 0) && (addr <= 0x10) && (count != addr))) {
+            continue;
         }
+        if (did_header == 0) {
+            did_header++;
+            printf("  Index Address  Size     Type   Flags\n");
+        }
+        printf("  %-3d   %08x %08"PRIx32" %-6s",
+               count, (uint32_t) cdev->cd_BoardAddr,
+               cdev->cd_BoardSize, ncr_board_name(board_type));
+        if (cdev->cd_Flags & CDF_SHUTUP)
+            printf(" ShutUp");
+        if (cdev->cd_Flags & CDF_CONFIGME)
+            printf(" ConfigMe");
+        if (cdev->cd_Flags & CDF_BADMEMORY)
+            printf(" BadMemory");
+        cbind.cb_ConfigDev = cdev;
+        if (GetCurrentBinding(&cbind, sizeof (cbind)) >= sizeof (cbind)) {
+            printf(" Bound");
+            if (cbind.cb_FileName != NULL)
+                printf(" to %s", cbind.cb_FileName);
+            if (cbind.cb_ProductString != NULL)
+                printf(" prod %s", cbind.cb_ProductString);
+        }
+        printf("\n");
     } while (cdev != NULL);
 
     if (count == 0)
-        printf("No A4091 cards detected\n");
+        printf("No A4091/A4092 cards detected\n");
     else if (did_header == 0)
         printf("Specified card %x not detected\n", addr);
 
@@ -4690,7 +4731,7 @@ a4091_list(uint32_t addr)
 /*
  * a4091_find
  * ----------
- * Locates the specified A4091 in the system (by autoconfig order).
+ * Locates the specified A4091/A4092 in the system (by autoconfig order).
  */
 static uint32_t
 a4091_find(uint32_t pos)
@@ -4705,14 +4746,20 @@ a4091_find(uint32_t pos)
         return (-1);
     }
 
+    current_board_name = "A4091/A4092";
     do {
-        cdev = FindConfigDev(cdev, ZORRO_MFG_COMMODORE, ZORRO_PROD_A4091);
-        if (cdev != NULL) {
-            count++;
-            if ((pos == 0) || (pos == count)) {
-                addr = (uint32_t) cdev->cd_BoardAddr;
-                break;
-            }
+        ncr_board_type_t board_type;
+
+        cdev = FindConfigDev(cdev, -1, -1);
+        board_type = ncr_board_type(cdev);
+        if (board_type == NCR_BOARD_NONE)
+            continue;
+
+        count++;
+        if ((pos == 0) || (pos == count)) {
+            addr = (uint32_t) cdev->cd_BoardAddr;
+            current_board_name = ncr_board_name(board_type);
+            break;
         }
     } while (cdev != NULL);
 
@@ -4814,15 +4861,15 @@ usage(void)
            "\t-D  perform DMA from/to Amiga memory: <src> <dst> <len>\n"
            "\t-f  ignore fact enforcer is present or driver is loaded\n"
            "\t-h  display this help text\n"
-           "\t-k  kill (disable) all active A4091 device drivers\n"
+           "\t-k  kill (disable) all active A4091/A4092 device drivers\n"
            "\t-l  specify the <number> of test iterations to run\n"
            "\t-L  loop until failure\n"
-           "\t-P  probe and list all detected A4091 cards\n"
+           "\t-P  probe and list all detected A4091/A4092 cards\n"
            "\t-q  quiet mode (only show errors)\n"
            "\t-Q  use Zorro III quick interrupts (lower latency)\n"
            "\t-r  display NCR53C710 registers\n"
            "\t-s  decode device external switches\n"
-           "\t-S  attempt to suspend all A4091 drivers while testing\n"
+           "\t-S  attempt to suspend all A4091/A4092 drivers while testing\n"
            "\t-t  test card\n"
            "\t-?  show individual test steps\n",
            version + 7);
@@ -4842,8 +4889,8 @@ main(int argc, char **argv)
     int      flag_dma       = 0;  /* Copy memory using 53C710 DMA engine */
     int      flag_force     = 0;  /* Ignore the fact that enforcer is present */
     int      flag_loop      = 0;  /* Loop all tests until failure */
-    int      flag_kill      = 0;  /* Kill active A4091 device driver */
-    int      flag_list      = 0;  /* List all A4091 cards found */
+    int      flag_kill      = 0;  /* Kill active A4091/A4092 device driver */
+    int      flag_list      = 0;  /* List all A4091/A4092 cards found */
     int      flag_quick_int = 0;  /* Use Zorro III quick interrupts */
     int      flag_regs      = 0;  /* Decode device registers */
     int      flag_switches  = 0;  /* Decode device external switches */
@@ -5032,14 +5079,14 @@ main(int argc, char **argv)
         a4091_base = addr;
 
     if (a4091_base == (uint32_t)-1) {
-        printf("No A4091 cards detected\n");
+        printf("No A4091/A4092 cards detected\n");
         exit(1);
     }
     if (a4091_base == A4000T_SCSI_BASE)
         runtime_flags |= FLAG_IS_A4000T;
     if (flag_verbose) {
         printf("%s at 0x%08x\n",
-               (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : "A4091",
+               (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : current_board_name,
                a4091_base);
     }
 
@@ -5069,14 +5116,14 @@ main(int argc, char **argv)
             (flag_force == 0) &&
             (a4091_show_or_disable_driver_irq_handler(0, 1) +
              a4091_show_or_disable_driver_task(0, 1) > 0)) {
-            printf("A4091 driver active in system, which will conflict with "
+            printf("A4091/A4092 driver active in system, which will conflict with "
                    "this tool.\n"
                    "You should use a ROM with no driver. Other options:\n"
                    "  1) \"avail flush\" might remove the open source driver "
                    "if it isn't active.\n"
                    "     Disabling mount of partitions at boot may help with "
                    "this.\n"
-                   "  2) \"a4091 -k\" might remove the driver or just crash.\n"
+                   "  2) \"ncr7xx -k\" might remove the driver or just crash.\n"
                    "  3) The \"-S\" option will attempt to suspend the driver "
                    "while testing.\n"
                    "  4) The \"-f\" option may be used to ignore the driver "

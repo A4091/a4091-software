@@ -16,8 +16,13 @@ REVISION        EQU     DEVICE_REVISION ; also the low word of serial number
 
 * See the Amiga Hardware Manual for more info.
 
-MANUF_ID        EQU    514        ; Commodore West Chester
-PRODUCT_ID      EQU     84        ; A4091
+        IFD     DRIVER_A4092
+MANUF_ID        EQU    $c0de      ; Reinauer
+PRODUCT_ID      EQU       1       ; A4092
+        ELSE
+MANUF_ID        EQU     514       ; Commodore West Chester
+PRODUCT_ID      EQU      84       ; A4091
+        ENDC
 
 ZORRO_III      EQU     $80
 AUTOBOOT_ROM   EQU     $10

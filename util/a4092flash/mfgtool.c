@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <limits.h>
 
+#include "../../a4091.h"
 #include "mfg_flash.h"
 #include "oem_flash.h"
 
@@ -40,15 +41,40 @@
 #include "../../ndkcompat.h"
 #include "spi.h"
 
-/* A4092 board identification (matches main.c) */
-#define MANUF_ID_COMMODORE_BRAUNSCHWEIG 513
-#define MANUF_ID_COMMODORE              514
-#define PROD_ID_A4092                   84
-
 #if __GNUC__ < 11
 struct ExecBase *SysBase;
 #endif
 struct ExpansionBase *ExpansionBase = NULL;
+
+static bool board_has_legacy_a409x_id(const struct ConfigDev *cd)
+{
+    return ZORRO_IS_LEGACY_A409X_ID(cd->cd_Rom.er_Manufacturer,
+                                    cd->cd_Rom.er_Product);
+}
+
+static bool board_has_a4092_id(const struct ConfigDev *cd)
+{
+    return ZORRO_IS_A4092_ID(cd->cd_Rom.er_Manufacturer,
+                             cd->cd_Rom.er_Product);
+}
+
+static bool a4092_spi_flash_present(uint32_t base)
+{
+    uint8_t mfg = 0, type = 0, cap = 0;
+
+    spi_read_id(base, &mfg, &type, &cap);
+    if (mfg != 0xEF)
+        return false;
+
+    switch ((type << 8) | cap) {
+        case 0x3013:
+        case 0x4013:
+        case 0x4017:
+            return true;
+        default:
+            return false;
+    }
+}
 
 #undef FindConfigDev
 // NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
@@ -1214,29 +1240,30 @@ int main(int argc, char **argv)
     uint32_t base = 0;
     struct ConfigDev *cd = NULL;
     int boards_found = 0;
+    int unsupported_a4091_found = 0;
     if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library",0)) != NULL) {
         while ((cd = FindConfigDev(cd,-1,-1)) != NULL) {
-            switch (cd->cd_Rom.er_Manufacturer) {
-                case MANUF_ID_COMMODORE:
-                case MANUF_ID_COMMODORE_BRAUNSCHWEIG:
-                    if (cd->cd_Rom.er_Product == PROD_ID_A4092) {
-                        base = (uint32_t)(uintptr_t)cd->cd_BoardAddr;
-                        boards_found++;
-                        break;
-                    } else {
-                        continue;
-                    }
-                default:
-                    continue;
+            uint32_t candidate_base = (uint32_t)(uintptr_t)cd->cd_BoardAddr;
+
+            if (board_has_a4092_id(cd) || (board_has_legacy_a409x_id(cd) &&
+                                           a4092_spi_flash_present(candidate_base))) {
+                base = candidate_base;
+                boards_found++;
+                break;
             }
-            if (base) break; /* Use first matching board */
+
+            if (board_has_legacy_a409x_id(cd))
+                unsupported_a4091_found = 1;
         }
         CloseLibrary((struct Library *)ExpansionBase);
         ExpansionBase = NULL;
     }
 
     if (!base || boards_found == 0) {
-        fprintf(stderr, "No A4092 board found via expansion.library\n");
+        if (unsupported_a4091_found)
+            fprintf(stderr, "Found A4091-compatible board(s), but mfgtool only works on A4092 SPI hardware\n");
+        else
+            fprintf(stderr, "No A4092 board found via expansion.library\n");
         return 1;
     } else {
 	printf("A4092 found at 0x%"PRIx32"\n", base);

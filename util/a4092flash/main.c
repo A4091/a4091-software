@@ -27,15 +27,11 @@
 #include <proto/alib.h>
 #include <dos/dosextens.h>
 
+#include "../../a4091.h"
 #include "flash.h"
 #include "main.h"
 #include "config.h"
 #include "nvram_flash.h"
-
-#define MANUF_ID_COMMODORE_BRAUNSCHWEIG 513
-#define MANUF_ID_COMMODORE 514
-
-#define PROD_ID_A4092  84
 
 #define A4091_ROM_MAGIC1 0xFFFF5352
 #define A4091_ROM_MAGIC2 0x2F434448
@@ -52,6 +48,18 @@ struct nvramParams nvramParams;
 #ifdef SHARED_REGISTERS
 bool devsInhibited = false;
 #endif
+
+static bool board_has_legacy_a409x_id(const struct ConfigDev *cd)
+{
+  return ZORRO_IS_LEGACY_A409X_ID(cd->cd_Rom.er_Manufacturer,
+                                  cd->cd_Rom.er_Product);
+}
+
+static bool board_has_a4092_id(const struct ConfigDev *cd)
+{
+  return ZORRO_IS_A4092_ID(cd->cd_Rom.er_Manufacturer,
+                           cd->cd_Rom.er_Product);
+}
 
 /**
  * _ColdReboot()
@@ -281,6 +289,8 @@ int main(int argc, char *argv[])
 
   int rc = 0;
   int boards_found = 0;
+  int a4092_found = 0;
+  int board_errors = 0;
 
   void *driver_buffer = NULL;
 
@@ -353,32 +363,46 @@ int main(int argc, char *argv[])
       struct scsiBoard board;
 
       while ((cd = FindConfigDev(cd,-1,-1)) != NULL) {
+        bool legacy_id;
+        UBYTE manufId = 0;
+        UBYTE devId = 0;
+        ULONG sectorSize = 0;
+        ULONG flashSize = 0;
 
         board.cd = cd;
+        legacy_id = board_has_legacy_a409x_id(cd);
+        if (!legacy_id && !board_has_a4092_id(cd))
+          continue;
 
-        switch (cd->cd_Rom.er_Manufacturer) {
-          case MANUF_ID_COMMODORE:
-          case MANUF_ID_COMMODORE_BRAUNSCHWEIG:
-            if (cd->cd_Rom.er_Product == PROD_ID_A4092) {
-              printf("Found A4091 / A4092");
-              setup_a4092_board(&board);
-              break;
+        boards_found++;
+        setup_a4092_board(&board);
+
+        if (!flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
+          if (legacy_id) {
+            if (manufId == 0x9f && devId == 0xaf) {
+              printf("Found A4091 at Address 0x%06x\n", (int)cd->cd_BoardAddr);
+              printf("a4092flash does not work on A4091.\n");
             } else {
-              continue; // Skip this board
+              printf("Found legacy-ID board at Address 0x%06x\n",
+                     (int)cd->cd_BoardAddr);
+              printf("No supported A4092 flash detected (Manufacturer: %02X Device: %02X)\n",
+                     manufId, devId);
+              board_errors = 1;
             }
-
-          default:
-            continue; // Skip this board
+          } else {
+            printf("Error: A4092 flash not detected (Manufacturer: %02X Device: %02X)\n",
+                   manufId, devId);
+            board_errors = 1;
+          }
+          continue;
         }
 
-        printf(" at Address 0x%06x\n",(int)cd->cd_BoardAddr);
-        boards_found++;
+        a4092_found++;
+        printf("Found %sA4092 at Address 0x%06x\n",
+               legacy_id ? "legacy-ID " : "",
+               (int)cd->cd_BoardAddr);
 
-        UBYTE manufId,devId;
-        ULONG sectorSize;
-        ULONG flashSize;
-
-        if (flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
+        {
           // Display version information before prompting
           if (config->writeFlash && driver_buffer) {
             char flash_version[128];
@@ -462,18 +486,16 @@ int main(int argc, char *argv[])
 	  if (config->nvramFlash) {
             execute_nvram_operations(&board);
 	  }
-
-        } else {
-	  if (manufId == 0x9f && devId == 0xaf)
-            printf("This is likely an A4091. Only A4092 has flash memory.\n");
-	  else
-            printf("Error: A4092 - Unknown Flash device Manufacturer: %02X Device: %02X\n", manufId, devId);
-          rc = 5;
         }
       }
 
       if (boards_found == 0) {
         printf("No A4092 board(s) found\n");
+        rc = 5;
+      } else if (a4092_found == 0) {
+        rc = 5;
+      } else if (board_errors) {
+        rc = 5;
       }
     } else {
       printf("Couldn't open Expansion.library.\n");
