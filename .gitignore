@@ -1,4 +1,4 @@
-objs/
+objs-*/
 attic/
 .cscope*
 *.uaem

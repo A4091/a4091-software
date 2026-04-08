@@ -4,3 +4,4 @@ rdb
 scsifix
 scsifix.o
 system-configuration
+update.tmp
