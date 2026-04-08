@@ -33,6 +33,8 @@
 
 #define ZORRO_MFG_A4092       0xC0DE
 #define ZORRO_PROD_A4092      0x0001
+#define ZORRO_MFG_A4770       0xC0DE
+#define ZORRO_PROD_A4770      0x0002
 
 #define ZORRO_IS_LEGACY_A409X_ID(mfg, prod) \
     (((mfg) == ZORRO_MFG_COMMODORE) && ((prod) == ZORRO_PROD_A4091))
@@ -40,9 +42,15 @@
 #define ZORRO_IS_A4092_ID(mfg, prod) \
     (((mfg) == ZORRO_MFG_A4092) && ((prod) == ZORRO_PROD_A4092))
 
+#define ZORRO_IS_A4770_ID(mfg, prod) \
+    (((mfg) == ZORRO_MFG_A4770) && ((prod) == ZORRO_PROD_A4770))
+
 #if defined(DRIVER_A4092)
 # define ZORRO_MFG_ID  ZORRO_MFG_A4092
 # define ZORRO_PROD_ID ZORRO_PROD_A4092
+#elif defined(DRIVER_A4770)
+# define ZORRO_MFG_ID  ZORRO_MFG_A4770
+# define ZORRO_PROD_ID ZORRO_PROD_A4770
 #else
 # define ZORRO_MFG_ID  ZORRO_MFG_COMMODORE
 # define ZORRO_PROD_ID ZORRO_PROD_A4091
@@ -51,10 +59,14 @@
 #define A4091_INTPRI 30
 #define A4091_IRQ    3
 
-#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092) || defined(DRIVER_A4770)
 # define HW_OFFSET_REGISTERS     A4091_OFFSET_REGISTERS
 # define HW_OFFSET_SWITCHES      A4091_OFFSET_SWITCHES
-# define HW_SCLK_CLOCK_FREQ      50     /* SCSI clock input = 50 MHz */
+# if defined(DRIVER_A4770)
+#  define HW_SCLK_CLOCK_FREQ     50     /* 53C770 SCLK input before doubling */
+# else
+#  define HW_SCLK_CLOCK_FREQ     50     /* SCSI clock input = 50 MHz */
+# endif
 # define HW_IS_ZORRO3            1
 #elif defined(DRIVER_A4000T)
 # define HW_SCSI_BASE            A4000T_SCSI_BASE

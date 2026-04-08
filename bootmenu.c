@@ -82,6 +82,8 @@ static const UBYTE *oem_blob_base = NULL; /* points to OEM bundle in ROM */
 #define BOOTMENU_NAME "A4091"
 #elif defined(DRIVER_A4092)
 #define BOOTMENU_NAME "A4092"
+#elif defined(DRIVER_A4770)
+#define BOOTMENU_NAME "A4770 Cheetah"
 #elif defined(DRIVER_A4000T)
 #define BOOTMENU_NAME "NCR53C710"
 #elif defined(DRIVER_A4000T770)
@@ -322,7 +324,7 @@ static void set_bootmenu_palette(void)
 
     /* Set up palette */
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
-    /* A4092: Pen 4 (PCB) from NVRAM, default dark gray */
+    /* Flash-backed boards: pen 4 (PCB) from NVRAM, default dark gray */
     SetRGB4(vp, 4, asave->menu_color_r, asave->menu_color_g, asave->menu_color_b);
 #else
     SetRGB4(vp, 4, 4, 4, 4);
@@ -439,6 +441,8 @@ static void page_header(struct NewGadget *ng, STRPTR title, BOOL welcome)
         Print("Welcome to your Amiga 4091 Zorro III SCSI-2 Host Controller",0,32,TRUE);
 #elif defined(DRIVER_A4092)
         Print("Welcome to your Amiga 4092 Zorro III SCSI-2 Host Controller",0,32,TRUE);
+#elif defined(DRIVER_A4770)
+        Print("Welcome to your Amiga 4770 Cheetah Zorro III SCSI Host Controller",0,32,TRUE);
 #elif defined(DRIVER_A4000T)
         Print(" Welcome to Amiga 4000(T) SCSI Configuration & Diagnostics",0,32,TRUE);
 #elif defined(DRIVER_A4000T770)
@@ -712,7 +716,7 @@ static void about_page(void)
     page_header(&ng, "About " BOOTMENU_NAME, TRUE);
 
     SetAPen(&screen->RastPort, 1);
-#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092) || defined(DRIVER_A4770)
     Print("Thank you to Dave Haynie, Scott Schaeffer, Greg", 118,68,FALSE);
     Print("Berlin and Terry Fisher for the original A4091.",118,77,FALSE);
 #elif defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)

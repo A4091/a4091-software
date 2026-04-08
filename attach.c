@@ -284,7 +284,7 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
-#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092) || defined(DRIVER_A4770)
 /*
  * a4091_find
  * ----------
@@ -404,7 +404,7 @@ uint8_t get_dip_switches(void)
 static uint8_t
 get_sc_host_id(const struct siop_softc *sc, uint8_t dip_switches)
 {
-#ifdef NCR53C770
+#ifdef DRIVER_A4000T770
     if (sc != NULL && sc->sc_siopp != NULL)
         return (~sc->sc_siopp->siop_gpreg) & 0x0f;
 #else
@@ -428,6 +428,9 @@ get_sc_target_count(uint8_t dip_switches)
 {
 #ifdef DRIVER_A4000T770
     return (dip_switches & BIT(0)) ? 8 : 16;
+#elif defined(DRIVER_A4770)
+    (void)dip_switches;
+    return 16;
 #else
     (void)dip_switches;
     return 8;
@@ -520,12 +523,15 @@ a4091_validate(uint32_t dev_base)
 #if defined(NCR53C770)
 #define siop_scratch siop_scratcha
 #endif
-    /* Create write pointer offset for 68030 cache write-allocate workaround */
+    /*
+     * Create write pointer offset for the cache write-allocate workaround.
+     * A4091/A4092 use the +0x40 write shadows; A4000T and 53C770 boards
+     * expose the TEMP/SCRATCH write shadows at +0x80.
+     */
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092)
     siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x40);
-#elif defined(DRIVER_A4000T)
-    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
-#elif defined(DRIVER_A4000T770)
+#elif defined(DRIVER_A4770) || defined(DRIVER_A4000T) || \
+    defined(DRIVER_A4000T770)
     siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
 #endif
 
@@ -594,7 +600,7 @@ init_chan(device_t self, UBYTE *boardnum)
     uint8_t dip_switches;
     int rc;
 
-#if defined(DRIVER_A4091) || defined(DRIVER_A4092)
+#if defined(DRIVER_A4091) || defined(DRIVER_A4092) || defined(DRIVER_A4770)
     dev_base = a4091_find(boardnum);
 #else
     dev_base = a4000t_find(boardnum);
@@ -630,7 +636,7 @@ init_chan(device_t self, UBYTE *boardnum)
 #if defined(DRIVER_A4000T) || defined(DRIVER_A4000T770)
     sc->sc_dcntl = SIOP_DCNTL_EA;  /* A4000T: Connect _SLACK/_STERM */
 #else
-    sc->sc_dcntl = 0;              /* A4091 */
+    sc->sc_dcntl = 0;              /* Zorro cards */
 #endif
     TAILQ_INIT(&sc->ready_list);
     TAILQ_INIT(&sc->nexus_list);
@@ -665,6 +671,11 @@ init_chan(device_t self, UBYTE *boardnum)
 
     asave->as_callout_head = &callout_head;
 
+#ifdef DRIVER_A4770
+    /* Bring up the A4770 as wide but non-Ultra until board policy is exposed. */
+    sc->sc_flags |= SIOP_FORCE_NON_ULTRA;
+#endif
+
 #ifdef DRIVER_A4000T770
     if ((dip_switches & BIT(0)) != 0)
         sc->sc_flags |= SIOP_FORCE_NARROW;
@@ -679,7 +690,7 @@ init_chan(device_t self, UBYTE *boardnum)
 
     /*
      * Rear-access DIP switches
-#ifdef NCR53C770
+#ifdef DRIVER_A4000T770
      *   SW 8 Off  Termination High On              Handled by hardware
      *   SW 7 Off  Termination Low On               Handled by hardware
      *   SW 6 Off  Synchronous SCSI Mode            sc->sc_nosync

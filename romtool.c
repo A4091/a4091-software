@@ -77,17 +77,17 @@ void inventory(char *filename, struct file *rom)
 
 	if (ntohl(inv->signature[0]) != 0xFFFF5352 ||
 		ntohl(inv->signature[1]) != 0x2F434448) {
-		printf("%s: %dkB A4091 ROM image. Signature: %08x%08x (INVALID)\n\n",
+		printf("%s: %dkB SCSI ROM image. Signature: %08x%08x (INVALID)\n\n",
 			filename, (rom->len==32768) ? 32:64,
 			ntohl(inv->signature[0]), ntohl(inv->signature[1]));
 		return;
 	}
-	printf("%s: %dkB A4091 ROM image. Signature: OK\n\n",
+	printf("%s: %dkB SCSI ROM image. Signature: OK\n\n",
 			filename, (rom->len==32768) ? 32:64);
 
 	printf(" ROM header:   offset = 0x000000 length = 0x%06x\n",
 			ntohl(inv->device_offset));
-	printf(" a4091.device: offset = 0x%06x length = 0x%06x ",
+	printf(" Driver:       offset = 0x%06x length = 0x%06x ",
 			ntohl(inv->device_offset), ntohl(inv->device_len));
 	is_compressed(rom->addr + ntohl(inv->device_offset));
 
@@ -359,7 +359,7 @@ static void print_usage(const char *name)
 	printf("Usage: %s [-vh?] <filename>\n", name);
 	printf("\n"
 	       "   -o | --output <filename>              output filename\n"
-	       "   -D | --device <filename>              path to a4091.device\n"
+	       "   -D | --device <filename>              path to driver image\n"
 	       "   -F | --filesystem <filename>          path to CDFileSystem\n"
 	       "   -T | --dostype <val>                  DosType (eg. 0x43443031)\n"
 	       "   -s | --skip                           skip first filesystem slot\n"
@@ -469,7 +469,7 @@ int main(int argc, char *argv[])
 	//char *image = rom.addr;
 
 	if (rom.len != (32*1024) && rom.len != (64*1024)) {
-		printf("A4091 ROM file needs to be 32k or 64k in size\n");
+		printf("ROM file needs to be 32k or 64k in size\n");
 		exit(EXIT_FAILURE);
 	}
 

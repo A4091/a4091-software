@@ -847,7 +847,7 @@ siopnginitialize(struct siop_softc *sc)
 	if (sc->sc_minsync < 25)
 		sc->sc_minsync = 25;
 	if (siopng_use_clock_doubler(sc) || siopng_use_extra_clock_cycle(sc))
-		sc->sc_minsync >>= 1;
+		sc->sc_minsync = (sc->sc_minsync + 1) >> 1;
 	if (!siopng_ultra_enabled(sc) && sc->sc_minsync < 25)
 		sc->sc_minsync = 25;
 

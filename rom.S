@@ -20,8 +20,13 @@ REVISION        EQU     DEVICE_REVISION ; also the low word of serial number
 MANUF_ID        EQU    $c0de      ; Reinauer
 PRODUCT_ID      EQU       1       ; A4092
         ELSE
+        IFD     DRIVER_A4770
+MANUF_ID        EQU    $c0de      ; Reinauer
+PRODUCT_ID      EQU       2       ; A4770
+        ELSE
 MANUF_ID        EQU     514       ; Commodore West Chester
 PRODUCT_ID      EQU      84       ; A4091
+        ENDC
         ENDC
 
 ZORRO_III      EQU     $80
@@ -88,7 +93,7 @@ RomStart
         ENDC
 
         dc.b    ((ER_TYPE<<4)|$0f)&$ff, ~(PRODUCT_ID<<4)&$ff, ~(ER_FLAGS<<4)&$ff, $ff
-        dc.b    ~(MANUF_ID>>4), ~(MANUF_ID<<4)&$ff, ~(VERSION>>4), ~(VERSION<<4)&$ff
+        dc.b    (~(MANUF_ID>>4))&$ff, ~(MANUF_ID<<4)&$ff, ~(VERSION>>4), ~(VERSION<<4)&$ff
         dc.b    ~(REVISION>>4), ~(REVISION<<4)&$ff, ~(ROM_VECTOR>>4), ~(ROM_VECTOR<<4)&$ff
         dc.b    $ff, $ff, $ff, $ff
         dc.b    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
@@ -322,13 +327,21 @@ DevName
         IFD DRIVER_A4092
         dc.b    'a4092.device',0                   ; Name string
         ELSE
+        IFD DRIVER_A4770
+        dc.b    'a4770.device',0                   ; Name string
+        ELSE
         dc.b    'a4091.device',0                   ; Name string
+        ENDC
         ENDC
 IdString
         IFD DRIVER_A4092
         dc.b    'A4092 scsidisk '
         ELSE
+        IFD DRIVER_A4770
+        dc.b    'A4770 scsidisk '
+        ELSE
         dc.b    'A4091 scsidisk '
+        ENDC
         ENDC
         FULL_VERSION_STR
         dc.b    0                     ; ID string

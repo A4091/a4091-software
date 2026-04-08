@@ -58,6 +58,23 @@ static bool board_has_a4092_id(const struct ConfigDev *cd)
                              cd->cd_Rom.er_Product);
 }
 
+static bool board_has_a4770_id(const struct ConfigDev *cd)
+{
+    return ZORRO_IS_A4770_ID(cd->cd_Rom.er_Manufacturer,
+                             cd->cd_Rom.er_Product);
+}
+
+static const char *board_name_from_id(const struct ConfigDev *cd)
+{
+    if (board_has_a4770_id(cd))
+        return "A4770";
+    if (board_has_a4092_id(cd))
+        return "A4092";
+    if (board_has_legacy_a409x_id(cd))
+        return "A4091-compatible board";
+    return "unknown board";
+}
+
 static bool a4092_spi_flash_present(uint32_t base)
 {
     uint8_t mfg = 0, type = 0, cap = 0;
@@ -1241,13 +1258,16 @@ int main(int argc, char **argv)
     struct ConfigDev *cd = NULL;
     int boards_found = 0;
     int unsupported_a4091_found = 0;
+    const char *board_name = NULL;
     if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library",0)) != NULL) {
         while ((cd = FindConfigDev(cd,-1,-1)) != NULL) {
             uint32_t candidate_base = (uint32_t)(uintptr_t)cd->cd_BoardAddr;
 
-            if (board_has_a4092_id(cd) || (board_has_legacy_a409x_id(cd) &&
-                                           a4092_spi_flash_present(candidate_base))) {
+            if (board_has_a4092_id(cd) || board_has_a4770_id(cd) ||
+                (board_has_legacy_a409x_id(cd) &&
+                 a4092_spi_flash_present(candidate_base))) {
                 base = candidate_base;
+                board_name = board_name_from_id(cd);
                 boards_found++;
                 break;
             }
@@ -1261,12 +1281,12 @@ int main(int argc, char **argv)
 
     if (!base || boards_found == 0) {
         if (unsupported_a4091_found)
-            fprintf(stderr, "Found A4091-compatible board(s), but mfgtool only works on A4092 SPI hardware\n");
+            fprintf(stderr, "Found A4091-compatible board(s), but mfgtool only works on supported SPI hardware\n");
         else
-            fprintf(stderr, "No A4092 board found via expansion.library\n");
+            fprintf(stderr, "No supported SPI board found via expansion.library\n");
         return 1;
     } else {
-	printf("A4092 found at 0x%"PRIx32"\n", base);
+	printf("%s found at 0x%"PRIx32"\n", board_name, base);
     }
 
     int argi = 1;

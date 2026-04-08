@@ -61,6 +61,23 @@ static bool board_has_a4092_id(const struct ConfigDev *cd)
                            cd->cd_Rom.er_Product);
 }
 
+static bool board_has_a4770_id(const struct ConfigDev *cd)
+{
+  return ZORRO_IS_A4770_ID(cd->cd_Rom.er_Manufacturer,
+                           cd->cd_Rom.er_Product);
+}
+
+static const char *board_name_from_id(const struct ConfigDev *cd)
+{
+  if (board_has_a4770_id(cd))
+    return "A4770";
+  if (board_has_a4092_id(cd))
+    return "A4092";
+  if (board_has_legacy_a409x_id(cd))
+    return "A4091-compatible board";
+  return "unknown board";
+}
+
 /**
  * _ColdReboot()
  *
@@ -246,7 +263,7 @@ static void execute_nvram_operations(struct scsiBoard* board);
  * get_version_from_buffer
  *
  * Extract the firmware version string from a buffer
- * Searches for "A4092 scsidisk" pattern and returns the version string
+ * Searches for a supported ROM ID string and returns the version string
  *
  * @param buffer pointer to the data buffer
  * @param size size of the buffer
@@ -256,24 +273,31 @@ static void execute_nvram_operations(struct scsiBoard* board);
  */
 static BOOL get_version_from_buffer(UBYTE *buffer, ULONG size, char *version_out, ULONG version_max)
 {
-  const char *needle = "A4092 scsidisk";
-  size_t needle_len = strlen(needle);
+  static const char * const needles[] = {
+    "A4092 scsidisk",
+    "A4770 scsidisk",
+  };
   ULONG search_size = (size < 4096) ? size : 4096;
 
-  for (size_t i = 0; i <= search_size - needle_len; i++) {
-    if (memcmp(buffer + i, needle, needle_len) == 0) {
-      if (version_out && version_max > 0) {
-        // Copy version string (up to null terminator or max size)
-        size_t j;
-        for (j = 0; j < version_max - 1 && (i + j) < size; j++) {
-          char c = buffer[i + j];
-          if (c == '\0' || c == '\n' || c == '\r')
-            break;
-          version_out[j] = c;
+  for (size_t n = 0; n < sizeof (needles) / sizeof (needles[0]); n++) {
+    const char *needle = needles[n];
+    size_t needle_len = strlen(needle);
+
+    for (size_t i = 0; i <= search_size - needle_len; i++) {
+      if (memcmp(buffer + i, needle, needle_len) == 0) {
+        if (version_out && version_max > 0) {
+          // Copy version string (up to null terminator or max size)
+          size_t j;
+          for (j = 0; j < version_max - 1 && (i + j) < size; j++) {
+            char c = buffer[i + j];
+            if (c == '\0' || c == '\n' || c == '\r')
+              break;
+            version_out[j] = c;
+          }
+          version_out[j] = '\0';
         }
-        version_out[j] = '\0';
+        return TRUE;
       }
-      return TRUE;
     }
   }
   return FALSE;
@@ -368,13 +392,15 @@ int main(int argc, char *argv[])
         UBYTE devId = 0;
         ULONG sectorSize = 0;
         ULONG flashSize = 0;
+        const char *board_name;
 
         board.cd = cd;
         legacy_id = board_has_legacy_a409x_id(cd);
-        if (!legacy_id && !board_has_a4092_id(cd))
+        if (!legacy_id && !board_has_a4092_id(cd) && !board_has_a4770_id(cd))
           continue;
 
         boards_found++;
+        board_name = board_name_from_id(cd);
         setup_a4092_board(&board);
 
         if (!flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
@@ -385,21 +411,21 @@ int main(int argc, char *argv[])
             } else {
               printf("Found legacy-ID board at Address 0x%06x\n",
                      (int)cd->cd_BoardAddr);
-              printf("No supported A4092 flash detected (Manufacturer: %02X Device: %02X)\n",
-                     manufId, devId);
+              printf("No supported flash detected for %s (Manufacturer: %02X Device: %02X)\n",
+                     board_name, manufId, devId);
               board_errors = 1;
             }
           } else {
-            printf("Error: A4092 flash not detected (Manufacturer: %02X Device: %02X)\n",
-                   manufId, devId);
+            printf("Error: %s flash not detected (Manufacturer: %02X Device: %02X)\n",
+                   board_name, manufId, devId);
             board_errors = 1;
           }
           continue;
         }
 
         a4092_found++;
-        printf("Found %sA4092 at Address 0x%06x\n",
-               legacy_id ? "legacy-ID " : "",
+        printf("Found %s%s at Address 0x%06x\n",
+               legacy_id ? "legacy-ID " : "", board_name,
                (int)cd->cd_BoardAddr);
 
         {
@@ -435,7 +461,7 @@ int main(int argc, char *argv[])
 
           // Ask the user if they wish to update this board
           if ((config->writeFlash || config->eraseFlash) && !promptUser(config)) continue;
-          ULONG bankSize = 65536; // hardcode A4091/A4092 image size for now
+          ULONG bankSize = 65536; // hardcode supported image size for now
           if (config->eraseFlash) {
             printf("Erasing whole flash.\n");
             if (!flash_erase_chip()) {
@@ -463,13 +489,13 @@ int main(int argc, char *argv[])
                 }
               }
             }
-            printf("Writing A4092 ROM image to flash memory.\n");
+            printf("Writing %s ROM image to flash memory.\n", board_name);
             writeBufToFlash(&board, driver_buffer, board.flashbase, romSize);
             printf("\n");
           }
 
 	  if (config->readFlash && config->scsi_rom_filename && flashSize) {
-            printf("Writing A4092 flash memory to file.\n");
+            printf("Writing %s flash memory to file.\n", board_name);
             if (writeFlashToFile(config->scsi_rom_filename,flashSize) == false) {
               rc = 5;
               goto exit;
@@ -490,7 +516,7 @@ int main(int argc, char *argv[])
       }
 
       if (boards_found == 0) {
-        printf("No A4092 board(s) found\n");
+        printf("No supported board(s) found\n");
         rc = 5;
       } else if (a4092_found == 0) {
         rc = 5;
@@ -729,7 +755,7 @@ static BOOL probeFlash(ULONG romSize)
   memcpy(&magic2, magic_buf + 4, 4);
 
   if (magic1 == A4091_ROM_MAGIC1 && magic2 == A4091_ROM_MAGIC2) {
-    printf("Found 64KB A4091/A4092 image.\n");
+    printf("Found 64KB supported ROM image.\n");
   } else {
     // Check for 32KB image
     for (int i = 0; i < 8; i++) {
@@ -740,7 +766,7 @@ static BOOL probeFlash(ULONG romSize)
     memcpy(&magic2, magic_buf + 4, 4);
 
     if (magic1 == A4091_ROM_MAGIC1 && magic2 == A4091_ROM_MAGIC2) {
-      printf("Found 32KB A4091/A4092 image.\n");
+      printf("Found 32KB supported ROM image.\n");
     } else {
       printf("Not a standard image.\n");
     }
