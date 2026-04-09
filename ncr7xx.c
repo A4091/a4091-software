@@ -115,6 +115,44 @@ extern struct ExecBase *SysBase;
 #define REG_DCNTL   0x38  // DMA control
 #define REG_ADDER   0x3c  // Sum output of internal adder
 
+/* NCR53C720/720SE/770 additional registers */
+#define REG72X_SCNTL3   0x00
+#define REG72X_SCNTL2   0x01
+#define REG72X_GPREG    0x04
+#define REG72X_SDID     0x05
+#define REG72X_SSID     0x09
+#define REG72X_SOCL     0x0a
+#define REG72X_ISTAT    0x17
+#define REG72X_CTEST3   0x18
+#define REG72X_CTEST3_SM BIT(0)             // 53C770 Snoop pins mode
+#define REG72X_CTEST2   0x19
+#define REG72X_CTEST1   0x1a
+#define REG72X_CTEST0   0x1b
+#define REG72X_CTEST6   0x20
+#define REG72X_CTEST5   0x21
+#define REG72X_CTEST4   0x22
+#define REG72X_SIST     0x40
+#define REG72X_SIEN     0x42
+#define REG72X_GPCNTL   0x44
+#define REG72X_MACNTL   0x45
+#define REG72X_SWIDE    0x46
+#define REG72X_SLPAR    0x47
+#define REG72X_RESPID   0x48
+#define REG72X_STIME1   0x4a
+#define REG72X_STIME0   0x4b
+#define REG72X_STEST3   0x4c
+#define REG72X_STEST2   0x4d
+#define REG72X_STEST1   0x4e
+#define REG72X_STEST0   0x4f
+#define REG72X_SIDL     0x52
+#define REG72X_SODL     0x56
+#define REG72X_SBDL     0x5a
+#define REG72X_SCRATCHB 0x5c
+#define REG72X_SCRATCHX 0x60
+
+#define NCR_WRITE_SHADOW_710  0x40
+#define NCR_WRITE_SHADOW_72X  0x80
+
 #define REG_SCNTL0_TRG  BIT(0)  // Enable Target mode as default
 #define REG_SCNTL0_EPG  BIT(2)  // Generate parity on the SCSI bus
 
@@ -146,10 +184,10 @@ extern struct ExecBase *SysBase;
 #define REG_DMODE_PD    BIT(3)  // When set: FC0=0 for data & FC0=1 for program
 #define REG_DMODE_FC1   BIT(4)  // Value driven on FC1 when bus mastering
 #define REG_DMODE_FC2   BIT(5)  // Value driven on FC2 when bus mastering
-#define REG_DMODE_BLE0  0                  // Burst length 1-transfer
-#define REG_DMODE_BLE1  BIT(6)             // Burst length 2-transfers
-#define REG_DMODE_BLE2  BIT(7)             // Burst length 4-transfers
-#define REG_DMODE_BLE3  (BIT(6) | BIT(7))  // Burst length 8-transfers
+#define REG_DMODE_BLE0  0                  // 53C710:1, 53C770:2 transfers
+#define REG_DMODE_BLE1  BIT(6)             // 53C710:2, 53C770:4 transfers
+#define REG_DMODE_BLE2  BIT(7)             // 53C710:4, 53C770:8 transfers
+#define REG_DMODE_BLE3  (BIT(6) | BIT(7))  // 53C710:8, 53C770:16 transfers
 
 #define REG_DCNTL_COM   BIT(0)  // Enable 53C710 mode
 #define REG_DCNTL_FA    BIT(1)  // Enable fast arbitration (faster DMA start)
@@ -157,6 +195,7 @@ extern struct ExecBase *SysBase;
 #define REG_DCNTL_LLM   BIT(3)  // Low level mode (no DMA or SCRIPTS)
 #define REG_DCNTL_SSM   BIT(4)  // SCRIPTS single-step mode
 #define REG_DCNTL_EA    BIT(5)  // Enable Ack
+#define REG72X_DCNTL_BSM BIT(6)            // 53C720/770 Bus Mode
 #define REG_DCNTL_CFD0  BIT(7)             // SCLK 16.67-25.00 MHz
 #define REG_DCNTL_CFD1  BIT(6)             // SCLK 25.01-37.50 MHz
 #define REG_DCNTL_CFD2  0                  // SCLK 37.50-50.00 MHz
@@ -164,6 +203,7 @@ extern struct ExecBase *SysBase;
 
 #define REG_DSTAT_IID   BIT(0)  // Illegal instruction
 #define REG_DSTAT_WDT   BIT(1)  // Watchdog timeout
+#define REG_DSTAT_SIR   BIT(2)  // SCRIPT interrupt instruction
 #define REG_DSTAT_SSI   BIT(3)  // SCRIPTS single-step interrupt
 #define REG_DSTAT_ABRT  BIT(4)  // Abort condition
 #define REG_DSTAT_BF    BIT(5)  // Bus fault
@@ -183,6 +223,7 @@ extern struct ExecBase *SysBase;
 #define REG_CTEST4_SFWR BIT(3)  // Send SODL register writes to SCSI FIFO
 #define REG_CTEST4_SLBE BIT(4)  // SCSI loopback mode enable
 #define REG_CTEST4_CDIS BIT(7)  // Cache burst disable
+#define REG72X_CTEST0_CDIS BIT(7)  // Cache burst disable
 
 #define REG_CTEST5_DACK BIT(0)  // Data acknowledge (1=DMA acks SCSI DMA req)
 #define REG_CTEST5_DREQ BIT(1)  // Data request (1=SCSI requests DMA transfer)
@@ -192,6 +233,7 @@ extern struct ExecBase *SysBase;
 
 #define REG_CTEST8_CLF  BIT(2)  // Clear DMA and SCSI FIFOs
 #define REG_CTEST8_FLF  BIT(3)  // Flush DMA FIFO
+
 
 #define NCR_DMA_FIFO_SIZE  16   // DMA FIFO talks to CPU bus
 #define NCR_SCSI_FIFO_SIZE 8    // SCSI FIFO talks to SCSI bus
@@ -212,13 +254,15 @@ typedef unsigned int   uint;
 static void a4091_state_restore(int skip_reset);
 
 static uint               runtime_flags = 0;
+static uint               runtime_burst_len = 0;
 static const char * const expansion_library_name = "expansion.library";
-static const char        *current_board_name = "A4091/A4092";
+static const char        *current_board_name = "NCR53C7xx board";
 
 typedef enum {
     NCR_BOARD_NONE = 0,
     NCR_BOARD_A4091,
     NCR_BOARD_A4092,
+    NCR_BOARD_A4770,
 } ncr_board_type_t;
 
 static ncr_board_type_t
@@ -229,6 +273,9 @@ ncr_board_type(const struct ConfigDev *cdev)
     if (ZORRO_IS_A4092_ID(cdev->cd_Rom.er_Manufacturer,
                           cdev->cd_Rom.er_Product))
         return (NCR_BOARD_A4092);
+    if (ZORRO_IS_A4770_ID(cdev->cd_Rom.er_Manufacturer,
+                          cdev->cd_Rom.er_Product))
+        return (NCR_BOARD_A4770);
     if (ZORRO_IS_LEGACY_A409X_ID(cdev->cd_Rom.er_Manufacturer,
                                  cdev->cd_Rom.er_Product))
         return (NCR_BOARD_A4091);
@@ -243,10 +290,14 @@ ncr_board_name(ncr_board_type_t board_type)
             return ("A4091");
         case NCR_BOARD_A4092:
             return ("A4092");
+        case NCR_BOARD_A4770:
+            return ("A4770");
         default:
-            return ("A4091/A4092");
+            return ("NCR53C7xx board");
     }
 }
+
+static uint8_t            ncr_write_shadow_offset = NCR_WRITE_SHADOW_710;
 
 typedef struct {
     struct Interrupt *local_isr;   // Temporary interrupt server
@@ -254,7 +305,7 @@ typedef struct {
     volatile uint32_t intcount;    // Total interrupts (normal + quick)
     volatile uint8_t ireg_istat;   // ISTAT captured by interrupt handler
     volatile uint8_t ireg_sien;    // SIEN captured by interrupt handler
-    volatile uint8_t ireg_sstat0;  // SSTAT0 captured by interrupt handler
+    volatile uint16_t ireg_scsi_status;  // SCSI interrupt status register
     volatile uint8_t ireg_dstat;   // DSTAT captured by interrupt handler
     uint8_t  card_owned;           // Task current owns device interrupts
     uint8_t  cleanup_installed;    // Cleanup on exit code installed
@@ -268,6 +319,54 @@ typedef struct {
 } a4091_save_t;
 
 static a4091_save_t a4091_save;
+
+typedef enum {
+    NCR_CHIP_710 = 0,
+    NCR_CHIP_720,
+    NCR_CHIP_720SE,
+    NCR_CHIP_770,
+} ncr_chip_t;
+
+typedef struct {
+    uint8_t            reg_loc;
+    uint8_t            reg_size;     // size in bytes
+    uint8_t            show;         // safe to read/display this register
+    uint8_t            pad;          // structure padding
+    const char         reg_name[8];  // Register name
+    const char * const reg_desc;     // Long description
+    const char * const *reg_bits;    // Individual bit names
+} ncr_regdefs_t;
+
+typedef struct {
+    ncr_chip_t              chip;
+    const char             *chip_name;
+    uint8_t                 revision;
+    uint8_t                 istat_reg;
+    uint8_t                 write_shadow_offset;
+    uint8_t                 irq_sien_capture_reg;
+    uint8_t                 irq_scsi_capture_reg;
+    uint8_t                 irq_scsi_capture_size;
+    const ncr_regdefs_t    *regdefs;
+    uint32_t                regdef_count;
+} ncr_runtime_info_t;
+
+static ncr_runtime_info_t ncr_runtime = {
+    NCR_CHIP_710,
+    "53C710",
+    0,
+    REG_ISTAT,
+    NCR_WRITE_SHADOW_710,
+    REG_SIEN,
+    REG_SSTAT0,
+    1,
+    NULL,
+    0,
+};
+
+static int ncr72x_use_clock_doubler(void);
+static uint ncr72x_input_clock_freq(void);
+static uint ncr_burst_len(void);
+static uint ncr72x_sync_clock_freq(void);
 
 extern BOOL __check_abort_enabled;
 
@@ -359,6 +458,7 @@ static uint32_t a4091_base;           // Base address for current card
 static uint32_t a4091_rom_base;       // ROM base address
 static uint32_t a4091_reg_base;       // Registers base address
 static uint32_t a4091_switch_base;    // Switches base address
+static uint32_t a4091_ac_serial;      // Serial from expansion.library (CPLD)
 
 static uint8_t
 get_rom(uint off)
@@ -509,15 +609,41 @@ decode_autoconfig(void)
         value32 <<= 8;
         value32 |= show_creg(0x06 + byte);
         printf(" Serial number byte %d", byte);
-        if (byte == 3)
+        if (byte == 3) {
             printf("   Serial=0x%08x", value32);
+            if (value32 > 0x01000000UL) {
+                printf(" CPLD=%u.%u.%u",
+                       (value32 >> 24) & 0xff,
+                       (value32 >> 16) & 0xff,
+                       value32 & 0xffff);
+            } else {
+                printf(" ROM=%u.%u",
+                       (value32 >> 16) & 0xffff,
+                       value32 & 0xffff);
+            }
+        }
+        printf("\n");
+    }
+
+    if (a4091_ac_serial != 0 && a4091_ac_serial != value32) {
+        printf("                        Autoconfig Serial=0x%08x",
+               a4091_ac_serial);
+        if (a4091_ac_serial > 0x01000000UL)
+            printf(" CPLD=%u.%u.%u",
+                   (a4091_ac_serial >> 24) & 0xff,
+                   (a4091_ac_serial >> 16) & 0xff,
+                   a4091_ac_serial & 0xffff);
+        else
+            printf(" ROM=%u.%u",
+                   (a4091_ac_serial >> 16) & 0xffff,
+                   a4091_ac_serial & 0xffff);
         printf("\n");
     }
 
     if (is_autoboot) {
-        value32 = show_creg(0x10) << 8;
+        value32 = show_creg(0x0a) << 8;
         printf(" Option ROM vector high\n");
-        value32 |= show_creg(0x11);
+        value32 |= show_creg(0x0b);
         printf(" Option ROM vector low  Offset=0x%04x\n", value32);
     }
     for (byte = 0x0c; byte <= 0x0f; byte++)
@@ -533,74 +659,120 @@ typedef const char * const bitdesc_t;
 static bitdesc_t bits_scntl0[] = {
     "TRG", "AAP", "EPG", "EPC", "WATN/", "START", "ARB0", "ARB1"
 };
-static bitdesc_t bits_scntl1[] = {
+static bitdesc_t bits_scntl1_710[] = {
     "RES0", "RES1", "AESP", "RST", "CON", "FSR", "ADB", "EXC"
 };
-static bitdesc_t bits_sien[] = {
+static bitdesc_t bits_scntl1_72x[] = {
+    "SST", "IARB", "AESP", "RST", "CON", "DHP", "ADB", "EXC"
+};
+static bitdesc_t bits_scntl3_72x[] = {
+    "CCF0", "CCF1", "CCF2", "EWS", "SCF0", "SCF1", "SCF2", "ULTRA"
+};
+static bitdesc_t bits_sien_710[] = {
     "PAR", "RST/", "UDC", "SGE", "SEL", "STO", "FCMP", "M/A"
+};
+static bitdesc_t bits_sien_72x[] = {
+    "PAR", "RST", "UDC", "SGE", "RSL", "SEL", "CMP", "MA",
+    "HTH", "GEN", "STO", "RES11", "RES12", "RES13", "RES14", "RES15"
 };
 static bitdesc_t bits_sbcl[] = {
     "I/O", "C/D", "MSG", "ATN", "SEL", "BSY", "ACK", "REQ"
 };
-static bitdesc_t bits_dstat[] = {
+static bitdesc_t bits_dstat_710[] = {
     "IID", "WTD", "SIR", "SSI", "ABRT", "RF", "RES6", "DFE"
 };
-static bitdesc_t bits_sstat0[] = {
+static bitdesc_t bits_dstat_72x[] = {
+    "IID", "WTD", "SIR", "SSI", "ABRT", "BF", "HPE", "DFE"
+};
+static bitdesc_t bits_sstat0_710[] = {
     "PAR", "RST/", "UDC", "SGE", "SEL", "STO", "FCMP", "M/A"
 };
-static bitdesc_t bits_sstat1[] = {
+static bitdesc_t bits_sstat0_72x[] = {
+    "SDP0", "RST/", "WOA", "LOA", "AIP", "OLF", "ORF", "ILF"
+};
+static bitdesc_t bits_sstat1_710[] = {
     "SDP/", "RST/", "WOA", "LOA", "AIP", "OLF", "ORF", "ILF"
 };
-static bitdesc_t bits_sstat2[] = {
+static bitdesc_t bits_sstat1_72x[] = {
+    "I/O", "C/D", "MSG", "SDP0", "FF0", "FF1", "FF2", "FF3"
+};
+static bitdesc_t bits_sstat2_710[] = {
     "I/O", "C/D", "MSG", "SDP", "FF0", "FF1", "FF2", "FF3"
 };
-static bitdesc_t bits_ctest0[] = {
+static bitdesc_t bits_sstat2_72x[] = {
+    "SDP1", "LDSC", "DIFF", "SPL1", "FF4", "OLF1", "ORF1", "ILF1"
+};
+static bitdesc_t bits_ctest0_710[] = {
     "DDIR", "RES1", "ERF", "HSC", "EAN", "GRP", "BTD", "RES7"
 };
-static bitdesc_t bits_ctest2[] = {
+static bitdesc_t bits_ctest0_72x[] = {
+    "C386E", "TT1", "EHP", "DFP", "GRP", "SC0", "SC1", "CDIS"
+};
+static bitdesc_t bits_ctest2_710[] = {
     "DACK", "DREQ", "TEOP", "DFP", "SFP", "SOFF", "SIGP", "RES7"
 };
-static bitdesc_t bits_ctest4[] = {
+static bitdesc_t bits_ctest2_72x[] = {
+    "DACK", "DREQ", "TEOP", "DFP", "RES4", "RES5", "SIGP", "DDIR"
+};
+static bitdesc_t bits_ctest3_72x[] = {
+    "SM", "FM", "CLF", "FLF", "V0", "V1", "V2", "V3"
+};
+static bitdesc_t bits_ctest4_710[] = {
     "FBL0", "FBL1", "FBL2", "SFWR", "SLBE", "SZM", "ZMOD", "MUX"
 };
-static bitdesc_t bits_ctest5[] = {
+static bitdesc_t bits_ctest4_72x[] = {
+    "FBL0", "FBL1", "FBL2", "EHPC", "SRTM", "SZM", "ZMOD", "MUX"
+};
+static bitdesc_t bits_ctest5_710[] = {
     "DACK", "DREQ", "EOP", "DDIR", "MASR", "ROFF", "BBCK", "ADCK"
 };
-static bitdesc_t bits_ctest7[] = {
+static bitdesc_t bits_ctest7_710[] = {
     "DIFF", "TT1", "EVP", "DFP", "NOTIME", "SC0", "SC1", "CDIS"
 };
-static bitdesc_t bits_istat[] = {
+static bitdesc_t bits_istat_710[] = {
     "DIP", "SIP", "RSV2", "CON", "RSV4", "SIOP", "RST", "ABRT"
 };
-static bitdesc_t bits_ctest8[] = {
+static bitdesc_t bits_istat_72x[] = {
+    "DIP", "SIP", "INTF", "CON", "SEM", "SIGP", "RST", "ABRT"
+};
+static bitdesc_t bits_ctest8_710[] = {
     "SM", "FM", "CLF", "FLF", "V0", "V1", "V2", "V3"
 };
 static bitdesc_t bits_dmode[] = {
     "MAN", "U0", "FAM", "PD", "FC1", "FC2", "BL0", "BL1"
 };
-static bitdesc_t bits_dien[] = {
+static bitdesc_t bits_dien_710[] = {
     "HD", "WTD", "SIR", "SSI", "ABRT", "BF", "RES6", "RES7"
 };
-static bitdesc_t bits_dcntl[] = {
+static bitdesc_t bits_dien_72x[] = {
+    "IID", "WTD", "SIR", "SSI", "ABRT", "BF", "HPED", "RES7"
+};
+static bitdesc_t bits_dcntl_710[] = {
     "COM", "FA", "STD", "LLM", "SSM", "EA", "CF0", "CF1"
 };
+static bitdesc_t bits_dcntl_72x[] = {
+    "COM", "FA", "STD", "BW16", "SSM", "EA", "BSM", "STE"
+};
+static bitdesc_t bits_gpcntl_72x[] = {
+    "GPIO0_EN", "GPIO1_EN", "GPIO2_EN", "GPIO3_EN", "GPIO4_EN",
+    "RES5", "RES6", "RES7"
+};
+static bitdesc_t bits_stest1_72x[] = {
+    "SFP0", "SFP1", "DBLSEL", "DBLEN", "RES4", "RES5", "RES6", "RES7"
+};
+static bitdesc_t bits_stest2_72x[] = {
+    "LOW", "EXT", "AWS", "SZM", "SLB", "DIF", "ROF", "SCE"
+};
+static bitdesc_t bits_stest3_72x[] = {
+    "FTM", "CSF", "TTM", "S16", "DSI", "HSC", "STR", "TE"
+};
 
-typedef struct {
-    uint8_t            reg_loc;
-    uint8_t            reg_size;     // size in bytes
-    uint8_t            show;         // safe to read/display this register
-    uint8_t            pad;          // structure padding
-    const char         reg_name[8];  // Register name
-    const char * const reg_desc;     // Long description
-    bitdesc_t         *reg_bits;     // Individual bit names
-} ncr_regdefs_t;
-
-static const ncr_regdefs_t ncr_regdefs[] =
+static const ncr_regdefs_t ncr_regdefs_710[] =
 {
     { 0x03, 1, 1, 0, "SCNTL0",   "SCSI control 0", bits_scntl0 },
-    { 0x02, 1, 1, 0, "SCNTL1",   "SCSI control 1", bits_scntl1 },
+    { 0x02, 1, 1, 0, "SCNTL1",   "SCSI control 1", bits_scntl1_710 },
     { 0x01, 1, 1, 0, "SDID",     "SCSI destination ID", NULL },
-    { 0x00, 1, 1, 0, "SIEN",     "SCSI IRQ enable", bits_sien },
+    { 0x00, 1, 1, 0, "SIEN",     "SCSI IRQ enable", bits_sien_710 },
     { 0x07, 1, 1, 0, "SCID",     "SCSI chip ID", NULL },
     { 0x06, 1, 1, 0, "SXFER",    "SCSI transfer", NULL },
     { 0x05, 1, 1, 0, "SODL",     "SCSI output data latch", NULL },
@@ -609,23 +781,23 @@ static const ncr_regdefs_t ncr_regdefs[] =
     { 0x0a, 1, 1, 0, "SIDL",     "SCSI input data latch", NULL },
     { 0x09, 1, 1, 0, "SBDL",     "SCSI bus data lines", NULL },
     { 0x08, 1, 1, 0, "SBCL",     "SCSI bus control lines", bits_sbcl },
-    { 0x0f, 1, 1, 0, "DSTAT",    "DMA status", bits_dstat },
-    { 0x0e, 1, 1, 0, "SSTAT0",   "SCSI status 0", bits_sstat0 },
-    { 0x0d, 1, 1, 0, "SSTAT1",   "SCSI status 1", bits_sstat1 },
-    { 0x0c, 1, 1, 0, "SSTAT2",   "SCSI status 2", bits_sstat2 },
+    { 0x0f, 1, 1, 0, "DSTAT",    "DMA status", bits_dstat_710 },
+    { 0x0e, 1, 1, 0, "SSTAT0",   "SCSI status 0", bits_sstat0_710 },
+    { 0x0d, 1, 1, 0, "SSTAT1",   "SCSI status 1", bits_sstat1_710 },
+    { 0x0c, 1, 1, 0, "SSTAT2",   "SCSI status 2", bits_sstat2_710 },
     { 0x10, 4, 1, 0, "DSA",      "Data structure address", NULL },
-    { 0x17, 1, 1, 0, "CTEST0",   "Chip test 0", bits_ctest0 },
+    { 0x17, 1, 1, 0, "CTEST0",   "Chip test 0", bits_ctest0_710 },
     { 0x16, 1, 1, 0, "CTEST1",   "Chip test 1 7-4=FIFO_Empty 3-0=FIFO_Full", NULL },
-    { 0x15, 1, 1, 0, "CTEST2",   "Chip test 2", bits_ctest2 },
+    { 0x15, 1, 1, 0, "CTEST2",   "Chip test 2", bits_ctest2_710 },
     { 0x14, 1, 0, 0, "CTEST3",   "Chip test 3 SCSI FIFO", NULL },
-    { 0x1b, 1, 1, 0, "CTEST4",   "Chip test 4", bits_ctest4 },
-    { 0x1a, 1, 1, 0, "CTEST5",   "Chip test 5", bits_ctest5 },
+    { 0x1b, 1, 1, 0, "CTEST4",   "Chip test 4", bits_ctest4_710 },
+    { 0x1a, 1, 1, 0, "CTEST5",   "Chip test 5", bits_ctest5_710 },
     { 0x19, 1, 0, 0, "CTEST6",   "Chip test 6 DMA FIFO", NULL },
-    { 0x18, 1, 1, 0, "CTEST7",   "Chip test 7", bits_ctest7 },
+    { 0x18, 1, 1, 0, "CTEST7",   "Chip test 7", bits_ctest7_710 },
     { 0x1c, 4, 1, 0, "TEMP",     "Temporary Stack", NULL },
     { 0x23, 1, 1, 0, "DFIFO",    "DMA FIFO", NULL },
-    { 0x22, 1, 1, 0, "ISTAT",    "Interrupt Status", bits_istat },
-    { 0x21, 1, 1, 0, "CTEST8",   "Chip test 8", bits_ctest8 },
+    { 0x22, 1, 1, 0, "ISTAT",    "Interrupt Status", bits_istat_710 },
+    { 0x21, 1, 1, 0, "CTEST8",   "Chip test 8", bits_ctest8_710 },
     { 0x20, 1, 1, 0, "LCRC",     "Longitudinal parity", NULL },
     { 0x25, 3, 1, 0, "DBC",      "DMA byte counter", NULL },
     { 0x24, 1, 1, 0, "DCMD",     "DMA command", NULL },
@@ -634,10 +806,69 @@ static const ncr_regdefs_t ncr_regdefs[] =
     { 0x30, 4, 1, 0, "DSPS",     "DMA SCRIPTS pointer save", NULL },
     { 0x34, 4, 1, 0, "SCRATCH",  "General purpose scratch pad", NULL },
     { 0x3b, 1, 1, 0, "DMODE",    "DMA mode", bits_dmode },
-    { 0x3a, 1, 1, 0, "DIEN",     "DMA interrupt enable", bits_dien },
-    { 0x39, 1, 1, 0, "DWT",      "DMA watchdog timer", NULL }, // No support in FS-UAE
-    { 0x38, 1, 1, 0, "DCNTL",    "DMA control", bits_dcntl },
+    { 0x3a, 1, 1, 0, "DIEN",     "DMA interrupt enable", bits_dien_710 },
+    { 0x39, 1, 1, 0, "DWT",      "DMA watchdog timer", NULL },
+    { 0x38, 1, 1, 0, "DCNTL",    "DMA control", bits_dcntl_710 },
     { 0x3c, 4, 1, 0, "ADDER",    "Sum output of internal adder", NULL },
+};
+
+static const ncr_regdefs_t ncr_regdefs_72x[] =
+{
+    { REG_SCNTL0,      1, 1, 0, "SCNTL0",  "SCSI control 0", bits_scntl0 },
+    { REG_SCNTL1,      1, 1, 0, "SCNTL1",  "SCSI control 1", bits_scntl1_72x },
+    { REG72X_SCNTL2,   1, 1, 0, "SCNTL2",  "SCSI control 2", NULL },
+    { REG72X_SCNTL3,   1, 1, 0, "SCNTL3",  "SCSI control 3", bits_scntl3_72x },
+    { REG72X_GPREG,    1, 1, 0, "GPREG",   "General purpose I/O", NULL },
+    { REG72X_SDID,     1, 1, 0, "SDID",    "SCSI destination ID", NULL },
+    { REG_SCFER,       1, 1, 0, "SXFER",   "SCSI transfer", NULL },
+    { REG_SCID,        1, 1, 0, "SCID",    "SCSI chip ID", NULL },
+    { REG_SBCL,        1, 1, 0, "SBCL",    "SCSI bus control lines", bits_sbcl },
+    { REG72X_SSID,     1, 1, 0, "SSID",    "SCSI selected ID", NULL },
+    { REG72X_SOCL,     1, 1, 0, "SOCL",    "SCSI output control latch", bits_sbcl },
+    { REG_SFBR,        1, 1, 0, "SFBR",    "SCSI first byte received", NULL },
+    { REG_DSTAT,       1, 1, 0, "DSTAT",   "DMA status", bits_dstat_72x },
+    { REG_SSTAT0,      1, 1, 0, "SSTAT0",  "SCSI status 0", bits_sstat0_72x },
+    { REG_SSTAT1,      1, 1, 0, "SSTAT1",  "SCSI status 1", bits_sstat1_72x },
+    { REG_SSTAT2,      1, 1, 0, "SSTAT2",  "SCSI status 2", bits_sstat2_72x },
+    { REG_DSA,         4, 1, 0, "DSA",     "Data structure address", NULL },
+    { REG72X_ISTAT,    1, 1, 0, "ISTAT",   "Interrupt status", bits_istat_72x },
+    { REG72X_CTEST3,   1, 1, 0, "CTEST3",  "Chip test 3", bits_ctest3_72x },
+    { REG72X_CTEST2,   1, 1, 0, "CTEST2",  "Chip test 2", bits_ctest2_72x },
+    { REG72X_CTEST1,   1, 1, 0, "CTEST1",  "Chip test 1", NULL },
+    { REG72X_CTEST0,   1, 1, 0, "CTEST0",  "Chip test 0", bits_ctest0_72x },
+    { REG_TEMP,        4, 1, 0, "TEMP",    "Temporary stack", NULL },
+    { REG72X_CTEST6,   1, 0, 0, "CTEST6",  "Chip test 6 DMA FIFO", NULL },
+    { REG72X_CTEST5,   1, 1, 0, "CTEST5",  "Chip test 5", NULL },
+    { REG72X_CTEST4,   1, 1, 0, "CTEST4",  "Chip test 4", bits_ctest4_72x },
+    { REG_DFIFO,       1, 1, 0, "DFIFO",   "DMA FIFO", NULL },
+    { REG_DCMD,        1, 1, 0, "DCMD",    "DMA command", NULL },
+    { REG_DBC,         3, 1, 0, "DBC",     "DMA byte counter", NULL },
+    { REG_DNAD,        4, 1, 0, "DNAD",    "DMA next address for data", NULL },
+    { REG_DSP,         4, 1, 0, "DSP",     "DMA SCRIPTS pointer", NULL },
+    { REG_DSPS,        4, 1, 0, "DSPS",    "DMA SCRIPTS pointer save", NULL },
+    { REG_SCRATCH,     4, 1, 0, "SCRAT_A", "Scratch register A", NULL },
+    { REG_DCNTL,       1, 1, 0, "DCNTL",   "DMA control", bits_dcntl_72x },
+    { REG_DWT,         1, 1, 0, "DWT",     "DMA watchdog timer", NULL },
+    { REG_DIEN,        1, 1, 0, "DIEN",    "DMA interrupt enable", bits_dien_72x },
+    { REG_DMODE,       1, 1, 0, "DMODE",   "DMA mode", bits_dmode },
+    { REG_ADDER,       4, 1, 0, "ADDER",   "Sum output of internal adder", NULL },
+    { REG72X_SIST,     2, 1, 0, "SIST",    "SCSI interrupt status", bits_sien_72x },
+    { REG72X_SIEN,     2, 1, 0, "SIEN",    "SCSI interrupt enable", bits_sien_72x },
+    { REG72X_GPCNTL,   1, 1, 0, "GPCNTL",  "General purpose control", bits_gpcntl_72x },
+    { REG72X_MACNTL,   1, 1, 0, "MACNTL",  "Memory access control", NULL },
+    { REG72X_SWIDE,    1, 1, 0, "SWIDE",   "Wide residue", NULL },
+    { REG72X_SLPAR,    1, 1, 0, "SLPAR",   "SCSI parity", NULL },
+    { REG72X_RESPID,   2, 1, 0, "RESPID",  "Reselect IDs", NULL },
+    { REG72X_STIME1,   1, 1, 0, "STIME1",  "SCSI timer 1", NULL },
+    { REG72X_STIME0,   1, 1, 0, "STIME0",  "SCSI timer 0", NULL },
+    { REG72X_STEST3,   1, 1, 0, "STEST3",  "SCSI test 3", bits_stest3_72x },
+    { REG72X_STEST2,   1, 1, 0, "STEST2",  "SCSI test 2", bits_stest2_72x },
+    { REG72X_STEST1,   1, 1, 0, "STEST1",  "SCSI test 1", bits_stest1_72x },
+    { REG72X_STEST0,   1, 1, 0, "STEST0",  "SCSI test 0", NULL },
+    { REG72X_SIDL,     2, 1, 0, "SIDL",    "SCSI input data latch", NULL },
+    { REG72X_SODL,     2, 1, 0, "SODL",    "SCSI output data latch", NULL },
+    { REG72X_SBDL,     2, 1, 0, "SBDL",    "SCSI bus data lines", NULL },
+    { REG72X_SCRATCHB, 4, 1, 0, "SCRAT_B", "Scratch register B", NULL },
 };
 
 static uint8_t
@@ -648,10 +879,17 @@ get_ncrreg8_noglob(uint32_t a4091_regs, uint reg)
     return (value);
 }
 
+static uint16_t
+get_ncrreg16b_noglob(uint32_t a4091_regs, uint reg)
+{
+    return ((uint16_t) *ADDR8(a4091_regs + reg + 0) << 8) |
+           ((uint16_t) *ADDR8(a4091_regs + reg + 1));
+}
+
 static void
 set_ncrreg8_noglob(uint32_t a4091_regs, uint reg, uint8_t value)
 {
-    *ADDR8(a4091_regs + 0x40 + reg) = value;
+    *ADDR8(a4091_regs + ncr_write_shadow_offset + reg) = value;
 }
 
 static uint8_t
@@ -660,6 +898,16 @@ get_ncrreg8(uint reg)
     uint8_t value = *ADDR8(a4091_reg_base + reg);
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] R %02x\n", a4091_reg_base + reg, value);
+    return (value);
+}
+
+static uint16_t
+get_ncrreg16b(uint reg)
+{
+    uint16_t value = ((uint16_t) *ADDR8(a4091_reg_base + reg + 0) << 8) |
+                     ((uint16_t) *ADDR8(a4091_reg_base + reg + 1));
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] R %04x\n", a4091_reg_base + reg, value);
     return (value);
 }
 
@@ -697,13 +945,13 @@ get_ncrreg32b(uint reg)
     return (value);
 }
 
-/* Write at shadow register (+0x40) to avoid 68030 write-allocate bug */
+/* Write via the board-specific shadow window to avoid write-allocate issues. */
 static void
 set_ncrreg8(uint reg, uint8_t value)
 {
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] W %02x\n", a4091_reg_base + reg, value);
-    *ADDR8(a4091_reg_base + 0x40 + reg) = value;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg) = value;
 }
 
 static void
@@ -711,7 +959,7 @@ set_ncrreg32(uint reg, uint32_t value)
 {
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] W %08x\n", a4091_reg_base + reg, value);
-    *ADDR32(a4091_reg_base + 0x40 + reg) = value;
+    *ADDR32(a4091_reg_base + ncr_write_shadow_offset + reg) = value;
 }
 
 static void
@@ -719,10 +967,391 @@ set_ncrreg32b(uint reg, uint32_t value)
 {
     if (runtime_flags & FLAG_DEBUG)
         printf("[%08x] W %08x\n", a4091_reg_base + reg, value);
-    *ADDR8(a4091_reg_base + 0x40 + reg + 0) = value >> 24;
-    *ADDR8(a4091_reg_base + 0x40 + reg + 1) = value >> 16;
-    *ADDR8(a4091_reg_base + 0x40 + reg + 2) = value >> 8;
-    *ADDR8(a4091_reg_base + 0x40 + reg + 3) = value;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 0) = value >> 24;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 1) = value >> 16;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 2) = value >> 8;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 3) = value;
+}
+
+static void
+set_ncrreg16b(uint reg, uint16_t value)
+{
+    if (runtime_flags & FLAG_DEBUG)
+        printf("[%08x] W %04x\n", a4091_reg_base + reg, value);
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 0) = value >> 8;
+    *ADDR8(a4091_reg_base + ncr_write_shadow_offset + reg + 1) = value;
+}
+
+static uint8_t
+get_ncr_istat(void)
+{
+    return get_ncrreg8(ncr_runtime.istat_reg);
+}
+
+static void
+set_ncr_istat(uint8_t value)
+{
+    set_ncrreg8(ncr_runtime.istat_reg, value);
+}
+
+static uint8_t
+get_ncr_istat_noglob(uint32_t reg_addr)
+{
+    return get_ncrreg8_noglob(reg_addr, ncr_runtime.istat_reg);
+}
+
+static void
+set_ncr_istat_noglob(uint32_t reg_addr, uint8_t value)
+{
+    set_ncrreg8_noglob(reg_addr, ncr_runtime.istat_reg, value);
+}
+
+static uint16_t
+get_ncr_irq_scsi_status(void)
+{
+    if (ncr_runtime.irq_scsi_capture_size == 2)
+        return get_ncrreg16b(ncr_runtime.irq_scsi_capture_reg);
+    return get_ncrreg8(ncr_runtime.irq_scsi_capture_reg);
+}
+
+static uint16_t
+get_ncr_irq_scsi_status_noglob(uint32_t reg_addr)
+{
+    if (ncr_runtime.irq_scsi_capture_size == 2)
+        return get_ncrreg16b_noglob(reg_addr, ncr_runtime.irq_scsi_capture_reg);
+    return get_ncrreg8_noglob(reg_addr, ncr_runtime.irq_scsi_capture_reg);
+}
+
+static void
+ncr_runtime_select_710(void)
+{
+    ncr_runtime.chip = NCR_CHIP_710;
+    ncr_runtime.chip_name = "53C710";
+    ncr_runtime.revision = get_ncrreg8(REG_CTEST8) >> 4;
+    ncr_runtime.istat_reg = REG_ISTAT;
+    ncr_runtime.write_shadow_offset = NCR_WRITE_SHADOW_710;
+    ncr_runtime.irq_sien_capture_reg = REG_SIEN;
+    ncr_runtime.irq_scsi_capture_reg = REG_SSTAT0;
+    ncr_runtime.irq_scsi_capture_size = 1;
+    ncr_runtime.regdefs = ncr_regdefs_710;
+    ncr_runtime.regdef_count = ARRAY_SIZE(ncr_regdefs_710);
+    ncr_write_shadow_offset = ncr_runtime.write_shadow_offset;
+}
+
+static void
+ncr_runtime_select_72x(uint8_t chip_type)
+{
+    ncr_runtime.chip = NCR_CHIP_720;
+    ncr_runtime.chip_name = "53C720";
+    if (chip_type == 1) {
+        ncr_runtime.chip = NCR_CHIP_720SE;
+        ncr_runtime.chip_name = "53C720SE";
+    } else if (chip_type == 2) {
+        ncr_runtime.chip = NCR_CHIP_770;
+        ncr_runtime.chip_name = "53C770";
+    }
+    ncr_runtime.revision = get_ncrreg8(REG72X_CTEST3) >> 4;
+    ncr_runtime.istat_reg = REG72X_ISTAT;
+    ncr_runtime.write_shadow_offset = NCR_WRITE_SHADOW_72X;
+    ncr_runtime.irq_sien_capture_reg = REG72X_SIEN + 1;
+    ncr_runtime.irq_scsi_capture_reg = REG72X_SIST;
+    ncr_runtime.irq_scsi_capture_size = 2;
+    ncr_runtime.regdefs = ncr_regdefs_72x;
+    ncr_runtime.regdef_count = ARRAY_SIZE(ncr_regdefs_72x);
+    ncr_write_shadow_offset = ncr_runtime.write_shadow_offset;
+}
+
+static uint32_t
+extract_be_reg(uint reg, uint size)
+{
+    uint32_t value;
+    uint32_t mask;
+    uint shift;
+
+    if (size == 1)
+        return get_ncrreg8(reg);
+    if (size == 4)
+        return get_ncrreg32(reg);
+
+    value = get_ncrreg32(reg & ~3);
+    shift = (4 - ((reg & 3) + size)) * 8;
+    mask = (1U << (size * 8)) - 1;
+    return (value >> shift) & mask;
+}
+
+static void
+detect_ncr_chip(void)
+{
+    const uint max_attempts = 4;
+    uint8_t prev_gpcntl = 0xff;
+    uint8_t prev_macntl = 0xff;
+    uint8_t prev_ctest3 = 0xff;
+    uint8_t prev_chip_type = 0xff;
+    uint8_t saw_valid_72x = 0;
+    uint attempt;
+
+    for (attempt = 0; attempt < max_attempts; attempt++) {
+        uint8_t gpcntl = get_ncrreg8(REG72X_GPCNTL);
+        uint8_t macntl = get_ncrreg8(REG72X_MACNTL);
+        uint8_t ctest3 = get_ncrreg8(REG72X_CTEST3);
+        uint8_t chip_type = macntl >> 4;
+        uint8_t valid_72x = (((gpcntl & 0x1f) == 0x0f) && (chip_type <= 2));
+
+        if (runtime_flags & FLAG_DEBUG) {
+            printf("72x probe raw[%u] GPCNTL=%02x MACNTL=%02x CTEST3=%02x "
+                   "type=%x %s\n",
+                   attempt + 1, gpcntl, macntl, ctest3, chip_type,
+                   valid_72x ? "candidate" : "reject");
+        }
+
+        /*
+         * On a 53C710, reads in the 0x40-0x7f range hit the write-shadow
+         * area. On 53C720/720SE/770 chips, 0x44 is GPCNTL and powers up with
+         * GPIO0-3 configured as inputs (0x0f in the low five bits). Combine
+         * that with the documented MACNTL chip-type field, but require the
+         * same signature twice in a row so detection does not depend on debug
+         * print timing.
+         */
+        if (valid_72x &&
+            saw_valid_72x &&
+            (gpcntl == prev_gpcntl) &&
+            (macntl == prev_macntl) &&
+            (ctest3 == prev_ctest3) &&
+            (chip_type == prev_chip_type)) {
+            if (runtime_flags & FLAG_DEBUG)
+                printf("72x probe stable after %u attempts\n", attempt + 1);
+            ncr_runtime_select_72x(chip_type);
+            return;
+        }
+
+        prev_gpcntl = gpcntl;
+        prev_macntl = macntl;
+        prev_ctest3 = ctest3;
+        prev_chip_type = chip_type;
+        saw_valid_72x = valid_72x;
+
+        if (attempt + 1 < max_attempts)
+            Delay(1);
+    }
+
+    if (runtime_flags & FLAG_DEBUG)
+        printf("72x probe unstable, defaulting to 53C710\n");
+    ncr_runtime_select_710();
+}
+
+static int
+ncr_runtime_supports_710_tests(void)
+{
+    return (ncr_runtime.chip == NCR_CHIP_710);
+}
+
+static uint8_t ncr_dmode_init(void);
+static uint ncr_burst_default(void);
+static int ncr_burst_valid(uint burst);
+static const char *ncr_burst_valid_values(void);
+
+static void
+print_ncr_chip_info(void)
+{
+    printf("NCR chip %s rev V%x write-shadow=+0x%02x",
+           ncr_runtime.chip_name,
+           ncr_runtime.revision,
+           ncr_runtime.write_shadow_offset);
+    if (ncr_runtime.chip == NCR_CHIP_770) {
+        printf(" doubler=%s input-sclk=%uMHz sync-sclk=%uMHz burst=%u dmode=%02x",
+               ncr72x_use_clock_doubler() ? "on" : "off",
+               ncr72x_input_clock_freq(), ncr72x_sync_clock_freq(),
+               ncr_burst_len(), ncr_dmode_init());
+    } else {
+        printf(" burst=%u dmode=%02x",
+               ncr_burst_len(),
+               ncr_dmode_init());
+    }
+    printf("\n");
+}
+
+#define REG_SCNTL0_ARB_FULL    (BIT(7) | BIT(6))
+#define REG72X_SCID_SRE        BIT(5)
+#define REG72X_SCID_RRE        BIT(6)
+#define REG72X_STEST1_DBLSEL   BIT(2)
+#define REG72X_STEST1_DBLEN    BIT(3)
+#define REG72X_STEST3_HSC      BIT(5)
+#define REG72X_STEST3_TE       BIT(7)
+#define REG72X_SCNTL1_EXC      BIT(7)
+
+static uint
+ncr72x_input_clock_freq(void)
+{
+    if (ncr_runtime.chip == NCR_CHIP_770 &&
+        a4091_base == A4000T770_SCSI_BASE)
+        return (40);
+    return (50);
+}
+
+static int
+ncr72x_use_clock_doubler(void)
+{
+    return (ncr_runtime.chip == NCR_CHIP_770 &&
+            (ncr72x_input_clock_freq() <= 50));
+}
+
+static uint
+ncr72x_sync_clock_freq(void)
+{
+    uint sclk = ncr72x_input_clock_freq();
+
+    if (ncr72x_use_clock_doubler())
+        return (sclk * 2);
+    return (sclk);
+}
+
+static uint8_t
+ncr72x_ccf(void)
+{
+    uint sclk = ncr72x_sync_clock_freq();
+
+    if (sclk <= 25)
+        return (1);
+    if (sclk <= 37)
+        return (2);
+    if (sclk <= 50)
+        return (3);
+    if (sclk <= 75)
+        return (4);
+    return (5);
+}
+
+static uint8_t
+ncr72x_min_sync_scf(void)
+{
+    static const uint16_t scf_div_numerators[] = {
+        0, 1000, 1500, 2000, 3000, 4000
+    };
+    uint sclk = ncr72x_sync_clock_freq();
+    uint scf;
+
+    if (ncr_runtime.chip != NCR_CHIP_770)
+        return (1);
+
+    for (scf = 1; scf < ARRAY_SIZE(scf_div_numerators); scf++) {
+        if (sclk * 1000U <= 80U * scf_div_numerators[scf])
+            return (scf);
+    }
+    return (1);
+}
+
+static uint8_t
+ncr72x_scntl3_init(void)
+{
+    uint8_t scntl3 = ncr72x_ccf();
+
+    if (ncr_runtime.chip == NCR_CHIP_770)
+        scntl3 |= ncr72x_min_sync_scf() << 4;
+    return (scntl3);
+}
+
+static uint8_t
+ncr72x_scntl1_init(void)
+{
+    if (!ncr72x_use_clock_doubler() && (ncr72x_sync_clock_freq() >= 100))
+        return (REG72X_SCNTL1_EXC);
+    return (0);
+}
+
+static uint
+ncr_burst_default(void)
+{
+    if (ncr_runtime.chip == NCR_CHIP_770) {
+        if (a4091_base == A4000T770_SCSI_BASE)
+            return (16);
+        return (8);
+    }
+    return (8);
+}
+
+static uint
+ncr_burst_len(void)
+{
+    if (runtime_burst_len != 0)
+        return (runtime_burst_len);
+    return (ncr_burst_default());
+}
+
+static int
+ncr_burst_valid(uint burst)
+{
+    if (ncr_runtime.chip == NCR_CHIP_770)
+        return (burst == 2 || burst == 4 || burst == 8 || burst == 16);
+    if (ncr_runtime.chip == NCR_CHIP_710)
+        return (burst == 1 || burst == 2 || burst == 4 || burst == 8);
+    return (0);
+}
+
+static const char *
+ncr_burst_valid_values(void)
+{
+    if (ncr_runtime.chip == NCR_CHIP_770)
+        return ("2, 4, 8, 16");
+    if (ncr_runtime.chip == NCR_CHIP_710)
+        return ("1, 2, 4, 8");
+    return (NULL);
+}
+
+static uint8_t
+ncr_dmode_init(void)
+{
+    uint8_t dmode;
+
+    if (ncr_runtime.chip == NCR_CHIP_770) {
+        switch (ncr_burst_len()) {
+            case 2:
+                dmode = REG_DMODE_BLE0;
+                break;
+            case 4:
+                dmode = REG_DMODE_BLE1;
+                break;
+            case 8:
+                dmode = REG_DMODE_BLE2;
+                break;
+            case 16:
+            default:
+                dmode = REG_DMODE_BLE3;
+                break;
+        }
+    } else {
+        switch (ncr_burst_len()) {
+            case 1:
+                dmode = REG_DMODE_BLE0;
+                break;
+            case 2:
+                dmode = REG_DMODE_BLE1;
+                break;
+            case 4:
+                dmode = REG_DMODE_BLE2;
+                break;
+            case 8:
+            default:
+                dmode = REG_DMODE_BLE3;
+                break;
+        }
+    }
+
+    if (ncr_runtime.chip == NCR_CHIP_710)
+        dmode |= REG_DMODE_FC2;
+    return (dmode);
+}
+
+
+static uint8_t
+ncr_scsi_host_id(void)
+{
+    if (ncr_runtime.chip == NCR_CHIP_770 &&
+        a4091_base == A4000T770_SCSI_BASE) {
+        return ((~get_ncrreg8(REG72X_GPREG)) & 0x0f);
+    }
+    if (!(runtime_flags & FLAG_IS_A4000T))
+        return (*ADDR8(a4091_switch_base) & 0x07);
+    return (7);
 }
 
 /*
@@ -768,48 +1397,77 @@ access_timeout(const char *msg, uint32_t ticks, uint64_t tick_start)
 static void
 a4091_reset(void)
 {
-    if (runtime_flags & FLAG_IS_A4000T)
-        set_ncrreg8(REG_DCNTL, REG_DCNTL_EA);   // Enable Ack: allow reg writes
-    set_ncrreg8(REG_ISTAT, REG_ISTAT_RST);  // Reset
-    (void) get_ncrreg8(REG_ISTAT);          // Push out write
+    uint8_t dcntl = 0;
 
-    set_ncrreg8(REG_ISTAT, 0);              // Clear reset
-    (void) get_ncrreg8(REG_ISTAT);          // Push out write
+    if ((runtime_flags & FLAG_IS_A4000T) ||
+        (a4091_base == A4000T770_SCSI_BASE)) {
+        dcntl |= REG_DCNTL_EA;   // Enable Ack: allow reg writes
+    }
+    if (dcntl != 0)
+        set_ncrreg8(REG_DCNTL, dcntl);
+
+    set_ncr_istat(REG_ISTAT_RST);           // Reset
+    (void) get_ncr_istat();                 // Push out write
+
+    set_ncr_istat(0);                       // Clear reset
+    (void) get_ncr_istat();                 // Push out write
     Delay(1);
 
-    /* SCSI Core clock (37.51-50 MHz) */
-    if (runtime_flags & FLAG_IS_A4000T)
-        set_ncrreg8(REG_DCNTL, REG_DCNTL_COM | REG_DCNTL_CFD2 | REG_DCNTL_EA);
-    else
-        set_ncrreg8(REG_DCNTL, REG_DCNTL_COM | REG_DCNTL_CFD2);
+    if (!ncr_runtime_supports_710_tests()) {
+        uint8_t host_id = ncr_scsi_host_id() & 0x0f;
+        uint8_t stest1 = get_ncrreg8(REG72X_STEST1) &
+                         ~(REG72X_STEST1_DBLEN | REG72X_STEST1_DBLSEL);
+        uint8_t stest3;
 
-    set_ncrreg8(REG_SCID, BIT(7));          // Set SCSI ID
+        set_ncrreg16b(REG72X_SIEN, 0);
+        set_ncrreg8(REG_SCNTL1, get_ncrreg8(REG_SCNTL1) | REG_SCNTL1_RST);
+        Delay(1);
+        set_ncrreg8(REG_SCNTL1, get_ncrreg8(REG_SCNTL1) & ~REG_SCNTL1_RST);
 
-    set_ncrreg8(REG_DWT, 60);               // 25MHz DMA timeout: 640ns * 60
-
-    const int burst_mode = 8;
-    switch (burst_mode) {
-        default:
-        case 1:
-            /* 1-transfer burst, FC = 101 -- works on A3000 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE0 | REG_DMODE_FC2);
-            break;
-        case 2:
-            /* 2-transfer burst, FC = 101 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE1 | REG_DMODE_FC2);
-            break;
-        case 4:
-            /* 4-transfer burst, FC = 101 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE2 | REG_DMODE_FC2);
-            break;
-        case 8:
-            /* 8-transfer burst, FC = 101 */
-            set_ncrreg8(REG_DMODE, REG_DMODE_BLE3 | REG_DMODE_FC2);
-            break;
+        set_ncrreg8(REG72X_STEST1, stest1);
+        if (ncr72x_use_clock_doubler()) {
+            set_ncrreg8(REG72X_STEST1, stest1 | REG72X_STEST1_DBLEN);
+            Delay(20);
+            stest3 = get_ncrreg8(REG72X_STEST3) | REG72X_STEST3_HSC;
+            set_ncrreg8(REG72X_STEST3, stest3);
+            set_ncrreg8(REG72X_SCNTL3, ncr72x_scntl3_init());
+            set_ncrreg8(REG72X_STEST1, stest1 | REG72X_STEST1_DBLEN |
+                        REG72X_STEST1_DBLSEL);
+            stest3 &= ~REG72X_STEST3_HSC;
+        } else {
+            stest3 = get_ncrreg8(REG72X_STEST3);
+            set_ncrreg8(REG72X_SCNTL3, ncr72x_scntl3_init());
+        }
+        set_ncrreg8(REG72X_STEST3, stest3 | REG72X_STEST3_TE);
+        set_ncrreg8(REG_SCNTL1, ncr72x_scntl1_init());
+        set_ncrreg8(REG_SCNTL0, REG_SCNTL0_ARB_FULL | REG_SCNTL0_EPG);
+        set_ncrreg8(REG_DCNTL, dcntl);
+        set_ncrreg8(REG_DMODE, ncr_dmode_init());
+        set_ncrreg16b(REG72X_SIEN, 0);
+        set_ncrreg8(REG_DIEN, 0);
+        set_ncrreg8(REG_SCID, host_id | REG72X_SCID_RRE | REG72X_SCID_SRE);
+        set_ncrreg16b(REG72X_RESPID, (uint16_t)(1U << host_id));
+        set_ncrreg8(REG_DWT, 0);
+        set_ncrreg8(REG72X_STIME0, 0x0c);
+        if (ncr_runtime.chip == NCR_CHIP_770) {
+            set_ncrreg8(REG72X_CTEST0,
+                        get_ncrreg8(REG72X_CTEST0) | REG72X_CTEST0_CDIS);
+            if (a4091_base != A4000T770_SCSI_BASE)
+                set_ncrreg8(REG72X_CTEST3,
+                            get_ncrreg8(REG72X_CTEST3) | REG72X_CTEST3_SM);
+        }
+        return;
     }
 
-    if ((runtime_flags & FLAG_IS_A4000T) == 0) {
-        /* Disable cache line bursts */
+    /* 53C710 SCSI Core clock (37.51-50 MHz) */
+    set_ncrreg8(REG_DCNTL, REG_DCNTL_COM | REG_DCNTL_CFD2 | dcntl);
+    set_ncrreg8(REG_SCID, BIT(7));          // Set SCSI ID
+    set_ncrreg8(REG_DWT, 60);               // 25MHz DMA timeout: 640ns * 60
+    set_ncrreg8(REG_DMODE, ncr_dmode_init());
+
+    if (ncr_runtime_supports_710_tests() &&
+        ((runtime_flags & FLAG_IS_A4000T) == 0)) {
+        /* REG_CTEST7 only exists on the 53C710 register map. */
         set_ncrreg8(REG_CTEST7, get_ncrreg8(REG_CTEST7) | REG_CTEST4_CDIS);
     }
 
@@ -844,29 +1502,30 @@ a4091_abort(void)
 /*
  * a4091_irq_handler
  * -----------------
- * Handle interrupts from the 53C710 SCSI controller
+ * Handle interrupts from the NCR SCSI controller
  */
 LONG
 a4091_irq_handler(register a4091_save_t *save asm("a1"))
 {
-    uint8_t istat = get_ncrreg8_noglob(save->reg_addr, REG_ISTAT);
+    uint8_t istat = get_ncr_istat_noglob(save->reg_addr);
 
     if (istat == 0) {
         return (0);
     }
 
     if (istat & REG_ISTAT_ABRT)
-        set_ncrreg8_noglob(save->reg_addr, REG_ISTAT, 0);
+        set_ncr_istat_noglob(save->reg_addr, 0);
 
     if ((istat & (REG_ISTAT_DIP | REG_ISTAT_SIP)) != 0) {
         uint prev_istat = save->ireg_istat;
         /*
-         * If ISTAT_SIP is set, read SSTAT0 register to determine cause
-         * If ISTAT_DIP is set, read DSTAT register to determine cause
+         * If ISTAT_SIP is set, read the active SCSI interrupt status register
+         * to determine cause. If ISTAT_DIP is set, read DSTAT.
          */
         save->ireg_istat  = istat;
-        save->ireg_sien   = get_ncrreg8_noglob(save->reg_addr, REG_SIEN);
-        save->ireg_sstat0 = get_ncrreg8_noglob(save->reg_addr, REG_SSTAT0);
+        save->ireg_sien   = get_ncrreg8_noglob(save->reg_addr,
+                                               ncr_runtime.irq_sien_capture_reg);
+        save->ireg_scsi_status = get_ncr_irq_scsi_status_noglob(save->reg_addr);
         save->ireg_dstat  = get_ncrreg8_noglob(save->reg_addr, REG_DSTAT);
 
         save->intcount++;
@@ -1037,6 +1696,7 @@ a4091_show_or_disable_driver_irq_handler(int disable, int show)
             if ((strcmp(name, "NCR SCSI") != 0) &&
                 (strcmp(name, "A4091 test") != 0) &&
                 (strcmp(name, "a4091.device") != 0) &&
+                (strcmp(name, "a4770.device") != 0) &&
                 (strcmp(name, "a4092.device") != 0))
                 continue;  // No match
             if (((uint32_t) s->is_Code >= 0x00f00000) &&
@@ -1125,6 +1785,7 @@ is_handler_task(const char *name)
     } else {
         if ((strcmp(name, "A3090 SCSI handler") != 0) &&
             (strcmp(name, "a4091.device") != 0) &&
+            (strcmp(name, "a4770.device") != 0) &&
             (strcmp(name, "a4092.device") != 0))
             return (0);
     }
@@ -1308,7 +1969,7 @@ a4091_state_restore(int skip_reset)
         a4091_save.card_owned = 0;
         if (skip_reset == 0) {
             set_ncrreg8(REG_DIEN, 0);
-            set_ncrreg8(REG_ISTAT, 0);
+            set_ncr_istat(0);
             a4091_reset();
         }
         a4091_enable_driver_irq_handler();
@@ -1323,9 +1984,9 @@ a4091_state_restore(int skip_reset)
 
         if ((a4091_save.intcount != 0) & (runtime_flags & FLAG_DEBUG)) {
             printf("Interrupt count=%d "
-                   "ISTAT=%02x SSTAT0=%02x DSTAT=%02x SIEN=%02x\n",
+                   "ISTAT=%02x SCSI=%04x DSTAT=%02x SIEN=%02x\n",
                     a4091_save.intcount, a4091_save.ireg_istat,
-                    a4091_save.ireg_sstat0, a4091_save.ireg_dstat,
+                    a4091_save.ireg_scsi_status, a4091_save.ireg_dstat,
                     a4091_save.ireg_sien);
         }
     }
@@ -1469,33 +2130,61 @@ dma_clear_istat(void)
     uint    timeout = 30;
 
     /* Clear pending interrupts */
-    while (((istat = get_ncrreg8(REG_ISTAT)) & 0x03) != 0) {
+    while (((istat = get_ncr_istat()) & 0x03) != 0) {
         if (istat & REG_ISTAT_SIP)
-            (void) get_ncrreg8(REG_SSTAT0);
+            (void) get_ncr_irq_scsi_status();
 
         if (istat & REG_ISTAT_DIP)
             (void) get_ncrreg8(REG_DSTAT);
 
         if (istat & (REG_ISTAT_RST | REG_ISTAT_ABRT))
-            set_ncrreg8(REG_ISTAT, 0);
+            set_ncr_istat(0);
 
         if (istat & (REG_ISTAT_DIP | REG_ISTAT_SIP))
             Delay(1);
 
         if (timeout-- == 5) {
-            /* Attempt to get out of this state with a 53C710 reset */
+            /* Attempt to get out of this state with a controller reset */
             a4091_reset();
         }
         if (timeout == 0) {
-            printf("Timeout clearing 53C710 ISTAT %02x\n", istat);
+            printf("Timeout clearing %s ISTAT %02x\n",
+                   ncr_runtime.chip_name, istat);
             return (1);
         }
     }
     return (0);
 }
 
+static void
+dump_live_scsi_state(void)
+{
+    if (ncr_runtime_supports_710_tests()) {
+        printf("SSTAT0=%02x SSTAT1=%02x SSTAT2=%02x\n",
+               get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
+               get_ncrreg8(REG_SSTAT2));
+        return;
+    }
+
+    printf("SIST=%04x SSTAT0=%02x SSTAT1=%02x SSTAT2=%02x\n",
+           get_ncrreg16b(REG72X_SIST),
+           get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
+           get_ncrreg8(REG_SSTAT2));
+    printf("%20sCTEST0=%02x CTEST1=%02x DFIFO=%02x STEST0=%02x "
+           "STEST1=%02x STEST3=%02x\n",
+           "",
+           get_ncrreg8(REG72X_CTEST0), get_ncrreg8(REG72X_CTEST1),
+           get_ncrreg8(REG_DFIFO), get_ncrreg8(REG72X_STEST0),
+           get_ncrreg8(REG72X_STEST1), get_ncrreg8(REG72X_STEST3));
+    printf("%20sDSP=%08x DSPS=%08x TEMP=%08x DNAD=%08x\n",
+           "",
+           get_ncrreg32(REG_DSP), get_ncrreg32(REG_DSPS),
+           get_ncrreg32(REG_TEMP), get_ncrreg32(REG_DNAD));
+}
+
 static int
-execute_script(uint32_t *script, ULONG script_len, uint flags)
+execute_script_at(uint32_t *script, ULONG script_len, uint flags,
+                  uint32_t dsp_addr)
 {
     int rc = 0;
     int count = 1;
@@ -1512,7 +2201,7 @@ execute_script(uint32_t *script, ULONG script_len, uint flags)
     /* Enable interrupts and start script */
     set_ncrreg8(REG_DIEN, REG_DIEN_ILD | REG_DIEN_WTD | REG_DIEN_SIR |
                 REG_DIEN_SSI | REG_DIEN_ABRT | REG_DIEN_BF);
-    set_ncrreg32(REG_DSP, (uint32_t) script);
+    set_ncrreg32(REG_DSP, dsp_addr);
 
     while (1) {
         istat = a4091_save.ireg_istat;
@@ -1527,7 +2216,7 @@ execute_script(uint32_t *script, ULONG script_len, uint flags)
             printf("istat=%02x\n", istat);
         }
         if ((count & 0xff) == 0) {
-            uint8_t istat = get_ncrreg8(REG_ISTAT);
+            uint8_t istat = get_ncr_istat();
             if (istat & (REG_ISTAT_ABRT | REG_ISTAT_DIP)) {
                 dstat = get_ncrreg8(REG_DSTAT);
                 if (runtime_flags & FLAG_DEBUG)
@@ -1575,7 +2264,7 @@ got_dstat:
 
         if (((count & 0xff) == 0) &&
             access_timeout("SIOP timeout", 30, tick_start)) {
-            uint8_t istat = get_ncrreg8(REG_ISTAT);
+            uint8_t istat = get_ncr_istat();
             dstat = get_ncrreg8(REG_DSTAT);
             dstat = get_ncrreg8(REG_DSTAT);
             if (dstat & REG_DSTAT_BF)
@@ -1591,9 +2280,7 @@ got_dstat:
             printf("ISTAT=%02x %02x DSTAT=%02x %02x ",
                    a4091_save.ireg_istat, istat,
                    a4091_save.ireg_dstat, dstat);
-            printf("SSTAT0=%02x SSTAT1=%02x SSTAT2=%02x\n",
-                   get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
-                   get_ncrreg8(REG_SSTAT2));
+            dump_live_scsi_state();
             rc = 1;
             goto fail;
         }
@@ -1607,6 +2294,12 @@ fail:
     if (rc != 0)
         printf("\n");
     return (rc);
+}
+
+static int
+execute_script(uint32_t *script, ULONG script_len, uint flags)
+{
+    return (execute_script_at(script, script_len, flags, (uint32_t)script));
 }
 
 static void
@@ -1648,24 +2341,24 @@ print_bits_dash(bitdesc_t *bits, uint value)
 static int
 decode_registers(void)
 {
+    const ncr_regdefs_t *regdefs = ncr_runtime.regdefs;
+    uint32_t    reg_count = ncr_runtime.regdef_count;
     const char *fmt;
     uint32_t    reg;
     uint32_t    value;
 
+    printf("%s rev V%x registers\n",
+           ncr_runtime.chip_name,
+           ncr_runtime.revision);
     printf("  Reg    Value  Name     Description\n");
 
-    for (reg = 0; reg < ARRAY_SIZE(ncr_regdefs); reg++) {
-        if (ncr_regdefs[reg].show == 0)
+    for (reg = 0; reg < reg_count; reg++) {
+        if (regdefs[reg].show == 0)
             continue;
-        printf("   %02x ", ncr_regdefs[reg].reg_loc);
+        printf("   %02x ", regdefs[reg].reg_loc);
 
-        if (ncr_regdefs[reg].reg_size == 1) {
-            value = get_ncrreg8(ncr_regdefs[reg].reg_loc);
-        } else {
-            value = get_ncrreg32(ncr_regdefs[reg].reg_loc & ~3);
-            value &= (0xffffffff >> ((ncr_regdefs[reg].reg_loc & 3) * 8));
-        }
-        switch (ncr_regdefs[reg].reg_size) {
+        value = extract_be_reg(regdefs[reg].reg_loc, regdefs[reg].reg_size);
+        switch (regdefs[reg].reg_size) {
             case 1:
                 fmt = "      %0*x";
                 break;
@@ -1679,12 +2372,11 @@ decode_registers(void)
                 fmt = "%0*x";
                 break;
         }
-        printf(fmt, ncr_regdefs[reg].reg_size * 2, value);
+        printf(fmt, regdefs[reg].reg_size * 2, value);
         printf("  %-8s %s",
-               ncr_regdefs[reg].reg_name, ncr_regdefs[reg].reg_desc);
-        if (ncr_regdefs[reg].reg_bits != NULL) {
-            print_bits(ncr_regdefs[reg].reg_bits, value);
-        }
+               regdefs[reg].reg_name, regdefs[reg].reg_desc);
+        if (regdefs[reg].reg_bits != NULL)
+            print_bits(regdefs[reg].reg_bits, value);
         printf("\n");
     }
     return (0);
@@ -1839,6 +2531,7 @@ static int
 dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
 {
     uint32_t *script = dma_mem_move_script;
+    ULONG     script_len = sizeof(dma_mem_move_script);
 
     script[0] = 0xc0000000 | len;
     script[1] = src;
@@ -1853,7 +2546,7 @@ dma_mem_to_mem(uint32_t src, uint32_t dst, uint32_t len)
     set_ncrreg8(REG_DMODE, get_ncrreg8(REG_DSTAT) | REG_DMODE_FAM);
 #endif
 
-    return (execute_script(script, 0x10, 0));
+    return (execute_script(script, script_len, 0));
 }
 
 /*
@@ -1906,6 +2599,7 @@ dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
                     int update_script)
 {
     uint32_t *script = dma_mem_move_script_quad;
+    ULONG     script_len = sizeof(dma_mem_move_script_quad);
 
     if (update_script) {
         script[0] = 0xc0000000 | len;
@@ -1927,7 +2621,56 @@ dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
         printf("DMA from %08x to %08x len %08x\n",
                (uint32_t) src, (uint32_t) dst, len);
 
-    return (execute_script(script, 0x20, 0));
+    return (execute_script(script, script_len, 0));
+}
+
+/*
+ * ncr_script_reg_addr
+ * -------------------
+ * SCRIPTS I/O opcodes use the chip's internal register numbering, not the
+ * host-visible big-endian byte offsets used by the Amiga CPU interface.
+ * This mostly matters for moved 8-bit registers such as ISTAT and DWT.
+ *
+ * The known-good A4000T770 SCRIPTS assembler in ../ncr53c770-software/
+ * ncr53cxxx.c uses the same numbering.
+ */
+static uint8_t
+ncr_script_reg_addr(uint8_t reg)
+{
+    switch (ncr_runtime.chip) {
+    case NCR_CHIP_720:
+    case NCR_CHIP_720SE:
+    case NCR_CHIP_770:
+        switch (reg) {
+        case REG72X_ISTAT:
+            return (0x14);
+        default:
+            break;
+        }
+        break;
+    case NCR_CHIP_710:
+    default:
+        switch (reg) {
+        case REG_ISTAT:
+            return (0x21);
+        default:
+            break;
+        }
+        break;
+    }
+
+    switch (reg) {
+    case REG_DWT:
+        return (0x3a);
+    case REG_DMODE:
+        return (0x38);
+    case REG_DIEN:
+        return (0x39);
+    case REG_DCNTL:
+        return (0x3b);
+    default:
+        return (reg);
+    }
 }
 
 /*
@@ -1939,6 +2682,8 @@ dma_mem_to_mem_quad(VAPTR src, VAPTR dst, uint32_t len,
 static void
 script_write_reg_setup(uint32_t *script, uint8_t reg, uint8_t value)
 {
+    uint8_t script_reg = ncr_script_reg_addr(reg);
+
     /*
      * Command
      *
@@ -1951,7 +2696,7 @@ script_write_reg_setup(uint32_t *script, uint8_t reg, uint8_t value)
      * Bits 15-8  00000000 = Immediate data
      * Bits 7-0   00000000 = Reserved
      */
-    script[0] = 0x78000000 | (reg << 16) | (value << 8);
+    script[0] = 0x78000000 | (script_reg << 16) | (value << 8);
     script[1] = 0x00000000;
     script[2] = 0x98080000;  // Transfer Control Opcode=011 (Interrupt and stop)
     script[3] = 0x00000000;
@@ -2249,7 +2994,8 @@ test_device_access(uint extended)
     }
 
     (void) *ADDR32(a4091_reg_base);
-    if (access_timeout("\n53C710 access timeout", 2, tick_start)) {
+    if (access_timeout("\nController register access timeout", 2,
+                       tick_start)) {
         rc = 1;
         goto fail;
     }
@@ -3674,7 +4420,7 @@ nonfunctional_tests(void)
 /*
  * test_bus_access
  * ---------------
- * Verify that 53C710 can access the host bus by fetching scripts.
+ * Verify that the controller can access the host bus by fetching scripts.
  */
 static int
 test_bus_access(uint extended)
@@ -3706,15 +4452,13 @@ test_bus_access(uint extended)
     tick_start = read_system_ticks();
 
     set_ncrreg8(REG_DIEN, REG_DIEN_ABRT);  // Set DMA interrupt enable on Abort
-    set_ncrreg8(REG_ISTAT, REG_ISTAT_ABRT);
+    set_ncr_istat(REG_ISTAT_ABRT);
     while (a4091_save.intcount == start_intcount) {
         if (access_timeout("Could not trigger interrupt", 2, tick_start)) {
-            printf("ISTAT=%02x %02x DSTAT=%02x %02x SSTAT0=%02x "
-                   "SSTAT1=%02x SSTAT2=%02x\n",
-                   a4091_save.ireg_istat, get_ncrreg8(REG_ISTAT),
-                   a4091_save.ireg_dstat, get_ncrreg8(REG_DSTAT),
-                   get_ncrreg8(REG_SSTAT0), get_ncrreg8(REG_SSTAT1),
-                   get_ncrreg8(REG_SSTAT2));
+            printf("ISTAT=%02x %02x DSTAT=%02x %02x ",
+                   a4091_save.ireg_istat, get_ncr_istat(),
+                   a4091_save.ireg_dstat, get_ncrreg8(REG_DSTAT));
+            dump_live_scsi_state();
             show_test_state("Bus access test:", 1);
             return (1);
         }
@@ -3724,7 +4468,6 @@ test_bus_access(uint extended)
         show_test_state("Bus access test:", 1);
         return (1);
     }
-
 
     /*
      * Execute a script at the base address of the ROM. The values here
@@ -3773,11 +4516,16 @@ test_bus_access(uint extended)
             rc++;
             break;
         }
-        script_write_reg_setup(saddr1, REG_SCRATCH, 0x5a);
+        /*
+         * Use a simple byte register as the proof target. SCRATCHA is awkward
+         * on 53C720/770 because the host-visible access is a 32-bit register
+         * while the SCRIPTS IO write targets a byte lane.
+         */
+        script_write_reg_setup(saddr1, REG_DWT, 0x5a);
 
         if (saddr0 != NULL) {
-            script_write_reg_setup(saddr0, REG_SCRATCH, 0xa5);
-            set_ncrreg32(REG_SCRATCH, 0xff);
+            script_write_reg_setup(saddr0, REG_DWT, 0xa5);
+            set_ncrreg8(REG_DWT, 0xff);
 
             if ((rc2 = execute_script(saddr0, 0x10, 0)) != 0) {
                 printf("A%u bus fetch failure from %08x\n",
@@ -3789,7 +4537,7 @@ test_bus_access(uint extended)
                 break;
 #endif
             }
-            got0 = get_ncrreg32(REG_SCRATCH);  // 0xa5 expected
+            got0 = get_ncrreg8(REG_DWT);  // 0xa5 expected
             if (got0 == 0xa5) {
                 /* Success: address under test where bit = 0 */
                 stuck_high &= ~BIT(bit);
@@ -3812,7 +4560,7 @@ test_bus_access(uint extended)
                        "expected %02x (diff %02x)\n",
                        bit, 0, (uint32_t) saddr0, got0, 0xa5, got0 ^ 0xa5);
 
-                got2 = get_ncrreg32(REG_SCRATCH);  // 0xa5 expected
+                got2 = get_ncrreg8(REG_DWT);  // 0xa5 expected
                 if (got2 != got0) {
                     printf("    Second fetch of %02x differs from first fetch "
                            "%02x\n", got2, got0);
@@ -3821,20 +4569,20 @@ test_bus_access(uint extended)
                     uint32_t *ptr = (uint32_t *)saddr1;
                     printf("    %08x %08x %08x %08x\n",
                            ptr[0], ptr[1], ptr[2], ptr[3]);
-                    printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
+                    printf("    Running again %02x\n", get_ncrreg8(REG_DWT));
                     Delay(1);
                     if ((rc2 = execute_script(saddr0, 0x10, 0)) != 0) {
                         printf("    Failed: %d\n", rc2);
                     } else {
-                        got0 = get_ncrreg32(REG_SCRATCH);
+                        got0 = get_ncrreg8(REG_DWT);
                         printf("    Succeeded with %02x expected %02x (%s)\n",
-                               got0, 0xa5, (got0 == 0xa5) ? "FAIL" : "Pass");
+                               got0, 0xa5, (got0 == 0xa5) ? "Pass" : "FAIL");
                     }
                 }
             }
         }
 
-        set_ncrreg32(REG_SCRATCH, 0xff);
+        set_ncrreg8(REG_DWT, 0xff);
         if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
             printf("A%u bus fetch failure from %08x\n",
                    bit, (uint32_t) saddr1);
@@ -3846,7 +4594,7 @@ test_bus_access(uint extended)
             break;
 #endif
         }
-        got1 = get_ncrreg32(REG_SCRATCH);  // 0x5a expected
+        got1 = get_ncrreg8(REG_DWT);  // 0x5a expected
 
         if (got1 == 0x5a) {
             /* Success: address under test where bit = 1 */
@@ -3868,7 +4616,7 @@ test_bus_access(uint extended)
             printf("A%u=%u bus fetch from %08x failed, %02x != "
                    "expected %02x (diff %02x)\n",
                    bit, 1, (uint32_t) saddr1, got1, 0x5a, got1 ^ 0x5a);
-            got2 = get_ncrreg32(REG_SCRATCH);  // 0x5a expected
+            got2 = get_ncrreg8(REG_DWT);  // 0x5a expected
             if (got2 != got1) {
                 printf("    Second fetch of %02x differs from first fetch %02x\n",
                        got2, got1);
@@ -3877,14 +4625,14 @@ test_bus_access(uint extended)
                 uint32_t *ptr = (uint32_t *)saddr1;
                 printf("    %08x %08x %08x %08x\n",
                        ptr[0], ptr[1], ptr[2], ptr[3]);
-                printf("    Running again %02x\n", get_ncrreg32(REG_SCRATCH));
+                printf("    Running again %02x\n", get_ncrreg8(REG_DWT));
                 Delay(1);
                 if ((rc2 = execute_script(saddr1, 0x10, 0)) != 0) {
                     printf("    Failed: %d\n", rc2);
                 } else {
-                    got1 = get_ncrreg32(REG_SCRATCH);
+                    got1 = get_ncrreg8(REG_DWT);
                     printf("    Succeeded with %02x expected %02x (%s)\n",
-                           got1, 0x5a, (got1 == 0x5a) ? "FAIL" : "Pass");
+                           got1, 0x5a, (got1 == 0x5a) ? "Pass" : "FAIL");
                 }
             }
         }
@@ -3894,15 +4642,7 @@ test_bus_access(uint extended)
         FreeMem(saddr1, 0x10);
     }
 
-    if (rc == 0) {
-        if (flag_verbose) {
-            printf("PASS:");
-            print_bits_dash(addr_pins, tested_high | tested_low);
-            printf(" tested\n");
-        }
-    } else {
-        show_test_state("Bus access test:", rc);
-    }
+    show_test_state("Bus access test:", rc);
 
     pins_diff  &= ~(stuck_high | stuck_low);
     stuck_high &= tested_low;
@@ -3973,39 +4713,62 @@ test_dma(uint extended)
 
     buf_handled = 4;
 
-    /* DMA test 1: transfer from 53C710 SCRATCH to TEMP register */
+    /* DMA test 1: use a neutral TEMP-register target on 53C770. */
     for (pos = 0; pos < 4; pos++) {
         uint32_t wdata = rand32();
-        set_ncrreg32(REG_SCRATCH, wdata);
-        set_ncrreg32(REG_TEMP, ~wdata);
-        CachePreDMA((APTR) (a4091_reg_base + REG_SCRATCH),
-                    &buf_handled, DMA_ReadFromRAM);
+        addr = (uint32_t) src + pos * 4;
+        *ADDR32(addr) = wdata;
         CachePreDMA((APTR) (a4091_reg_base + REG_TEMP),
                     &buf_handled, 0);
-        rc = dma_scratch_to_temp();
+        if (ncr_runtime.chip == NCR_CHIP_770) {
+            CachePreDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
+            set_ncrreg32(REG_TEMP, ~wdata);
+            rc = dma_mem_to_mem(addr, a4091_reg_base + REG_TEMP, 4);
+            CachePostDMA((APTR) addr, &buf_handled, DMA_ReadFromRAM);
+        } else {
+            set_ncrreg32(REG_SCRATCH, wdata);
+            set_ncrreg32(REG_TEMP, ~wdata);
+            CachePreDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                        &buf_handled, DMA_ReadFromRAM);
+            rc = dma_scratch_to_temp();
+            CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
+                         &buf_handled, DMA_ReadFromRAM);
+        }
         CachePostDMA((APTR) (a4091_reg_base + REG_TEMP),
                      &buf_handled, 0);
-        CachePostDMA((APTR) (a4091_reg_base + REG_SCRATCH),
-                     &buf_handled, DMA_ReadFromRAM);
 
         temp = get_ncrreg32(REG_TEMP);
         diff = wdata ^ temp;
 
         if (rc != 0)
-            printf("DMA failed at pos %x for %s\n", pos, "SCRATCH->TEMP");
+            printf("DMA failed at pos %x for %s\n", pos,
+                   (ncr_runtime.chip == NCR_CHIP_770) ? "RAM->TEMP" :
+                                                        "SCRATCH->TEMP");
         if (((rc != 0) || (diff != 0)) && (rc2++ < 10)) {
-            scratch = get_ncrreg32(REG_SCRATCH);
             if (rc2 == 1)
                 printf("\n");
-            printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x "
-                   "(diff %08x)\n",
-                   a4091_reg_base + REG_SCRATCH,
-                   a4091_reg_base + REG_TEMP,
-                   temp, (diff != 0) ? "!" : "", wdata, temp ^ wdata);
-            if (scratch != wdata) {
-                printf("  SCRATCH %08x: %08x != written %08x (diff %08x)\n",
-                       a4091_reg_base + REG_TEMP, scratch, wdata,
-                       scratch ^ wdata);
+            if (ncr_runtime.chip == NCR_CHIP_770) {
+                printf("  Addr %08x to TEMP %08x: %08x %s= expected %08x "
+                       "(diff %08x)\n",
+                       addr, a4091_reg_base + REG_TEMP,
+                       temp, (diff != 0) ? "!" : "", wdata, temp ^ wdata);
+                scratch = *ADDR32(addr);
+                if (scratch != wdata) {
+                    printf("  Source %08x: %08x != written %08x (diff %08x)\n",
+                           addr, scratch, wdata, scratch ^ wdata);
+                }
+            } else {
+                scratch = get_ncrreg32(REG_SCRATCH);
+                printf("  SCRATCH %08x to TEMP %08x: %08x %s= expected %08x "
+                       "(diff %08x)\n",
+                       a4091_reg_base + REG_SCRATCH,
+                       a4091_reg_base + REG_TEMP,
+                       temp, (diff != 0) ? "!" : "", wdata, temp ^ wdata);
+                if (scratch != wdata) {
+                    printf("  SCRATCH %08x: %08x != written %08x (diff %08x)\n",
+                           a4091_reg_base + REG_TEMP, scratch, wdata,
+                           scratch ^ wdata);
+                }
             }
             if ((temp != wdata) && (temp != ~wdata)) {
                 printf("  TEMP value %08x != written %08x or expected %08x\n"
@@ -4505,10 +5268,13 @@ test_dma_copy_perf(uint extended)
     int       rc = 0;
     int       pass;
     int       total_passes = 0;
+    uint      tick_milli = 0;
     VAPTR     src;
     VAPTR     dst;
     uint64_t  tick_start;
-    uint64_t  tick_end;
+    uint64_t  tick_end = 0;
+    uint64_t  ticks = 0;
+    uint64_t  total_kb = 0;
     ULONG     buf_handled;
 
     (void)extended;
@@ -4552,24 +5318,12 @@ run_some_more:
     }
     if (rc == 0) {
         tick_end = read_system_ticks();
-        uint tick_milli = get_milli_ticks(tick_end);
-        uint64_t ticks = tick_end - tick_start;
-        uint64_t total_kb = total_passes * (dma_len / 1024) * 2 * 4;
+        tick_milli = get_milli_ticks(tick_end);
+        ticks = tick_end - tick_start;
+        total_kb = total_passes * (dma_len / 1024) * 2 * 4;
         /*                          2=R/w, 4=4 transfers in script */
-        const char *passfail = "PASS";
         if (ticks < 10)
             goto run_some_more;
-
-        if (flag_verbose) {
-            printf("%s: %u KB in %u.%02u ticks",
-                    passfail, (uint32_t) total_kb, (uint32_t) ticks,
-                    (tick_milli + 50) / 100);
-            if ((ticks + tick_milli) == 0)
-                tick_milli = 1;
-            printf(" (%u KB/sec)\n",
-                   (uint32_t) (total_kb * TICKS_PER_SECOND * 1000 /
-                               (ticks * 1000 + tick_milli)));
-        }
     }
     CachePostDMA((APTR) src, &buf_handled, DMA_ReadFromRAM);
     CachePostDMA(dst, &buf_handled, 0);
@@ -4579,8 +5333,21 @@ fail_dst_alloc:
     FreeMem((APTR *) src, dma_len);
 
 fail_src_alloc:
-    if (rc != 0)
-        show_test_state("DMA copy perf:", rc);
+    show_test_state("DMA copy perf:", rc);
+    if ((rc == 0) && flag_verbose) {
+        uint32_t kb_per_sec;
+
+        if ((ticks + tick_milli) == 0)
+            tick_milli = 1;
+        kb_per_sec = (uint32_t) (total_kb * TICKS_PER_SECOND * 1000 /
+                                 (ticks * 1000 + tick_milli));
+        printf("  %16s %u KB in %u.%02u ticks (%u KB/sec)\n",
+               "",
+               (uint32_t) total_kb,
+               (uint32_t) ticks,
+               (tick_milli + 50) / 100,
+               kb_per_sec);
+    }
     return (rc);
 }
 
@@ -4592,6 +5359,7 @@ show_test_numbers(void)
            "unit test.\n"
            "Example:  ncr7xx -t56\n"
            "          This will execute both test 5 and test 6.\n"
+           "53C710 tests:\n"
            "  -0  Device access: Check ROM header and Zorro config area\n"
            "  -1  Register access\n"
            "          53C710 register read-only bits are verified.\n"
@@ -4608,7 +5376,13 @@ show_test_numbers(void)
            "  -6  Copy block DMA: Main mem->main mem data verify\n"
            "  -7  DMA copy performance (no verify)\n"
 //         "  -8  SCSI Loopback (not implemented)\n"
-           "  -8  SCSI pins: data pins and some control pins\n");
+           "  -8  SCSI pins: data pins and some control pins\n"
+           "53C720/720SE/770 tests:\n"
+           "  -0  Device access: Check base ROM/register access\n"
+           "  -4  Bus access and host SCRIPTS fetch\n"
+           "  -5  Simple DMA via SCRATCHA/TEMP and RAM\n"
+           "  -6  Copy block DMA: Main mem->main mem data verify\n"
+           "  -7  DMA copy performance (no verify)\n");
 }
 
 typedef struct {
@@ -4628,24 +5402,52 @@ static const test_funcs_t test_funcs[] = {
 //  { 9, test_loopback },
 };
 
+static const test_funcs_t test_funcs_72x[] = {
+    { 0, test_device_access },
+    { 4, test_bus_access },
+    { 5, test_dma },
+    { 6, test_dma_copy },
+    { 7, test_dma_copy_perf },
+};
+
 /*
  * test_card
  * ---------
- * Tests the specified A4091/A4092 card.
+ * Tests the specified card.
  */
 static int
 test_card(uint test_flags, uint extended)
 {
     int rc = 0;
     uint pos;
+    uint supported_mask = 0;
+    const test_funcs_t *funcs = test_funcs;
+    uint func_count = ARRAY_SIZE(test_funcs);
+
+    if (!ncr_runtime_supports_710_tests()) {
+        funcs = test_funcs_72x;
+        func_count = ARRAY_SIZE(test_funcs_72x);
+    }
+
+    for (pos = 0; pos < func_count; pos++)
+        supported_mask |= BIT(funcs[pos].bit);
 
     if (test_flags == 0)
-        test_flags = -1;
+        test_flags = supported_mask;
 
-    for (pos = 0; pos < ARRAY_SIZE(test_funcs); pos++) {
-        uint mask = BIT(test_funcs[pos].bit);
+    if (test_flags & ~supported_mask) {
+        printf("%s self-tests currently support only:",
+               ncr_runtime.chip_name);
+        for (pos = 0; pos < func_count; pos++)
+            printf(" -%u", funcs[pos].bit);
+        printf("\n");
+        return (1);
+    }
+
+    for (pos = 0; pos < func_count; pos++) {
+        uint mask = BIT(funcs[pos].bit);
         if ((rc == 0) && (test_flags & mask)) {
-            rc = test_funcs[pos].func(extended);
+            rc = funcs[pos].func(extended);
         }
         if (check_break())
             return (1);
@@ -4665,7 +5467,7 @@ test_card(uint test_flags, uint extended)
 /*
  * a4901_list
  * ----------
- * Display list of all A4091/A4092 cards found during autoconfig.
+ * Display list of all supported cards found during autoconfig.
  */
 static int
 a4091_list(uint32_t addr)
@@ -4719,7 +5521,7 @@ a4091_list(uint32_t addr)
     } while (cdev != NULL);
 
     if (count == 0)
-        printf("No A4091/A4092 cards detected\n");
+        printf("No supported cards detected\n");
     else if (did_header == 0)
         printf("Specified card %x not detected\n", addr);
 
@@ -4731,7 +5533,7 @@ a4091_list(uint32_t addr)
 /*
  * a4091_find
  * ----------
- * Locates the specified A4091/A4092 in the system (by autoconfig order).
+ * Locates the specified supported card in the system (by autoconfig order).
  */
 static uint32_t
 a4091_find(uint32_t pos)
@@ -4746,7 +5548,7 @@ a4091_find(uint32_t pos)
         return (-1);
     }
 
-    current_board_name = "A4091/A4092";
+    current_board_name = "NCR53C7xx board";
     do {
         ncr_board_type_t board_type;
 
@@ -4759,6 +5561,7 @@ a4091_find(uint32_t pos)
         if ((pos == 0) || (pos == count)) {
             addr = (uint32_t) cdev->cd_BoardAddr;
             current_board_name = ncr_board_name(board_type);
+            a4091_ac_serial = cdev->cd_Rom.er_SerialNumber;
             break;
         }
     } while (cdev != NULL);
@@ -4856,20 +5659,21 @@ usage(void)
            "correct operation.\n"
            "Options:\n"
            "\t-a  specify card address (slot or physical address): <addr>\n"
+           "\t-b  set DMA burst length: <1|2|4|8|16> (chip-specific)\n"
            "\t-c  decode device autoconfig area\n"
            "\t-d  enable debug output\n"
            "\t-D  perform DMA from/to Amiga memory: <src> <dst> <len>\n"
            "\t-f  ignore fact enforcer is present or driver is loaded\n"
            "\t-h  display this help text\n"
-           "\t-k  kill (disable) all active A4091/A4092 device drivers\n"
+           "\t-k  kill (disable) all active supported device drivers\n"
            "\t-l  specify the <number> of test iterations to run\n"
            "\t-L  loop until failure\n"
-           "\t-P  probe and list all detected A4091/A4092 cards\n"
+           "\t-P  probe and list all detected supported cards\n"
            "\t-q  quiet mode (only show errors)\n"
            "\t-Q  use Zorro III quick interrupts (lower latency)\n"
-           "\t-r  display NCR53C710 registers\n"
+           "\t-r  display detected NCR53C7xx registers\n"
            "\t-s  decode device external switches\n"
-           "\t-S  attempt to suspend all A4091/A4092 drivers while testing\n"
+           "\t-S  attempt to suspend all supported drivers while testing\n"
            "\t-t  test card\n"
            "\t-?  show individual test steps\n",
            version + 7);
@@ -4889,13 +5693,13 @@ main(int argc, char **argv)
     int      flag_dma       = 0;  /* Copy memory using 53C710 DMA engine */
     int      flag_force     = 0;  /* Ignore the fact that enforcer is present */
     int      flag_loop      = 0;  /* Loop all tests until failure */
-    int      flag_kill      = 0;  /* Kill active A4091/A4092 device driver */
-    int      flag_list      = 0;  /* List all A4091/A4092 cards found */
+    int      flag_kill      = 0;  /* Kill active supported device driver */
+    int      flag_list      = 0;  /* List all supported cards found */
     int      flag_quick_int = 0;  /* Use Zorro III quick interrupts */
     int      flag_regs      = 0;  /* Decode device registers */
     int      flag_switches  = 0;  /* Decode device external switches */
     int      flag_test      = 0;  /* Test card */
-    int      flag_suspend   = 0;  /* Suspend A4091 drivers while testing */
+    int      flag_suspend   = 0;  /* Suspend supported drivers while testing */
     int      flag_zautocfg  = 0;  /* Attempt Zorro Autoconfig */
     uint     test_flags     = 0;  /* Test flags (0-9) */
     uint     pass           = 0;  /* Current test pass */
@@ -4943,6 +5747,27 @@ main(int argc, char **argv)
                         }
                         if (addr == A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS)
                             addr = A4000T_SCSI_BASE;
+                        break;
+                    }
+                    case 'b': {
+                        int pos = 0;
+
+                        if (++arg >= argc) {
+                            printf("You must specify a DMA burst length\n");
+                            exit(1);
+                        }
+                        if ((sscanf(argv[arg], "%u%n",
+                                    &runtime_burst_len, &pos) != 1) ||
+                            (pos == 0) ||
+                            (runtime_burst_len != 1 &&
+                             runtime_burst_len != 2 &&
+                             runtime_burst_len != 4 &&
+                             runtime_burst_len != 8 &&
+                             runtime_burst_len != 16)) {
+                            printf("Invalid DMA burst length %s specified\n",
+                                   argv[arg]);
+                            exit(1);
+                        }
                         break;
                     }
                     case 'c':
@@ -5079,7 +5904,7 @@ main(int argc, char **argv)
         a4091_base = addr;
 
     if (a4091_base == (uint32_t)-1) {
-        printf("No A4091/A4092 cards detected\n");
+        printf("No supported cards detected\n");
         exit(1);
     }
     if (a4091_base == A4000T_SCSI_BASE)
@@ -5100,7 +5925,40 @@ main(int argc, char **argv)
         a4091_switch_base = a4091_base + A4091_OFFSET_SWITCHES;
     }
 
-    a4091_save.reg_addr = a4091_reg_base;  // 53C710 registers
+    a4091_save.reg_addr = a4091_reg_base;  // NCR53C7xx registers
+
+    {
+        BERR_DSACK_SAVE();
+        detect_ncr_chip();
+        BERR_DSACK_RESTORE();
+    }
+    if (runtime_burst_len != 0) {
+        const char *valid = ncr_burst_valid_values();
+
+        if (!ncr_burst_valid(runtime_burst_len)) {
+            if (valid != NULL) {
+                printf("DMA burst length %u is invalid for %s; valid values "
+                       "are %s\n",
+                       runtime_burst_len, ncr_runtime.chip_name, valid);
+            } else {
+                printf("DMA burst override is currently supported only on "
+                       "53C710 and 53C770 (detected %s)\n",
+                       ncr_runtime.chip_name);
+            }
+            exit(1);
+        }
+    }
+    if (flag_verbose)
+        print_ncr_chip_info();
+
+    if (!ncr_runtime_supports_710_tests() &&
+        flag_kill) {
+        printf("%s support is currently limited to probing, register "
+               "inspection, DMA, and the -t0/-t4/-t5/-t6/-t7 tests. "
+               "The -k path is still 53C710-only.\n",
+               ncr_runtime.chip_name);
+        exit(1);
+    }
 
     if (flag_kill) {
         BERR_DSACK_SAVE();
@@ -5109,14 +5967,14 @@ main(int argc, char **argv)
     }
 
     if (flag_dma || flag_test) {
-        /* Check if A4091 is owned by driver */
+        /* Check if the board is owned by a driver */
         attempt_driver_expunge();
 
         if ((flag_suspend == 0) &&
             (flag_force == 0) &&
             (a4091_show_or_disable_driver_irq_handler(0, 1) +
              a4091_show_or_disable_driver_task(0, 1) > 0)) {
-            printf("A4091/A4092 driver active in system, which will conflict with "
+            printf("%s driver active in system, which will conflict with "
                    "this tool.\n"
                    "You should use a ROM with no driver. Other options:\n"
                    "  1) \"avail flush\" might remove the open source driver "
@@ -5127,7 +5985,8 @@ main(int argc, char **argv)
                    "  3) The \"-S\" option will attempt to suspend the driver "
                    "while testing.\n"
                    "  4) The \"-f\" option may be used to ignore the driver "
-                   "presence (unsafe).\n");
+                   "presence (unsafe).\n",
+                   current_board_name);
             exit(1);
         }
         BERR_DSACK_SAVE();
