@@ -2626,12 +2626,6 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	KASSERT(!cold);
 
 #ifdef PORT_AMIGA
-#ifdef DEBUG
-        if (((uint) xs > 0x10000000) || ((uint) xs < 0x02000000)) {
-            panic("Invalid xs %08lx", (uint) xs);
-            return (1);
-        }
-#endif
         /*
          * Set the LUN in the CDB if we have an older device. We also
          * set it for more modern SCSI-2 devices "just in case".
