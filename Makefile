@@ -27,6 +27,12 @@ TARGETCFLAGS := -DDRIVER_A4092 -DNCR53C710=1 -DARCH_710 -DDEVNAME="a4092" -DNO_C
 TARGETAFLAGS := -DNCR53C710=1 -DDRIVER_A4092=1
 DEVNAME=a4092
 HAVE_ROM=y
+else ifeq ($(DEVICE),A4770)
+TARGET  := NCR53C770
+TARGETCFLAGS := -DDRIVER_A4770 -DNCR53C770=1 -DARCH_770 -DDEVNAME="a4770" -DNO_CONFIGDEV=0 -DHAVE_ROM=1 -DFLASH_SPI=1 -DSIOP_770_USE_4BIT_OFFSET=$(SIOP_770_USE_4BIT_OFFSET)
+TARGETAFLAGS := -DNCR53C770=1 -DDRIVER_A4770=1
+DEVNAME=a4770
+HAVE_ROM=y
 else ifeq ($(DEVICE),A4000T)
 TARGET  := NCR53C710
 TARGETCFLAGS := -DDRIVER_A4000T -DNCR53C710=1 -DARCH_710 -DDEVNAME="scsi710" -DNO_CONFIGDEV=1 -DHAVE_ROM=0 -DOEM_KICKMODULE=1
@@ -40,7 +46,7 @@ TARGETAFLAGS := -DNCR53C770=1
 DEVNAME=scsi770
 HAVE_ROM=n
 else
-$(error Unknown build target! Please set DEVICE to A4091, A4092, A4000T or A4000T770.)
+$(error Unknown build target! Please set DEVICE to A4091, A4092, A4770, A4000T or A4000T770.)
 endif
 
 OBJDIR  ?= objs-$(DEVICE)
@@ -60,7 +66,7 @@ SRCS    += siop.c
 else ifeq ($(TARGET),NCR53C770)
 SRCS    += siop2.c
 endif
-ifeq ($(DEVNAME),a4092)
+ifneq (,$(filter $(DEVNAME),a4092 a4770))
 SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c mfg.c
 endif
 SRCS    += romfile.c battmem.c
@@ -73,6 +79,10 @@ OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 OBJSROM := $(OBJDIR)/rom.o
 TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash
+DISK_FILES := $(PROG) $(PROGU) $(PROGD) util/a4092flash/a4092flash
+ifneq (,$(filter $(DEVNAME),a4092 a4770))
+DISK_FILES += $(ROM_CD)
+endif
 
 HOSTCC  ?= cc
 CC      := m68k-amigaos-gcc
@@ -367,9 +377,9 @@ lha:
 	lha -c a4091_$$VER.lha a4091_$$VER >/dev/null ;\
 	rm -rf a4091_$$VER
 
-disk:
+disk: $(DISK_FILES)
 	@echo "Building Disk image"
-	$(QUIET)$(MAKE) -s -C disk
+	$(QUIET)$(MAKE) -s -C disk DEVICE=$(DEVICE) DEVNAME=$(DEVNAME)
 
 all-targets:
 	@echo "Cleaning up first"
@@ -388,6 +398,13 @@ all-targets:
 	@echo "Building A4092 driverless, normal and cdboot image"
 	$(QUIET)$(MAKE) -s DEVICE=A4092 a4092_cdfs.rom
 	$(QUIET)$(MAKE) -s DEVICE=A4092 clean
+	@echo "Building A4770 debug image"
+	$(QUIET)$(MAKE) -s DEVICE=A4770 DEBUG="-DDEBUG -DDEBUG_DEVICE -DDEBUG_SD -DDEBUG_MOUNTER"
+	$(QUIET)mv a4770.rom a4770_debug.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4770 clean
+	@echo "Building A4770 driverless, normal and cdboot image"
+	$(QUIET)$(MAKE) -s DEVICE=A4770 a4770_cdfs.rom
+	$(QUIET)$(MAKE) -s DEVICE=A4770 clean
 	@echo "Building scsi710.device and scsi710.kick"
 	$(QUIET)$(MAKE) -s DEVICE=A4000T scsi710.kick
 	$(QUIET)$(MAKE) -s DEVICE=A4000T clean
