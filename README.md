@@ -150,7 +150,7 @@ The A4091 driver is a hybrid, combining a robust, battle-tested SCSI core with A
 
 ### The Mounter
 
-A key component for ease of use is the **mounter**. It is included in the ROM and is responsible for mounting hard drives at boot time, using the filesystems stored in Kickstart or the ROM (like `CDVDFS` or `fat95`).
+A key component for ease of use is the **mounter**. It is included in the ROM and is responsible for mounting hard drives at boot time, using the filesystems stored in Kickstart or the ROM (like `ODFileSystem` or `fat95`).
 
 After the main driver is running, the mounter scans the A4091 ROM for any embedded filesystem drivers. When it finds one, it automatically performs the necessary steps to mount it, so the user doesn't have to manually run any commands. This is what allows for seamless booting from a CD or automatic access to FAT-formatted drives.
 
@@ -216,7 +216,7 @@ For advanced debugging, you can enable serial output by uncommenting various `-D
 
 ### Using a Different CD-ROM Filesystem (AmigaOS `CDFileSystem`)
 
-By default, the ROM is built with the **CDVDFS** filesystem from AROS. You can replace it with the official `CDFileSystem` from AmigaOS 3.2 (or other versions).
+By default, the ROM is built with the **ODFileSystem** ROM profile from `3rdparty/ODFileSystem`. You can replace it with the official `CDFileSystem` from AmigaOS 3.2 (or other versions).
 
 **Step 1: Extract `CDFileSystem` from the AmigaOS Install Disk**
 

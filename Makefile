@@ -173,7 +173,8 @@ endif
 
 # Autodetect which CDFileSystem is available if any. This mechanism
 # lets you build with an AmigaOS CDFileSystem if you drop the file
-# into the source tree. Per default, we are building with CDVDFS.
+# into the source tree. Per default, we are building with the
+# ODFileSystem ROM profile from 3rdparty/ODFileSystem.
 
 ifneq (,$(wildcard BootCDFileSystem))
 CDFS=BootCDFileSystem
@@ -181,8 +182,17 @@ else
 ifneq (,$(wildcard CDFileSystem))
 CDFS=CDFileSystem
 else
-CDFS=$(OBJDIR)/CDVDFS
+CDFS=$(OBJDIR)/ODFileSystem
 endif
+endif
+
+DEBUG_CDFS ?= 0
+ifeq ($(DEBUG_CDFS),1)
+ODFS_ROM_TARGET=rom-test
+ODFS_ROM_BUILD_DIR=build/amiga-rom-test
+else
+ODFS_ROM_TARGET=rom
+ODFS_ROM_BUILD_DIR=build/amiga-rom
 endif
 
 ifeq ($(HAVE_ROM),y)
@@ -335,9 +345,11 @@ distclean: clean
 	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick scsi_assets.kick a4091_*.lha
 	$(QUIET)rm -rf $(OBJDIR)
 
-$(OBJDIR)/CDVDFS:
-	$(QUIET)$(MAKE) -s -C 3rdparty/CDVDFS/src
-	$(QUIET)cp 3rdparty/CDVDFS/src/cdrom-handler $@
+$(OBJDIR)/ODFileSystem: | $(OBJDIR)
+	$(QUIET)$(MAKE) -s -C 3rdparty/ODFileSystem \
+		CC="$(CC)" STRIP="$(STRIP)" HOSTCC="$(HOSTCC)" \
+		NDK_PATH="$(NDK_PATH)" AMIGA_DATE="$(ADATE)" $(ODFS_ROM_TARGET)
+	$(QUIET)cp 3rdparty/ODFileSystem/$(ODFS_ROM_BUILD_DIR)/ODFileSystem $@
 
 kickstart:
 	$(QUIET)if [ -f oem.bin ]; then $(MAKE) -s scsi_assets.kick; fi
@@ -390,4 +402,4 @@ all-targets:
 	$(QUIET)$(MAKE) -s disk
 	$(QUIET)$(MAKE) -s DEVICE=A4091 lha
 
-.PHONY: verbose all $(OBJDIR)/CDVDFS disk
+.PHONY: verbose all $(OBJDIR)/ODFileSystem disk

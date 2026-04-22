@@ -316,9 +316,9 @@ ____________________________________________________________________________
 Q:      CDROM Booting doesn't work for me, what do I do?
 
 A:      Use a4091_cdfs.rom from the release archive. This version will use
-        the AROS version of CDVDFS as CDFileSystem.
+        the ROM profile build of ODFileSystem as CDFileSystem.
 
-A:      If you do not want to use CDVDFS, make sure you use BootCDFileSystem
+A:      If you do not want to use ODFileSystem, make sure you use BootCDFileSystem
         from the AmigaOS 4.1 installation disk or CDFileSystem from 3.2(.x)
 ___________________________________________________________________________
 
