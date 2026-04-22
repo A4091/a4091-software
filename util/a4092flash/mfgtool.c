@@ -92,11 +92,6 @@ static bool a4092_spi_flash_present(uint32_t base)
             return false;
     }
 }
-
-#undef FindConfigDev
-// NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
-struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
-
 #define MAX_TRANSFER_SIZE (8 * 1024 * 1024)
 
 static bool spi_verify_buf(uint32_t base, uint32_t addr, const uint8_t *ref, size_t len,
@@ -473,7 +468,7 @@ static bool parse_mfg_config(const char *path, struct mfg_data *mfg, bool *has_s
 
     /* Compose serial after parsing so card_type is always available */
     if (*has_serial)
-        snprintf(mfg->serial, sizeof(mfg->serial), "%s-%08lu", mfg->card_type, raw_serial);
+        snprintf(mfg->serial, sizeof(mfg->serial), "%.6s-%08lu", mfg->card_type, raw_serial);
 
     return true;
 }
@@ -832,7 +827,7 @@ static int cmd_writemfg(uint32_t base, const char *config_file)
                 serial_num = 1;
             fclose(sf);
         }
-        snprintf(mfg.serial, sizeof(mfg.serial), "%s-%08lu", mfg.card_type, serial_num);
+        snprintf(mfg.serial, sizeof(mfg.serial), "%.6s-%08lu", mfg.card_type, serial_num);
         printf("Auto-assigned serial: %s\n", mfg.serial);
 
         /* Write back incremented serial */
@@ -1272,7 +1267,7 @@ int main(int argc, char **argv)
                 break;
             }
 
-            if (board_has_legacy_a409x_id(cd))
+            if (ZORRO_IS_LEGACY_A409X_ID(cd->cd_Rom.er_Manufacturer, cd->cd_Rom.er_Product))
                 unsupported_a4091_found = 1;
         }
         CloseLibrary((struct Library *)ExpansionBase);
@@ -1286,7 +1281,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "No supported SPI board found via expansion.library\n");
         return 1;
     } else {
-	printf("%s found at 0x%"PRIx32"\n", board_name, base);
+	printf("%s found at 0x%08" PRIx32 "\n", board_name, (uint32_t)base);
     }
 
     int argi = 1;

@@ -29,12 +29,15 @@
 
 #include "../../a4091.h"
 #include "flash.h"
+#include "gui.h"
+#include "hardware.h"
 #include "main.h"
 #include "config.h"
 #include "nvram_flash.h"
 
 #define A4091_ROM_MAGIC1 0xFFFF5352
 #define A4091_ROM_MAGIC2 0x2F434448
+#define MAX_ROM_INSPECT_SIZE (64 * 1024)
 
 const char ver[] = VERSION_STRING;
 
@@ -48,35 +51,6 @@ struct nvramParams nvramParams;
 #ifdef SHARED_REGISTERS
 bool devsInhibited = false;
 #endif
-
-static bool board_has_legacy_a409x_id(const struct ConfigDev *cd)
-{
-  return ZORRO_IS_LEGACY_A409X_ID(cd->cd_Rom.er_Manufacturer,
-                                  cd->cd_Rom.er_Product);
-}
-
-static bool board_has_a4092_id(const struct ConfigDev *cd)
-{
-  return ZORRO_IS_A4092_ID(cd->cd_Rom.er_Manufacturer,
-                           cd->cd_Rom.er_Product);
-}
-
-static bool board_has_a4770_id(const struct ConfigDev *cd)
-{
-  return ZORRO_IS_A4770_ID(cd->cd_Rom.er_Manufacturer,
-                           cd->cd_Rom.er_Product);
-}
-
-static const char *board_name_from_id(const struct ConfigDev *cd)
-{
-  if (board_has_a4770_id(cd))
-    return "A4770";
-  if (board_has_a4092_id(cd))
-    return "A4092";
-  if (board_has_legacy_a409x_id(cd))
-    return "A4091-compatible board";
-  return "unknown board";
-}
 
 /**
  * _ColdReboot()
@@ -214,17 +188,6 @@ bool inhibitDosDevs(bool inhibit)
 #endif
 
 /**
- * setup_a4092_board
- *
- * Configure the board struct for an A4092 Board
- * @param board pointer to the board struct
- */
-static void setup_a4092_board(struct scsiBoard *board)
-{
-  board->flashbase = (volatile UBYTE *)board->cd->cd_BoardAddr;
-}
-
-/**
  * promptUser
  *
  * Ask if the user wants to update this board
@@ -259,47 +222,15 @@ static BOOL probeFlash(ULONG romSize);
 static BOOL parse_nvram_params(struct Config* config);
 static void execute_nvram_operations(struct scsiBoard* board);
 
-/**
- * get_version_from_buffer
- *
- * Extract the firmware version string from a buffer
- * Searches for a supported ROM ID string and returns the version string
- *
- * @param buffer pointer to the data buffer
- * @param size size of the buffer
- * @param version_out output buffer for version string (can be NULL to just check)
- * @param version_max max size of output buffer
- * @return true if version found
- */
-static BOOL get_version_from_buffer(UBYTE *buffer, ULONG size, char *version_out, ULONG version_max)
+static BOOL cli_requests_gui(int argc, char *argv[])
 {
-  static const char * const needles[] = {
-    "A4092 scsidisk",
-    "A4770 scsidisk",
-  };
-  ULONG search_size = (size < 4096) ? size : 4096;
+  int i;
 
-  for (size_t n = 0; n < sizeof (needles) / sizeof (needles[0]); n++) {
-    const char *needle = needles[n];
-    size_t needle_len = strlen(needle);
-
-    for (size_t i = 0; i <= search_size - needle_len; i++) {
-      if (memcmp(buffer + i, needle, needle_len) == 0) {
-        if (version_out && version_max > 0) {
-          // Copy version string (up to null terminator or max size)
-          size_t j;
-          for (j = 0; j < version_max - 1 && (i + j) < size; j++) {
-            char c = buffer[i + j];
-            if (c == '\0' || c == '\n' || c == '\r')
-              break;
-            version_out[j] = c;
-          }
-          version_out[j] = '\0';
-        }
-        return TRUE;
-      }
-    }
+  for (i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--gui") == 0 || strcmp(argv[i], "-G") == 0)
+      return TRUE;
   }
+
   return FALSE;
 }
 
@@ -322,6 +253,16 @@ int main(int argc, char *argv[])
 
   if (DosBase == NULL) {
     return(20);
+  }
+
+  if (argc == 0) {
+    rc = run_workbench_ui();
+    goto exit;
+  }
+
+  if (cli_requests_gui(argc, argv)) {
+    rc = run_workbench_ui();
+    goto exit;
   }
 
   printf("\n%s\n\n", VERSION);
@@ -388,6 +329,7 @@ int main(int argc, char *argv[])
 
       while ((cd = FindConfigDev(cd,-1,-1)) != NULL) {
         bool legacy_id;
+        enum boardType detected_card;
         UBYTE manufId = 0;
         UBYTE devId = 0;
         ULONG sectorSize = 0;
@@ -395,15 +337,14 @@ int main(int argc, char *argv[])
         const char *board_name;
 
         board.cd = cd;
-        legacy_id = board_has_legacy_a409x_id(cd);
-        if (!legacy_id && !board_has_a4092_id(cd) && !board_has_a4770_id(cd))
+        detected_card = board_type_from_configdev(cd);
+        legacy_id = (detected_card == BOARD_A4091);
+        if (detected_card == BOARD_NONE)
           continue;
-
         boards_found++;
-        board_name = board_name_from_id(cd);
         setup_a4092_board(&board);
 
-        if (!flash_init(&manufId,&devId,board.flashbase,&flashSize,&sectorSize)) {
+        if (!flash_init(&manufId, &devId, board.flashbase, &flashSize, &sectorSize)) {
           if (legacy_id) {
             if (manufId == 0x9f && devId == 0xaf) {
               printf("Found A4091 at Address 0x%06x\n", (int)cd->cd_BoardAddr);
@@ -411,52 +352,50 @@ int main(int argc, char *argv[])
             } else {
               printf("Found legacy-ID board at Address 0x%06x\n",
                      (int)cd->cd_BoardAddr);
-              printf("No supported flash detected for %s (Manufacturer: %02X Device: %02X)\n",
-                     board_name, manufId, devId);
+              printf("No supported flash detected (Manufacturer: %02X Device: %02X)\n",
+                     manufId, devId);
               board_errors = 1;
             }
           } else {
             printf("Error: %s flash not detected (Manufacturer: %02X Device: %02X)\n",
-                   board_name, manufId, devId);
+                   board_type_name(detected_card), manufId, devId);
             board_errors = 1;
           }
           continue;
         }
 
+        if (legacy_id && detected_card == BOARD_A4091)
+          detected_card = BOARD_A4092;
+
+        board_name = board_type_name(detected_card);
         a4092_found++;
-        printf("Found %s%s at Address 0x%06x\n",
-               legacy_id ? "legacy-ID " : "", board_name,
-               (int)cd->cd_BoardAddr);
+        if (legacy_id && detected_card == BOARD_A4092)
+          printf("Found legacy-ID %s at Address 0x%06x\n",
+                 board_name, (int)cd->cd_BoardAddr);
+        else
+          printf("Found %s at Address 0x%06x\n",
+                 board_name, (int)cd->cd_BoardAddr);
 
         {
           // Display version information before prompting
           if (config->writeFlash && driver_buffer) {
-            char flash_version[128];
-            char file_version[128];
-            const ULONG SEARCH_SIZE = 4096;
-            ULONG search_size = (flashSize < SEARCH_SIZE) ? flashSize : SEARCH_SIZE;
-            char *flash_buf = AllocMem(search_size, 0);
+            struct romInfo flash_info;
+            struct romInfo file_info;
+            ULONG inspect_size = (flashSize < MAX_ROM_INSPECT_SIZE) ? flashSize : MAX_ROM_INSPECT_SIZE;
+            char *flash_buf = AllocMem(inspect_size, 0);
 
             if (flash_buf) {
-              for (int i = 0; i < search_size; i++) {
-                flash_buf[i] = flash_readByte(i);
-              }
+              flash_readBuf(0, (UBYTE *)flash_buf, inspect_size);
+              summarize_rom_buffer((UBYTE *)flash_buf, inspect_size, &flash_info);
 
               printf("  Installed: ");
-              if (get_version_from_buffer((UBYTE *)flash_buf, search_size, flash_version, sizeof(flash_version))) {
-                printf("%s\n", flash_version);
-              } else {
-                printf("(unknown)\n");
-              }
-              FreeMem(flash_buf, search_size);
+              printf("%s\n", flash_info.summary);
+              FreeMem(flash_buf, inspect_size);
             }
 
+            summarize_rom_buffer(driver_buffer, romSize, &file_info);
             printf("  Update to: ");
-            if (get_version_from_buffer(driver_buffer, romSize, file_version, sizeof(file_version))) {
-              printf("%s\n", file_version);
-            } else {
-              printf("(unknown)\n");
-            }
+            printf("%s\n", file_info.summary);
           }
 
           // Ask the user if they wish to update this board
@@ -779,12 +718,9 @@ static BOOL probeFlash(ULONG romSize)
       buffer[i] = flash_readByte(i);
     }
 
-    char version[128];
-    if (get_version_from_buffer((UBYTE *)buffer, search_size, version, sizeof(version))) {
-      printf("Version: %s\n", version);
-    } else {
-      printf("Could not determine version.\n");
-    }
+    struct romInfo info;
+    summarize_rom_buffer((UBYTE *)buffer, search_size, &info);
+    printf("Version: %s\n", info.summary);
 
     FreeMem(buffer, search_size);
   } else {

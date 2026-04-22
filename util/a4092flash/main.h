@@ -19,6 +19,11 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <exec/lists.h>
+#include <exec/ports.h>
+
 #define STR(s) #s      /* Turn s into a string literal without expanding macro definitions (however, \
                           if invoked from a macro, macro arguments are expanded). */
 #define XSTR(s) STR(s) /* Turn s into a string literal after macro-expanding it. */
@@ -26,16 +31,16 @@
 #define VERSION_STRING "$VER: a4092flash " XSTR(DEVICE_VERSION) "." XSTR(DEVICE_REVISION) " (" XSTR(BUILD_DATE) ") " XSTR(GIT_REF)
 #define VERSION "a4092flash " XSTR(DEVICE_VERSION) "." XSTR(DEVICE_REVISION) " (" XSTR(BUILD_DATE) ") " XSTR(GIT_REF)
 
-#undef FindConfigDev
-// NDK 1.3 definition of FindConfigDev is incorrect which causes "makes pointer from integer without a cast" warning
-struct ConfigDev* FindConfigDev(struct ConfigDev*, LONG, LONG);
-
 // NDK 1.3 includes lacks these, so define them here
 #ifdef __KICK13__
 void ColdReboot(void);
 struct DosList *LockDosList(ULONG);
 struct DosList *NextDosEntry(struct DosList *, ULONG);
 void *UnLockDosList(ULONG);
+#endif
+
+#ifdef SHARED_REGISTERS
+bool inhibitDosDevs(bool inhibit);
 #endif
 
 struct scsiBoard {

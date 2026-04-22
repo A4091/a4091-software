@@ -96,7 +96,7 @@ struct mfg_data {
 
     /* Integrity check - CRC32 over all preceding bytes (252 bytes) */
     uint32_t crc32;
-} __attribute__((packed));
+} __attribute__((packed)) __attribute__((aligned(2)));
 
 /* Verify structure size at compile time */
 _Static_assert(sizeof(struct mfg_data) == 256,

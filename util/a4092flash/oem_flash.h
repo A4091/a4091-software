@@ -50,7 +50,7 @@ struct oem_variant {
     uint32_t compressed_size;           /* ZX0 compressed data bytes */
     uint32_t uncompressed_size;         /* raw planar bitmap bytes */
     uint32_t data_offset;               /* offset from bundle start to payload */
-} __attribute__((packed));
+} __attribute__((packed)) __attribute__((aligned(2)));
 
 struct oem_header {
     uint32_t magic;                               /* OEM_MAGIC */
@@ -60,7 +60,7 @@ struct oem_header {
     uint32_t total_size;                          /* total blob size in bytes */
     struct oem_variant variant[OEM_VARIANT_SLOTS];
     uint32_t checksum;                            /* XOR32 over preceding bytes */
-} __attribute__((packed));
+} __attribute__((packed)) __attribute__((aligned(2)));
 
 _Static_assert(sizeof(struct oem_variant) == 84,
                "oem_variant structure must be exactly 84 bytes");

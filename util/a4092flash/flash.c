@@ -210,7 +210,7 @@ void parallel_flash_writeByte(ULONG address, UBYTE data)
   parallel_flash_command(CMD_BYTE_PROGRAM);
   parallel_flash_write_byte(address, data);
   if (!parallel_flash_poll(address)) {
-      printf("Write failed at address 0x%"PRIx32"\n", address);
+      printf("Write failed at address 0x%08" PRIx32 "\n", (uint32_t)address);
   }
   return;
 }
@@ -318,7 +318,7 @@ static inline bool parallel_flash_poll(ULONG address)
   } while ( ((val1 & (1 << 6)) != (val2 & (1 << 6))) && timeout > 0);
 
   if (timeout == 0) {
-     printf("Flash poll timeout at 0x%"PRIx32"!\n", address);
+     printf("Flash poll timeout at 0x%08" PRIx32 "!\n", (uint32_t)address);
      return false;
   }
 

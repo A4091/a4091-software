@@ -16,10 +16,11 @@
 
 #include <inttypes.h>
 
-/* ULONG has changed from NDK 3.9 to NDK 3.2.
- * However, PRI*32 did not. What is the right way to implement this?
+/* Some Amiga NDK/CRT combinations define uint32_t as unsigned long while
+ * inttypes.h still uses unsigned int formats for PRI*32. Keep the macros
+ * aligned with the actual 32-bit type we compile against.
  */
-#if INCLUDE_VERSION < 47
+#if (INCLUDE_VERSION < 47) || (defined(__CLIB2__) && (__SIZEOF_LONG__ == 4))
 #undef PRIu32
 #define PRIu32 "lu"
 #undef PRId32

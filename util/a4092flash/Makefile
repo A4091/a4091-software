@@ -3,7 +3,9 @@ CC=m68k-amigaos-gcc
 STRIP=m68k-amigaos-strip
 HOSTCC=gcc
 # Compiler flags (do not place libraries here)
-CFLAGS=-mcrt=nix13 -mcpu=68060 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
+CFLAGS=-mcrt=clib2 -mcpu=68030 -Wall -Wno-pointer-sign -s -Os -fomit-frame-pointer
+NDK_INCLUDE ?= /opt/amiga/m68k-amigaos/ndk-include
+CFLAGS+=-I$(NDK_INCLUDE)
 # Libraries must come last on the link line
 LDLIBS=-lamiga -lgcc
 QUIET?=@
@@ -53,6 +55,8 @@ endif
 all:	$(PROJECT) mfgtool
 
 SRCS = flash.c \
+       gui.c \
+       hardware.c \
        spi.c \
        config.c \
        main.c \

@@ -117,7 +117,9 @@ struct Config* configure(int argc, char *argv[]) {
  * @brief Print the usage information
 */
 void usage(void) {
-    printf("\nUsage: a4092flash [-Y] { -R <a4092.rom> | -W <a4092.rom> | -E | -P | -F <nvram_cmd> }\n\n");
+    printf("\nUsage: a4092flash [--gui|-G]\n");
+    printf("       a4092flash [-Y] { -R <a4092.rom> | -W <a4092.rom> | -E | -P | -F <nvram_cmd> }\n\n");
+    printf("       --gui | -G - Start the Workbench GUI from CLI.\n");
     printf("       -Y assume YES as answer to all questions\n");
     printf("       -R <a4092.rom> - Read A4092 ROM to file\n");
     printf("       -W <a4092.rom> - Flash A4092 ROM from file\n");
