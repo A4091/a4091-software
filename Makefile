@@ -379,7 +379,7 @@ lha:
 
 disk: $(DISK_FILES)
 	@echo "Building Disk image"
-	$(QUIET)$(MAKE) -s -C disk DEVICE=$(DEVICE) DEVNAME=$(DEVNAME)
+	$(QUIET)$(MAKE) -s -C disk DEVICE=$(DEVICE) DEVNAME=$(DEVNAME) FULL_VERSION="$(FULL_VERSION)" ADATE="$(ADATE)"
 
 all-targets:
 	@echo "Cleaning up first"

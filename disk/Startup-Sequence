@@ -63,8 +63,8 @@ ENDIF
 ENDIF
 ENDIF
 echo ""
-echo "VERSION_LINE"
-echo "COPYRIGHT_LINE"
+echo "@A4091_DISK_VERSION_LINE@"
+echo "@A4091_DISK_COPYRIGHT_LINE@"
 echo ""
 echo "                 Welcome to the SCSI Test and Utilities Disk."
 echo ""

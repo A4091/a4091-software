@@ -1,5 +1,5 @@
 @DATABASE "A4091"
-@$VER: A4091.guide 1.2 (25.08.2024)
+@$VER: A4091.guide 1.3 (@A4091_DISK_BUILD_DATE@)
 @(C) Stefan Reinauer & Chris Hooper
 @WORDWRAP
 @AUTHOR Stefan Reinauer & Chris Hooper
@@ -14,7 +14,7 @@
               \\ \\__\\ \\__\\     \\ \\__\\ \\_______\\|\\_______\\   \\ \\__\\
                \\|__|\\|__|      \\|__|\\|_______|\\|_______|    \\|__|
 
-                       © 2022-2025 Stefan Reinauer & Chris Hooper
+                       © 2022-2026 Stefan Reinauer & Chris Hooper
 
 ____________________________________________________________________________
 
@@ -23,11 +23,13 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.2                               a4091.device Version 42.32
+Guide Version 1.3                      @A4091_DISK_DEVICE_NAME@ Version @A4091_DISK_FULL_VERSION@
 
 
-     @{"License      : Legal restrictions                                  " link License}
+     @{"License      : License Terms of this Project                       " link License}
      @{"What is it   : What is the Amiga 4091?                             " link A4091Overview}
+     @{"Go smaler    : What is the Amiga 4091 Mini?                        " link A4091MiniOverview}
+     @{"Wait, what?  : What is the Amiga 4092?                             " link A4092Overview}
      @{"Compatibility: Compatibility guidelines & Requirements             " link Compatibility}
      @{"ROM Versions : What are all the available ROM versions             " link ROMVersions}
      @{"Configuration: Early Startup Menu / Configuration                  " link Configuration}
@@ -50,7 +52,7 @@ Contacts:
 
 @NODE License "License"
 
-Copyright 2021-2025 Chris D Hooper, Stefan Reinauer
+Copyright 2021-2026 Chris D Hooper, Stefan Reinauer
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -81,16 +83,79 @@ POSSIBILITY OF SUCH DAMAGE.
 @NODE A4091Overview "What is the A4091?"
 
 The Amiga 4091 is one of only two SCSI-II controllers ever produced for
-the Amiga's ZorroIII bus.
+the Amiga's Zorro III bus.
 
 As rare as it was, Chris Hooper and Stefan Reinauer decided in 2021 to
-create a reproduction of this card.
+create a reproduction of this card: The ReA4091
 
 You can find more information at https://www.scsi.me/
 You can find all source code available at https://github.com/A4091/
 
 
 @ENDNODE
+
+@NODE A4091MiniOverview "What is the A4091 Mini?"
+
+The Amiga 4091 Mini is a half size version of the ReA4091
+
+You can find more information at https://www.scsi.me/
+You can find all source code available at https://github.com/A4091/
+
+@ENDNODE
+
+@NODE A4092Overview "What is the A4092?"
+
+The Amiga A4092 is a complete, modern reimplementation of the A4091.
+While it still has a lot of architectural similarity to the A4091,
+it has a lot of new things under the hood:
+
+ o) CPLD Instead of GALs
+    The original A4091 used eight discrete GALs (ATF22V10 and similar)
+    programmed with WinCUPL to implement all bus interface, AutoConfig,
+    address decoding, arbitration, and SCSI control logic. The A4092
+    consolidates all of this into a single Xilinx XC95144XL CPLD.
+    This brings several advantages:
+
+     *) Field-updatable logic ¿ no need to pull and reprogram individual
+        GAL chips
+     *) No soldering and no sockets required for upgrading the logic.
+     *) More logic resources and routing flexibility than the original
+        GAL array
+     *) Eliminates dependence on increasingly scarce GAL parts
+     *) The original WinCUPL equations have been rewritten from scratch
+        in Verilog for the CPLD
+     *) Significantly higher speed and better Zorro III compatibility
+
+ o) SPI Flash Instead of EPROM
+    The parallel EPROM used for the A4091's boot ROM has been replaced
+    with SPI Flash memory. Firmware updates no longer require a UV eraser
+    and a dedicated EPROM programmer ¿ the flash can be reprogrammed
+    in-system.
+
+ o) Modern SMD Packages
+    Where the original A4091 used through-hole, PLCC and SOIC packages,
+    the A4092 uses TSSOP and other modern surface-mount packages (such
+    as 0603 passives). This reduces the board footprint, improves signal
+    integrity and aligns with current PCB assembly capabilities.
+
+ o) Designed for Current Manufacturing
+    The A4092 is designed to be manufactured with services like JLCPCB
+    or PCBway, using (mostly) components that are in current production
+    and readily sourced. No hunting for NOS parts or pulling chips from
+    donor boards.
+
+ o) AutoConfig in the CPLD
+    The AutoConfig logic ¿ previously spread across multiple GALs ¿ is
+    now integrated into the CPLD alongside the rest of the glue logic,
+    resulting in a cleaner and more maintainable design.
+
+You can find more information at https://www.scsi.me/
+You can find all source code available at https://github.com/A4091/
+
+
+@ENDNODE
+
+
 
 @NODE Compatibility "Compatibility Guidelines & Requirements"
 
@@ -359,6 +424,8 @@ putting up with Stefan's patches.
 trackfile.device, a complete device implementation that is part of the
 AmigaOS 3.2 NDK (and nobody seems to know about this)
 
+@{B}Dorken@{UB}: For making the Verilog rewrite of the A4092 a reality.
+
 @{B}Matt Harlum@{UB}: For many fixes and great help debugging!
 
 @{B}Szymon Gosk@{UB}: For creating A4091 compatible metal brackets and
@@ -372,7 +439,8 @@ of highly technical Amiga enthusiasts that is a joy to be around and
 getting inspired for projects like the ReA4091.
 
 @{B}Bernie Innocenti, Francis Bernier@{UB}:
-For helping with box and disk pictures and dimensions.
+For helping with box and disk pictures and dimensions, bug fixes,
+testing, etc.
 
 @ENDNODE
 
@@ -398,6 +466,95 @@ Super Buster    :       The custom chip that handles translation between
 @{B}Version History@{UB}
 
 Full history available at https://github.com/A4091/a4091-software/commits/main
+
+Release v42.36:
+
+SCSI and DMA
+ o) Improve Zorro II RAM compatibility for DMA allocations
+ o) Copy SCSI scripts to Chip RAM on Zorro II systems
+ o) Add bounce buffer support for SCSI direct commands
+ o) Allocate inquiry buffers from DMA-capable memory
+ o) Probe disconnect-reconnect capability and improve NCR53C720/770 support
+ o) Handle Command Complete and NOP messages during message-in phase
+ o) Enable TolerANT active negation for Ultra SCSI controllers
+
+A4092 support
+ o) Add manufacturing data support and boot menu display page
+ o) Update SPI offsets for the latest CPLD design
+ o) Add configurable A4092 main screen color
+ o) Add update shortcut for A4092 firmware flashing
+
+A4092 flash tools
+ o) Fix SPI flash capacity calculation
+ o) Show installed and update versions before flashing
+ o) Share SPI code with mfgtool instead of duplicating it
+ o) Add error checking and input validation in flash update paths
+ o) Avoid time_t usage in flash tooling
+
+Bug fixes
+ o) Fix TEMP register range checking
+ o) Fix DMA chain index validation
+ o) Fix undefined behavior from bad bit shifts
+ o) Initialize io_Actual before issuing read/write commands
+
+Build system and utilities
+ o) Derive NDK include path from compiler location
+ o) Pass device type flags to assembler
+ o) Build per-device disk image variants
+ o) Rename the A4091 test utility to ncr7xx
+ o) Switch UI and artwork to an 8-color palette
+
+Release v42.35:
+
+A4092 support
+ o) Add full support for the new A4092 SCSI controller
+ o) Allow changing A4092 DIP switches from the boot menu
+ o) Add SPI flash support with bootmenu and a4092flash integration
+ o) Store A4092 settings directly in flash-based NVRAM
+
+ROM and driver
+ o) Replace RNC ProPack compression with Salvador ZX0
+ o) Reduce ROM header size and improve compressed binary sizes
+ o) Add Zorro III quick interrupt support
+ o) Add Zorro II DMA bounce buffers for Chip RAM / Zorro II Fast RAM systems
+ o) Fix geometry reporting for drives larger than 2TB
+
+Build system
+ o) Derive device version from git tags
+ o) Include all ROM and kickstart module artifacts in release builds
+ o) Fix version string handling for non-release builds
+ o) Improve gcc 6.5.0 compatibility
+
+Performance and cleanup
+ o) Reduce library dependencies in printf and command handling code
+ o) Add disk creation workflow improvements and system-configuration generation
+ o) Improve boot menu gadget appearance and status messages
+ o) Add optional external add-on script support in disk creation
+ o) Update devtest and salvador submodules
+
+Release v42.34:
+
+Bug fixes
+ o) Fix false detection of shadow devices
+
+Release v42.33:
+
+a4091.rom
+ o) Fix CDROM boot regression introduced in 42.32
+ o) Update CDVDFS to fix gcc 13 optimization issues
+ o) Add Phase 5 wide SCSI ID handling support
+
+Boot menu
+ o) Improve probing for non-standard host controller addresses
+ o) Improve handling of LUN probing and wide SCSI addresses
+ o) Add keyboard shortcuts
+
+A4092 support
+ o) Add a4092flash utility for updating the A4092 autoboot ROM
+
+Code quality
+ o) Fix the last outstanding Coverity issue
+
 
 Release v42.32:
 
