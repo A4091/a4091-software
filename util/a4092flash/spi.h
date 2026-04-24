@@ -50,6 +50,11 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
 UBYTE spi_flash_readByte(ULONG address);
 bool spi_flash_readBuf(ULONG address, UBYTE *buf, ULONG len);
 void spi_flash_writeByte(ULONG address, UBYTE data);
+bool spi_flash_erase_sector_with_progress(ULONG address, ULONG sectorSize,
+                                          void (*progress)(void *ctx,
+                                                           ULONG done,
+                                                           ULONG total),
+                                          void *progressCtx);
 bool spi_flash_erase_sector(ULONG address, ULONG sectorSize);
 bool spi_flash_erase_chip(void);
 void spi_flash_cleanup(void);

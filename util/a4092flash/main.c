@@ -41,6 +41,12 @@
 
 const char ver[] = VERSION_STRING;
 
+/* The GUI path has a large stack frame after GadTools/status/progress support.
+ * Ask clib2 to relaunch with enough stack instead of depending on the shell's
+ * current Stack setting.
+ */
+unsigned int __stack_size = 32768;
+
 struct Library *DosBase;
 #if __GNUC__ < 11
 struct ExecBase *SysBase;
@@ -234,6 +240,13 @@ static BOOL cli_requests_gui(int argc, char *argv[])
   return FALSE;
 }
 
+static BOOL started_from_workbench(void)
+{
+  struct Process *process = (struct Process *)FindTask(NULL);
+
+  return process && process->pr_CLI == 0;
+}
+
 int main(int argc, char *argv[])
 {
 #pragma GCC diagnostic push
@@ -255,7 +268,7 @@ int main(int argc, char *argv[])
     return(20);
   }
 
-  if (argc == 0) {
+  if (argc == 0 || started_from_workbench()) {
     rc = run_workbench_ui();
     goto exit;
   }
@@ -617,54 +630,110 @@ BOOL writeFlashToFile(char *filename, ULONG romSize)
  * @param size number of bytes to write
  * @returns true on success
 */
-BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *dest, ULONG size)
+static void emit_write_progress(flashWriteProgressFn progressFn, void *progressCtx,
+                                enum flashWritePhase phase, ULONG done,
+                                ULONG total, int *lastProgress)
 {
-  UBYTE *sourcePtr = NULL;
+  int progress;
+
+  if (!progressFn || total == 0)
+    return;
+
+  progress = (int)((done * 100UL) / total);
+  if (progress > 100)
+    progress = 100;
+
+  if (*lastProgress != progress) {
+    progressFn(progressCtx, phase, done, total);
+    *lastProgress = progress;
+  }
+}
+
+BOOL writeBufToFlashWithProgress(struct scsiBoard *board, UBYTE *source,
+                                 volatile UBYTE *dest, ULONG size,
+                                 flashWriteProgressFn progressFn,
+                                 void *progressCtx)
+{
   UBYTE destVal   = 0;
+  bool showConsole = (progressFn == NULL) && !flash_status_sink_active();
+  int lastWriteProgress = -1;
+  int lastVerifyProgress = -1;
 
-  int progress = 0;
-  int lastProgress = 1;
+  (void)board;
+  (void)dest;
 
-  fprintf(stdout,"Writing:     ");
-  fflush(stdout);
+  if (showConsole) {
+    fprintf(stdout,"Writing:     ");
+    fflush(stdout);
+  } else {
+    flash_printf("Writing flash...\n");
+  }
 
-  for (int i=0; i<size; i++) {
+  for (ULONG i = 0; i < size; i++) {
+    if (showConsole) {
+      int progress = (size > 1) ? (int)((i * 100UL) / (size - 1)) : 100;
 
-    progress = (i*100)/(size-1);
-
-    if (lastProgress != progress) {
-      fprintf(stdout,"\b\b\b\b%3d%%",progress);
-      fflush(stdout);
-      lastProgress = progress;
+      if (lastWriteProgress != progress) {
+        fprintf(stdout,"\b\b\b\b%3d%%",progress);
+        fflush(stdout);
+        lastWriteProgress = progress;
+      }
     }
-    sourcePtr = ((void *)source + i);
-    flash_writeByte(i,*sourcePtr);
+
+    flash_writeByte(i, source[i]);
+
+    if (!showConsole) {
+      emit_write_progress(progressFn, progressCtx, FLASH_WRITE_PHASE_PROGRAM,
+                          i + 1, size, &lastWriteProgress);
+    }
 
   }
 
-  fprintf(stdout,"\n");
-  fflush(stdout);
+  if (showConsole) {
+    fprintf(stdout,"\n");
+    fflush(stdout);
 
-  fprintf(stdout,"Verifying:     ");
-  for (int i=0; i<size; i++) {
+    fprintf(stdout,"Verifying:     ");
+  } else {
+    flash_printf("Verifying flash...\n");
+  }
 
-    progress = (i*100)/(size-1);
+  for (ULONG i = 0; i < size; i++) {
+    if (showConsole) {
+      int progress = (size > 1) ? (int)((i * 100UL) / (size - 1)) : 100;
 
-    if (lastProgress != progress) {
-      fprintf(stdout,"\b\b\b\b%3d%%",progress);
-      fflush(stdout);
-      lastProgress = progress;
+      if (lastVerifyProgress != progress) {
+        fprintf(stdout,"\b\b\b\b%3d%%",progress);
+        fflush(stdout);
+        lastVerifyProgress = progress;
+      }
     }
-    sourcePtr = ((void *)source + i);
+
     destVal = flash_readByte(i);
-    if (*sourcePtr != destVal) {
-          printf("\nVerification failed at offset %06x - Expected %02X but read %02X\n",i,*sourcePtr,destVal);
+    if (source[i] != destVal) {
+          flash_printf("Verification failed at offset %06lx - Expected %02X but read %02X\n",
+                              (unsigned long)i, source[i], destVal);
           return false;
     }
+
+    if (!showConsole) {
+      emit_write_progress(progressFn, progressCtx, FLASH_WRITE_PHASE_VERIFY,
+                          i + 1, size, &lastVerifyProgress);
+    }
   }
-  fprintf(stdout,"\n");
-  fflush(stdout);
+
+  if (showConsole) {
+    fprintf(stdout,"\n");
+    fflush(stdout);
+  }
+
   return true;
+}
+
+BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *dest,
+                     ULONG size)
+{
+  return writeBufToFlashWithProgress(board, source, dest, size, NULL, NULL);
 }
 
 /**

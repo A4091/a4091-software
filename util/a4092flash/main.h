@@ -66,9 +66,21 @@ struct nvramParams {
   bool write_switchflags_set;
 };
 
+enum flashWritePhase {
+  FLASH_WRITE_PHASE_PROGRAM = 0,
+  FLASH_WRITE_PHASE_VERIFY
+};
+
+typedef void (*flashWriteProgressFn)(void *ctx, enum flashWritePhase phase,
+                                     ULONG done, ULONG total);
+
 ULONG getFileSize(char *);
 BOOL readFileToBuf(char *, void *);
 BOOL writeFlashToFile(char *filename, ULONG romSize);
 BOOL writeBufToFlash(struct scsiBoard *board, UBYTE *source, volatile UBYTE *dest, ULONG size);
+BOOL writeBufToFlashWithProgress(struct scsiBoard *board, UBYTE *source,
+                                 volatile UBYTE *dest, ULONG size,
+                                 flashWriteProgressFn progressFn,
+                                 void *progressCtx);
 
 #endif

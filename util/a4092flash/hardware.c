@@ -33,6 +33,20 @@ const char *board_type_name(enum boardType type)
   }
 }
 
+const char *board_type_display_name(enum boardType type)
+{
+  switch (type) {
+    case BOARD_A4091:
+      return "A4091 SCSI-2 Host Controller";
+    case BOARD_A4092:
+      return "A4092 SCSI-2 Host Controller";
+    case BOARD_A4770:
+      return "A4770 Ultra-Wide SCSI Host Controller";
+    default:
+      return "No supported board detected";
+  }
+}
+
 enum boardType board_type_from_configdev(const struct ConfigDev *cd)
 {
   if (ZORRO_IS_A4092_ID(cd->cd_Rom.er_Manufacturer, cd->cd_Rom.er_Product))

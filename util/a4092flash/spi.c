@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "flash.h"
 #include "spi.h"
 #include "nibble_word.h"
 
@@ -101,7 +102,8 @@ static bool spi_wait_wip_clear(uint32_t base, uint32_t max_iters)
             return true;
         }
     }
-    printf("SPI: timeout waiting for WIP clear (SR1=%02X)\n", spi_read_sr1(base));
+    flash_printf("SPI: timeout waiting for WIP clear (SR1=%02X)\n",
+                        spi_read_sr1(base));
     return false;
 }
 static bool spi_wait_wel_set(uint32_t base, uint32_t max_iters)
@@ -118,14 +120,14 @@ static bool spi_write_status(uint32_t base, uint8_t sr1, uint8_t sr2)
 {
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        printf("ERROR: WEL not set before status write\n");
+        flash_printf("ERROR: WEL not set before status write\n");
         return false;
     }
     spi_tx_hold(base, SPI_CMD_WRSR);
     spi_tx_hold(base, sr1);
     spi_tx_end(base, sr2);
     if (!spi_wait_wip_clear(base, 100000)) {
-        printf("ERROR: status register write timed out\n");
+        flash_printf("ERROR: status register write timed out\n");
         return false;
     }
     return true;
@@ -139,16 +141,18 @@ bool spi_clear_block_protect(uint32_t base)
         return true;
     }
     uint8_t new_sr1 = sr1 & (uint8_t)~SR1_BP_MASK;
-    printf("SPI flash reports block protection (SR1=%02X SR2=%02X); clearing BP bits...\n", sr1, sr2);
+    flash_printf("SPI flash reports block protection (SR1=%02X SR2=%02X); clearing BP bits...\n",
+                        sr1, sr2);
     if (!spi_write_status(base, new_sr1, sr2)) {
-        printf("ERROR: failed to clear block protection bits\n");
+        flash_printf("ERROR: failed to clear block protection bits\n");
         return false;
     }
     uint8_t verify1 = spi_read_sr1(base);
     uint8_t verify2 = spi_read_sr2(base);
     if (verify1 & SR1_BP_MASK) {
 	(void)verify2;
-        printf("ERROR: block protection bits still set (SR1=%02X SR2=%02X). Check WP# pin.\n", verify1, verify2);
+        flash_printf("ERROR: block protection bits still set (SR1=%02X SR2=%02X). Check WP# pin.\n",
+                            verify1, verify2);
         return false;
     }
     return true;
@@ -178,7 +182,8 @@ static bool spi_block_erase(uint32_t base, uint32_t baddr, uint8_t erase_cmd)
 {
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        printf("ERROR: WEL not set before erase at 0x%08lX\n", (unsigned long)baddr);
+        flash_printf("ERROR: WEL not set before erase at 0x%08lX\n",
+                            (unsigned long)baddr);
         return false;
     }
     spi_tx_hold(base, erase_cmd);
@@ -197,7 +202,8 @@ static bool spi_page_program(uint32_t base, uint32_t addr, const uint8_t *data, 
     if (!len || len > SPI_PAGE_SIZE) return false;
     spi_write_enable(base);
     if (!spi_wait_wel_set(base, 1000)) {
-        printf("ERROR: WEL not set before program at 0x%08lX\n", (unsigned long)addr);
+        flash_printf("ERROR: WEL not set before program at 0x%08lX\n",
+                            (unsigned long)addr);
         return false;
     }
     spi_tx_hold(base, SPI_CMD_PP);
@@ -241,7 +247,8 @@ bool spi_erase_range_blocks(uint32_t base, uint32_t addr, size_t len,
                             void (*progress)(size_t done, size_t total))
 {
     if (len & (SPI_BLOCK_SIZE - 1))
-        printf("WARNING: erase size 0x%lX is not a multiple of 64KB\n", (unsigned long)len);
+        flash_printf("WARNING: erase size 0x%lX is not a multiple of 64KB\n",
+                            (unsigned long)len);
 
     uint32_t start = (addr / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
     uint32_t end   = ((addr + (uint32_t)len - 1) / SPI_BLOCK_SIZE) * SPI_BLOCK_SIZE;
@@ -341,7 +348,8 @@ bool spi_flash_init(UBYTE *manuf, UBYTE *devid, volatile UBYTE *base, ULONG *siz
     }
 
     (void)vendor; (void)device;
-    printf("Flash part: %s %s (%lu KB)\n", vendor, device, (unsigned long)(spi_flash_size / 1024));
+    flash_printf("Flash part: %s %s (%lu KB)\n", vendor, device,
+                        (unsigned long)(spi_flash_size / 1024));
 
     return true;
 }
@@ -396,28 +404,51 @@ void spi_flash_writeByte(ULONG address, UBYTE data)
  * @param sectorSize Size of region to erase
  * @return true on success, false on failure
  */
-bool spi_flash_erase_sector(ULONG address, ULONG sectorSize)
+bool spi_flash_erase_sector_with_progress(ULONG address, ULONG sectorSize,
+                                          void (*progress)(void *ctx,
+                                                           ULONG done,
+                                                           ULONG total),
+                                          void *progressCtx)
 {
+    ULONG start = address;
+    BOOL smoothProgress = (progress != NULL && sectorSize <= SPI_BLOCK_SIZE);
+
     if (sectorSize & (SPI_SECTOR_SIZE_4K - 1))
-        printf("WARNING: erase size 0x%lX is not a multiple of 4KB\n", (unsigned long)sectorSize);
+        flash_printf("WARNING: erase size 0x%lX is not a multiple of 4KB\n",
+                            (unsigned long)sectorSize);
 
     ULONG end = address + sectorSize;
 
+    if (progress)
+        progress(progressCtx, 0, sectorSize);
+
     while (address < end) {
         ULONG remaining = end - address;
+        ULONG erasedSize;
 
-        if ((address & (SPI_BLOCK_SIZE - 1)) == 0 && remaining >= SPI_BLOCK_SIZE) {
+        if (!smoothProgress &&
+            (address & (SPI_BLOCK_SIZE - 1)) == 0 &&
+            remaining >= SPI_BLOCK_SIZE) {
             if (!spi_block_erase(spi_base_address, address, SPI_CMD_BE_64K))
                 return false;
-            address += SPI_BLOCK_SIZE;
+            erasedSize = SPI_BLOCK_SIZE;
         } else {
             if (!spi_sector_erase_4k(spi_base_address, address))
                 return false;
-            address += 4096;
+            erasedSize = SPI_SECTOR_SIZE_4K;
         }
+
+        address += erasedSize;
+        if (progress)
+            progress(progressCtx, address - start, sectorSize);
     }
 
     return true;
+}
+
+bool spi_flash_erase_sector(ULONG address, ULONG sectorSize)
+{
+    return spi_flash_erase_sector_with_progress(address, sectorSize, NULL, NULL);
 }
 
 /**

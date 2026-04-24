@@ -23,6 +23,7 @@
 #include "port.h"
 #include "printf.h"
 #endif
+#include <stdarg.h>
 #include <stdio.h>
 #include <proto/expansion.h>
 #include <exec/types.h>
@@ -44,6 +45,49 @@ static ULONG flashbase;
 static ULONG flash_size = 0;
 static ULONG sector_size = 0;
 static flash_type_t current_flash_type = FLASH_TYPE_NONE;
+static flashStatusSinkFn flash_status_sink = NULL;
+static void *flash_status_sink_ctx = NULL;
+
+#define FLASH_VERIFY_PROGRESS_CHUNK 1024UL
+
+void flash_set_status_sink(flashStatusSinkFn sink, void *ctx)
+{
+  flash_status_sink = sink;
+  flash_status_sink_ctx = ctx;
+}
+
+bool flash_status_sink_active(void)
+{
+  return (flash_status_sink != NULL);
+}
+
+void flash_printf(const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+#ifdef _KERNEL
+  {
+    char message[256];
+
+    if (flash_status_sink) {
+      memset(message, 0, sizeof(message));
+      vsnprintf(message, sizeof(message), fmt, ap);
+      flash_status_sink(flash_status_sink_ctx, message);
+    }
+  }
+#else
+  if (flash_status_sink) {
+    char message[256];
+
+    vsnprintf(message, sizeof(message), fmt, ap);
+    flash_status_sink(flash_status_sink_ctx, message);
+  } else {
+    vprintf(fmt, ap);
+  }
+#endif
+  va_end(ap);
+}
 
 #ifdef FLASH_PARALLEL
 /* ===== Parallel flash implementation ===== */
@@ -129,10 +173,10 @@ static bool flash_is_supported(UBYTE manufacturer, UBYTE device, UWORD *size)
 
   while (devices_supported[i].id != 0) {
     if (devices_supported[i].id == deviceId) {
-      printf("Flash part: %s %s (%d KB)\n",
-		      devices_supported[i].vendor,
-		      devices_supported[i].device,
-		      devices_supported[i].size);
+      flash_printf("Flash part: %s %s (%d KB)\n",
+                          devices_supported[i].vendor,
+                          devices_supported[i].device,
+                          devices_supported[i].size);
       if (size) {
           *size = devices_supported[i].size;
       }
@@ -210,7 +254,8 @@ void parallel_flash_writeByte(ULONG address, UBYTE data)
   parallel_flash_command(CMD_BYTE_PROGRAM);
   parallel_flash_write_byte(address, data);
   if (!parallel_flash_poll(address)) {
-      printf("Write failed at address 0x%08" PRIx32 "\n", (uint32_t)address);
+      flash_printf("Write failed at address 0x%08" PRIx32 "\n",
+                          (uint32_t)address);
   }
   return;
 }
@@ -318,7 +363,8 @@ static inline bool parallel_flash_poll(ULONG address)
   } while ( ((val1 & (1 << 6)) != (val2 & (1 << 6))) && timeout > 0);
 
   if (timeout == 0) {
-     printf("Flash poll timeout at 0x%08" PRIx32 "!\n", (uint32_t)address);
+     flash_printf("Flash poll timeout at 0x%08" PRIx32 "!\n",
+                         (uint32_t)address);
      return false;
   }
 
@@ -503,26 +549,78 @@ void flash_writeByte(ULONG address, UBYTE data)
  * @param size Size of region to verify
  * @return true if all bytes are 0xFF, false otherwise
  */
-static bool flash_verify_erased(ULONG address, ULONG size)
+static void flash_emit_erase_progress(flashEraseProgressFn progressFn,
+                                      void *progressCtx, ULONG done,
+                                      ULONG total)
+{
+  if (progressFn)
+    progressFn(progressCtx, done, total);
+}
+
+struct flash_erase_progress_adapter {
+  flashEraseProgressFn progressFn;
+  void *progressCtx;
+  ULONG doneBase;
+  ULONG span;
+  ULONG total;
+};
+
+static void flash_spi_erase_progress(void *ctx, ULONG done, ULONG total)
+{
+  struct flash_erase_progress_adapter *adapter =
+      (struct flash_erase_progress_adapter *)ctx;
+  unsigned long long scaledDone;
+
+  if (!adapter || !adapter->progressFn)
+    return;
+
+  if (total == 0) {
+    adapter->progressFn(adapter->progressCtx, adapter->doneBase,
+                        adapter->total);
+    return;
+  }
+
+  scaledDone = ((unsigned long long)done * (unsigned long long)adapter->span) /
+               (unsigned long long)total;
+  adapter->progressFn(adapter->progressCtx,
+                      adapter->doneBase + (ULONG)scaledDone,
+                      adapter->total);
+}
+
+static bool flash_verify_erased(ULONG address, ULONG size,
+                                flashEraseProgressFn progressFn,
+                                void *progressCtx, ULONG doneBase,
+                                ULONG total)
 {
   bool failed = false;
   UBYTE d;
+  ULONG verified = 0;
 
-  printf("Verifying erase from 0x%08lX (%lu bytes)...\n", (unsigned long)address, (unsigned long)size);
+  flash_printf("Verifying erase from 0x%08lX (%lu bytes)...\n",
+                      (unsigned long)address, (unsigned long)size);
 
   for (ULONG i = address; i < address + size; i++) {
     d = flash_readByte(i);
     if (d != 0xFF) {
       failed = true;
-      printf("Erase verify failed at 0x%08lX: expected 0xFF, got 0x%02X\n", (unsigned long)i, d);
+      flash_printf("Erase verify failed at 0x%08lX: expected 0xFF, got 0x%02X\n",
+                          (unsigned long)i, d);
+    }
+
+    verified++;
+    if (progressFn &&
+        ((verified % FLASH_VERIFY_PROGRESS_CHUNK) == 0 || verified == size)) {
+      flash_emit_erase_progress(progressFn, progressCtx,
+                                doneBase + verified, total);
     }
   }
 
   if (failed) {
-    printf("ERASE VERIFICATION FAILED for region 0x%08lX-0x%08lX\n",
-           (unsigned long)address, (unsigned long)(address + size - 1));
+    flash_printf("ERASE VERIFICATION FAILED for region 0x%08lX-0x%08lX\n",
+                        (unsigned long)address,
+                        (unsigned long)(address + size - 1));
   } else {
-    printf("Erase verification successful!\n");
+    flash_printf("Erase verification successful!\n");
   }
 
   return !failed;
@@ -550,7 +648,7 @@ bool flash_erase_chip(void)
 #endif
 
   // Only verify if erase succeeded
-  return result && flash_verify_erased(0, flash_size);
+  return result && flash_verify_erased(0, flash_size, NULL, NULL, 0, 0);
 }
 
 /**
@@ -561,24 +659,51 @@ bool flash_erase_chip(void)
  * @param sectorSize Size of sector to erase
  * @return true if erase and verification successful, false otherwise
  */
-bool flash_erase_sector(ULONG address, ULONG sectorSize)
+bool flash_erase_sector_with_progress(ULONG address, ULONG sectorSize,
+                                      flashEraseProgressFn progressFn,
+                                      void *progressCtx)
 {
   bool result = false;
+  ULONG totalProgress = sectorSize * 2;
+  struct flash_erase_progress_adapter progressAdapter;
+
+  progressAdapter.progressFn = progressFn;
+  progressAdapter.progressCtx = progressCtx;
+  progressAdapter.doneBase = 0;
+  progressAdapter.span = sectorSize;
+  progressAdapter.total = totalProgress;
 
 #ifdef FLASH_SPI
   if (current_flash_type == FLASH_TYPE_SPI) {
-    result = spi_flash_erase_sector(address, sectorSize);
+    result = spi_flash_erase_sector_with_progress(address, sectorSize,
+                                                  progressFn ? flash_spi_erase_progress : NULL,
+                                                  progressFn ? &progressAdapter : NULL);
   }
 #endif
 #ifdef FLASH_PARALLEL
   if (current_flash_type == FLASH_TYPE_PARALLEL) {
-    parallel_flash_erase_sector(address, sectorSize);
-    result = true;
+    flash_emit_erase_progress(progressFn, progressCtx, 0, totalProgress);
+    result = parallel_flash_erase_sector(address, sectorSize);
+    if (result)
+      flash_emit_erase_progress(progressFn, progressCtx, sectorSize,
+                                totalProgress);
   }
 #endif
 
   // Only verify if erase succeeded
-  return result && flash_verify_erased(address, sectorSize);
+  if (!result)
+    return false;
+
+  if (!progressFn)
+    totalProgress = 0;
+
+  return flash_verify_erased(address, sectorSize, progressFn, progressCtx,
+                             sectorSize, totalProgress);
+}
+
+bool flash_erase_sector(ULONG address, ULONG sectorSize)
+{
+  return flash_erase_sector_with_progress(address, sectorSize, NULL, NULL);
 }
 
 /**
@@ -609,7 +734,7 @@ bool flash_erase_bank(ULONG address, ULONG sectorSize, ULONG bankSize)
 #endif
 
   // Only verify if erase succeeded
-  return result && flash_verify_erased(address, bankSize);
+  return result && flash_verify_erased(address, bankSize, NULL, NULL, 0, 0);
 }
 
 /**

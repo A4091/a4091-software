@@ -35,6 +35,7 @@ struct boardInfo {
 
 void setup_a4092_board(struct scsiBoard *board);
 const char *board_type_name(enum boardType type);
+const char *board_type_display_name(enum boardType type);
 enum boardType board_type_from_configdev(const struct ConfigDev *cd);
 void summarize_rom_buffer(UBYTE *buffer, ULONG size, struct romInfo *info);
 BOOL inspect_flash_contents(ULONG flashSize, struct romInfo *info);

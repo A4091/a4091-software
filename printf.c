@@ -46,6 +46,10 @@
 #include "printf.h"
 #define USE_SERIAL_OUTPUT
 #include "port.h"
+#undef printf
+#undef vprintf
+#undef putchar
+#undef vfprintf
 #include <exec/execbase.h>
 
 #include <string.h>
@@ -69,8 +73,6 @@
 #define FMT_NEGATIVE   0x0080   // Value is negative
 #define FMT_UPPERCASE  0x0100   // Uppercase hex (A-F) instead of (a-f)
 #define FMT_DOT        0x0200   // Dot specifier was used
-
-#ifdef USE_SERIAL_OUTPUT
 
 /* Output buffer structure */
 typedef struct {
@@ -113,6 +115,7 @@ udiv64_32(uint32_t *remainder, uint64_t value, uint32_t base)
     return quotient;
 }
 
+#ifdef USE_SERIAL_OUTPUT
 static int KPutChar(int ch)
 {
     asm volatile (
@@ -155,6 +158,7 @@ puts(const char *str)
     KPutChar('\n');
     return (0);
 }
+#endif
 
 /**
  * put() sends the specified character either to a buffer to the console.
@@ -179,7 +183,9 @@ static void
 put(int ch, buf_t *desc)
 {
     if (desc == NULL) {
+#ifdef USE_SERIAL_OUTPUT
         KPutChar(ch);
+#endif
     } else if (desc->buf_cur < desc->buf_end) {
         *(desc->buf_cur)++ = (char) ch;
     }
@@ -603,6 +609,7 @@ int sprintf(char *buf, const char *fmt, ...)
  *
  * @return      The number of bytes written to the serial console.
  */
+#ifdef USE_SERIAL_OUTPUT
 __attribute__((format(__printf__, 1, 0)))
 int vprintf(const char *fmt, va_list ap)
 {
@@ -632,7 +639,7 @@ int printf(const char *fmt, ...)
 
     return (rc);
 }
-#endif /* USE_SERIAL_OUTPUT */
+#endif
 
 #undef DO_PRINTF_TEST
 #ifdef DO_PRINTF_TEST

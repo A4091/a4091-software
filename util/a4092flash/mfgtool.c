@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <proto/dos.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,6 +46,15 @@
 struct ExecBase *SysBase;
 #endif
 struct ExpansionBase *ExpansionBase = NULL;
+
+void flash_printf(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
 
 static bool board_has_legacy_a409x_id(const struct ConfigDev *cd)
 {
@@ -1281,7 +1291,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "No supported SPI board found via expansion.library\n");
         return 1;
     } else {
-	printf("%s found at 0x%08" PRIx32 "\n", board_name, (uint32_t)base);
+	printf("%s found at 0x%08x\n", board_name, (uint32_t)base);
     }
 
     int argi = 1;
