@@ -3,7 +3,7 @@ DATE    := $(firstword $(NOW))
 TIME    := $(lastword $(NOW))
 ADATE   := $(shell date '+%-d.%-m.%Y')
 # FULL_VERSION is 42.xx-yy-dirty
-FULL_VERSION ?= $(shell git describe --tags --dirty | sed -r 's/^release_//')
+FULL_VERSION ?= $(shell git describe --tags --dirty | sed -r 's/^(release_|v)//')
 DEVICE_VERSION := $(shell echo $(FULL_VERSION) | cut -f1 -d\.)
 DEVICE_REVISION := $(shell echo $(FULL_VERSION) | cut -f2 -d\.|cut -f1 -d\-)
 

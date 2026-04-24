@@ -16,7 +16,7 @@ GIT_REF_NAME := $(shell git branch --show-current 2>/dev/null)
 GIT_EXACT_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
 
 ifeq ($(strip $(GIT_REF_NAME)),)
-ifneq ($(filter release_%,$(GIT_EXACT_TAG)),)
+ifneq ($(filter release_% v%,$(GIT_EXACT_TAG)),)
 GIT_REF_NAME := release
 endif
 endif

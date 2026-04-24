@@ -3,7 +3,7 @@
 set -e
 
 if [ -z "${FULL_VERSION:-}" ]; then
-  FULL_VERSION=$(git describe --tags --dirty | sed -r 's/^release_//')
+  FULL_VERSION=$(git describe --tags --dirty | sed -r 's/^(release_|v)//')
 fi
 if [ -z "${ADATE:-}" ]; then
   ADATE=$(date '+%-d.%-m.%Y')
