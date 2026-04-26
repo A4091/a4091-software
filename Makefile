@@ -178,7 +178,7 @@ endif
 GIT:=$(shell git -C "$(CURDIR)" rev-parse --git-dir 1>/dev/null 2>&1 \
         && command -v git)
 ifneq ($(GIT),)
-freshsubs:=$(shell git submodule update --init $(quiet_errors))
+freshsubs:=$(shell git submodule update --init --recursive $(quiet_errors))
 endif
 
 # Autodetect which CDFileSystem is available if any. This mechanism
