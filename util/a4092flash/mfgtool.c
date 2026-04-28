@@ -715,34 +715,70 @@ static void usage(const char *argv0)
 , argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0, argv0);
 }
 
+static int hex_digit_value(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
 /* parse CSV of hex bytes for 'patch' */
 static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
 {
-    size_t slen = strlen(s);
-    if (slen == 0 || slen > MAX_PATCH_TEXT_LEN) return false;
     uint8_t *buf = (uint8_t*)malloc(MAX_PATCH_BYTES);
+    size_t n=0, pos=0;
+    bool done = false;
+    size_t token;
+
     if (!buf) return false;
-    size_t n=0;
-    const char *p=s;
-    while (*p) {
-        while (*p==' '||*p=='\t'||*p==',') ++p;
-        if (!*p) break;
+
+    for (token = 0; token <= MAX_PATCH_BYTES; token++) {
+        int nibbles=0;
         unsigned v;
-        if (strncmp(p,"0x",2)==0 || strncmp(p,"0X",2)==0) {
-            p+=2;
+        int digit;
+        size_t skip;
+
+        for (skip = 0; skip <= MAX_PATCH_TEXT_LEN; skip++) {
+            if (pos > MAX_PATCH_TEXT_LEN) { free(buf); return false; }
+            if (s[pos] != ' ' && s[pos] != '\t' && s[pos] != ',')
+                break;
+            pos++;
         }
-        int nibbles=0; v=0;
-        while ((*p>='0'&&*p<='9')||(*p>='a'&&*p<='f')||(*p>='A'&&*p<='F')) {
-            v = (v<<4) | (unsigned)((*p>='0'&&*p<='9')?(*p-'0'):((*p>='a'&&*p<='f')?(*p-'a'+10):(*p-'A'+10)));
-            ++p; ++nibbles;
-            if (nibbles>2) break;
+        if (pos > MAX_PATCH_TEXT_LEN) { free(buf); return false; }
+        if (s[pos] == '\0') { done = true; break; }
+        if (token == MAX_PATCH_BYTES) { free(buf); return false; }
+
+        if (s[pos] == '0' && pos < MAX_PATCH_TEXT_LEN &&
+            (s[pos + 1] == 'x' || s[pos + 1] == 'X')) {
+            pos += 2;
         }
-        if (nibbles==0 || nibbles>2) { free(buf); return false; }
-        if (n >= MAX_PATCH_BYTES) { free(buf); return false; }
+
+        v = 0;
+        for (nibbles = 0; nibbles < 2; nibbles++) {
+            if (pos > MAX_PATCH_TEXT_LEN) { free(buf); return false; }
+            digit = hex_digit_value(s[pos]);
+            if (digit < 0)
+                break;
+            v = (v << 4) | (unsigned)digit;
+            pos++;
+        }
+        if (nibbles==0) { free(buf); return false; }
         buf[n++] = (uint8_t)v;
-        while (*p==' '||*p=='\t'||*p==',') ++p;
-        if (*p=='\0') break;
+
+        if (pos > MAX_PATCH_TEXT_LEN) { free(buf); return false; }
+        if (hex_digit_value(s[pos]) >= 0) { free(buf); return false; }
+        if (s[pos] == '\0') { done = true; break; }
+        if (s[pos] != ' ' && s[pos] != '\t' && s[pos] != ',') {
+            free(buf);
+            return false;
+        }
     }
+    if (!done) { free(buf); return false; }
+
     *out = buf; *outlen = n; return true;
 }
 
