@@ -73,12 +73,56 @@
 #define FMT_NEGATIVE   0x0080   // Value is negative
 #define FMT_UPPERCASE  0x0100   // Uppercase hex (A-F) instead of (a-f)
 #define FMT_DOT        0x0200   // Dot specifier was used
+#define FMT_MAX_WIDTH  2048     // Limit padding and precision output
 
 /* Output buffer structure */
 typedef struct {
     char *buf_cur;
     char *buf_end;
 } buf_t;
+
+static int
+clamp_field_width(int width)
+{
+    if (width < 0)
+        return 0;
+    if (width > FMT_MAX_WIDTH)
+        return FMT_MAX_WIDTH;
+    return width;
+}
+
+static int
+normalize_star_width(int width)
+{
+    if (width < 0) {
+        if (width < -FMT_MAX_WIDTH)
+            return FMT_MAX_WIDTH;
+        return -width;
+    }
+    return clamp_field_width(width);
+}
+
+static int
+parse_decimal_width(const char **fmt, int ch)
+{
+    int width = 0;
+
+    for (;;) {
+        int digit = ch - '0';
+
+        if (width <= (FMT_MAX_WIDTH - digit) / 10)
+            width = (width * 10) + digit;
+        else
+            width = FMT_MAX_WIDTH;
+
+        ch = **fmt;
+        if ((unsigned)ch - '0' > 9)
+            break;
+        ++*fmt;
+    }
+
+    return width;
+}
 
 /**
  * udiv64_32() - Software 64-bit by 32-bit unsigned division
@@ -349,7 +393,7 @@ kdoprnt(buf_t *desc, const char *fmt, va_list ap)
         }
         flags  = 0;
         width  = 0;
-        mwidth = 2048;  // Limit max string output
+        mwidth = FMT_MAX_WIDTH;
 reswitch:
         switch (ch = *fmt++) {
             case '#':
@@ -368,18 +412,18 @@ reswitch:
                 width = va_arg(ap, int);
                 if (width < 0) {
                     flags |= FMT_LJUST;
-                    width = -width;
                 }
+                width = normalize_star_width(width);
                 goto reswitch;
             case '.':
                 flags |= FMT_DOT;
                 ch = *fmt++;
                 if (ch == '*') {
-                    mwidth = va_arg(ap, int);
+                    mwidth = clamp_field_width(va_arg(ap, int));
+                } else if ((unsigned)ch - '0' <= 9) {
+                    mwidth = parse_decimal_width(&fmt, ch);
                 } else {
                     mwidth = 0;
-                    for (mwidth = 0; ch >= '0' && ch <= '9'; ch = *fmt++)
-                        mwidth = (mwidth * 10) + (ch - '0');
                     fmt--;
                 }
                 goto reswitch;
@@ -395,14 +439,7 @@ reswitch:
             case '7':
             case '8':
             case '9':
-                for (;;) {
-                    width *= 10;
-                    width += ch - '0';
-                    ch = *fmt;
-                    if ((unsigned)ch - '0' > 9)
-                        break;
-                    ++fmt;
-                }
+                width = parse_decimal_width(&fmt, ch);
                 goto reswitch;
             case 'l':
                 if (*fmt == 'l') {
