@@ -290,9 +290,6 @@ static void ui_draw_progress(struct UiContext *ctx, BOOL fullRedraw)
 
     rp = ctx->window->RPort;
 
-    if (innerRight < innerLeft || innerBottom < innerTop)
-        return;
-
     innerWidth = (ULONG)(innerRight - innerLeft + 1);
     fillWidth = ui_progress_fill_width(ctx->progressPercent, innerWidth);
 
@@ -334,6 +331,7 @@ static void ui_set_status(struct UiContext *ctx, const char *message)
 {
     char status[sizeof(ctx->statusText)];
     size_t len = 0;
+    size_t last;
 
     if (!ctx || !message)
         return;
@@ -347,8 +345,12 @@ static void ui_set_status(struct UiContext *ctx, const char *message)
         len++;
     }
 
-    while (len > 0 && status[len - 1] == ' ')
-        len--;
+    while (len > 0) {
+        last = len - 1;
+        if (status[last] != ' ')
+            break;
+        len = last;
+    }
 
     status[len] = '\0';
     if (len == 0)

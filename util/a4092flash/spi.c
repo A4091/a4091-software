@@ -392,7 +392,10 @@ bool spi_flash_readBuf(ULONG address, UBYTE *buf, ULONG len)
  */
 void spi_flash_writeByte(ULONG address, UBYTE data)
 {
-    spi_write_buf_pagewise(spi_base_address, address, &data, 1, NULL);
+    if (!spi_write_buf_pagewise(spi_base_address, address, &data, 1, NULL)) {
+        flash_printf("Write failed at address 0x%08lX\n",
+                     (unsigned long)address);
+    }
 }
 
 /**

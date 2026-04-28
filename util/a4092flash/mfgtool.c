@@ -103,6 +103,8 @@ static bool a4092_spi_flash_present(uint32_t base)
     }
 }
 #define MAX_TRANSFER_SIZE (8 * 1024 * 1024)
+#define MAX_PATCH_BYTES 256u
+#define MAX_PATCH_TEXT_LEN 2048u
 
 static bool spi_verify_buf(uint32_t base, uint32_t addr, const uint8_t *ref, size_t len,
                            void (*progress)(size_t done, size_t total))
@@ -220,6 +222,23 @@ static bool parse_size(const char *s, size_t *out)
     *out = (size_t)v; return true;
 }
 
+static bool copy_bounded_arg(char *dst, size_t dst_len, const char *src)
+{
+    size_t i;
+
+    if (dst_len == 0)
+        return false;
+
+    for (i = 0; i < dst_len; i++) {
+        dst[i] = src[i];
+        if (src[i] == '\0')
+            return i > 0;
+    }
+
+    dst[dst_len - 1] = '\0';
+    return false;
+}
+
 /* ===== mfg data helpers ===== */
 
 static uint32_t mfg_checksum(const struct mfg_data *mfg)
@@ -242,21 +261,60 @@ static bool mfg_verify_checksum(const struct mfg_data *mfg)
     return xor == 0;
 }
 
+#define MFG_DATE_MIN_YEAR 1970u
+#define MFG_DATE_MAX_YEAR 2105u
+
+static bool parse_fixed_decimal(const char *s, size_t digits, unsigned *value)
+{
+    unsigned v = 0;
+
+    for (size_t i = 0; i < digits; i++) {
+        if (s[i] < '0' || s[i] > '9')
+            return false;
+        v = (v * 10) + (unsigned)(s[i] - '0');
+    }
+
+    *value = v;
+    return true;
+}
+
 static bool parse_date(const char *s, uint32_t *ts)
 {
-    static const int mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-    int y, m, d;
-    if (sscanf(s, "%d-%d-%d", &y, &m, &d) != 3) return false;
-    if (y < 1970 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+    static const unsigned mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    static const uint16_t month_yday[] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+    };
+    unsigned y, m, d;
+    unsigned prior_year;
+    uint32_t days;
+    uint32_t leaps_before_year;
+    uint32_t leaps_before_epoch;
 
-    int leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    if (strlen(s) != 10)
+        return false;
+
+    if (!parse_fixed_decimal(s, 4, &y) || s[4] != '-' ||
+        !parse_fixed_decimal(s + 5, 2, &m) || s[7] != '-' ||
+        !parse_fixed_decimal(s + 8, 2, &d) || s[10] != '\0')
+        return false;
+
+    if (y < MFG_DATE_MIN_YEAR || y > MFG_DATE_MAX_YEAR ||
+        m < 1 || m > 12 || d < 1 || d > 31)
+        return false;
+
+    unsigned leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
     if (d > mdays[m - 1] + (m == 2 && leap)) return false;
 
-    uint32_t days = 0;
-    for (int i = 1970; i < y; i++)
-        days += 365 + (i % 4 == 0 && (i % 100 != 0 || i % 400 == 0));
-    for (int i = 0; i < m - 1; i++)
-        days += mdays[i] + (i == 1 && leap);
+    prior_year = y - 1;
+    leaps_before_year = (prior_year / 4) - (prior_year / 100) +
+                        (prior_year / 400);
+    leaps_before_epoch = ((MFG_DATE_MIN_YEAR - 1) / 4) -
+                         ((MFG_DATE_MIN_YEAR - 1) / 100) +
+                         ((MFG_DATE_MIN_YEAR - 1) / 400);
+
+    days = ((uint32_t)(y - MFG_DATE_MIN_YEAR) * 365) +
+           (leaps_before_year - leaps_before_epoch);
+    days += month_yday[m - 1] + (m > 2 && leap);
     days += d - 1;
 
     *ts = days * 86400UL;
@@ -381,6 +439,19 @@ static char *trim(char *s)
     return s;
 }
 
+static void format_serial(char *serial, size_t serial_len,
+                          const char *card_type, unsigned long number)
+{
+    char formatted[16];
+
+    if (serial_len == 0)
+        return;
+
+    snprintf(formatted, sizeof(formatted), "%.6s-%08lu", card_type, number);
+    strncpy(serial, formatted, serial_len - 1);
+    serial[serial_len - 1] = '\0';
+}
+
 static bool parse_mfg_config(const char *path, struct mfg_data *mfg, bool *has_serial)
 {
     FILE *f = fopen(path, "r");
@@ -478,7 +549,7 @@ static bool parse_mfg_config(const char *path, struct mfg_data *mfg, bool *has_s
 
     /* Compose serial after parsing so card_type is always available */
     if (*has_serial)
-        snprintf(mfg->serial, sizeof(mfg->serial), "%.6s-%08lu", mfg->card_type, raw_serial);
+        format_serial(mfg->serial, sizeof(mfg->serial), mfg->card_type, raw_serial);
 
     return true;
 }
@@ -647,11 +718,9 @@ static void usage(const char *argv0)
 /* parse CSV of hex bytes for 'patch' */
 static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
 {
-    const size_t max_hex_chars = 4096; /* avoid unbounded input */
     size_t slen = strlen(s);
-    if (slen == 0 || slen > max_hex_chars) return false;
-    size_t capacity = slen + 1;
-    uint8_t *buf = (uint8_t*)malloc(capacity);
+    if (slen == 0 || slen > MAX_PATCH_TEXT_LEN) return false;
+    uint8_t *buf = (uint8_t*)malloc(MAX_PATCH_BYTES);
     if (!buf) return false;
     size_t n=0;
     const char *p=s;
@@ -668,8 +737,8 @@ static bool parse_hexbytes(const char *s, uint8_t **out, size_t *outlen)
             ++p; ++nibbles;
             if (nibbles>2) break;
         }
-        if (nibbles==0) { free(buf); return false; }
-        if (n >= MAX_TRANSFER_SIZE || n >= capacity) { free(buf); return false; }
+        if (nibbles==0 || nibbles>2) { free(buf); return false; }
+        if (n >= MAX_PATCH_BYTES) { free(buf); return false; }
         buf[n++] = (uint8_t)v;
         while (*p==' '||*p=='\t'||*p==',') ++p;
         if (*p=='\0') break;
@@ -790,16 +859,15 @@ static int cmd_verify(uint32_t base, const char *saddr, const char *infile)
     printf("Verify OK\n");
     return 0;
 }
-static int cmd_patch(uint32_t base, const char *saddr, const char *hexlist)
+static int cmd_patch(uint32_t base, uint32_t addr, const uint8_t *bytes, size_t n)
 {
-    uint32_t addr; if (!parse_u32(saddr,&addr)) { fprintf(stderr,"bad addr\n"); return 2; }
-    uint8_t *bytes=NULL; size_t n=0;
-    if (!parse_hexbytes(hexlist, &bytes, &n) || n==0) { free(bytes); fprintf(stderr,"bad hex bytes\n"); return 2; }
-    if (n > MAX_TRANSFER_SIZE) { free(bytes); fprintf(stderr,"patch too large (max %d)\n", MAX_TRANSFER_SIZE); return 2; }
-    if (!spi_clear_block_protect(base)) { free(bytes); return 3; }
+    if (n == 0 || n > MAX_PATCH_BYTES) {
+        fprintf(stderr,"patch too large (max %u)\n", (unsigned)MAX_PATCH_BYTES);
+        return 2;
+    }
+    if (!spi_clear_block_protect(base)) { return 3; }
     printf("Patching %zu byte(s) at 0x%08lX (assumes erased)...\n", n, (unsigned long)addr);
     bool ok = spi_write_buf_pagewise(base, addr, bytes, n, NULL);
-    free(bytes);
     if (!ok) { fprintf(stderr,"patch failed\n"); return 3; }
     printf("Patch OK\n"); return 0;
 }
@@ -837,7 +905,7 @@ static int cmd_writemfg(uint32_t base, const char *config_file)
                 serial_num = 1;
             fclose(sf);
         }
-        snprintf(mfg.serial, sizeof(mfg.serial), "%.6s-%08lu", mfg.card_type, serial_num);
+        format_serial(mfg.serial, sizeof(mfg.serial), mfg.card_type, serial_num);
         printf("Auto-assigned serial: %s\n", mfg.serial);
 
         /* Write back incremented serial */
@@ -1291,7 +1359,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "No supported SPI board found via expansion.library\n");
         return 1;
     } else {
-	printf("%s found at 0x%08x\n", board_name, (uint32_t)base);
+        printf("%s found at 0x%08lX\n", board_name, (unsigned long)base);
     }
 
     int argi = 1;
@@ -1328,7 +1396,26 @@ int main(int argc, char **argv)
     }
     else if (strcmp(cmd,"patch")==0) {
         if (argi+1 >= argc) { usage(argv[0]); return 1; }
-        return cmd_patch(base, argv[argi], argv[argi+1]);
+        uint32_t addr;
+        uint8_t *bytes = NULL;
+        size_t n = 0;
+        char hexlist[MAX_PATCH_TEXT_LEN + 1];
+        int rc;
+
+        if (!parse_u32(argv[argi], &addr)) { fprintf(stderr,"bad addr\n"); return 2; }
+        if (!copy_bounded_arg(hexlist, sizeof(hexlist), argv[argi+1])) {
+            fprintf(stderr,"bad hex bytes\n");
+            return 2;
+        }
+        if (!parse_hexbytes(hexlist, &bytes, &n) || n == 0 || n > MAX_PATCH_BYTES) {
+            free(bytes);
+            fprintf(stderr,"bad hex bytes\n");
+            return 2;
+        }
+
+        rc = cmd_patch(base, addr, bytes, n);
+        free(bytes);
+        return rc;
     }
     else if (strcmp(cmd,"status")==0) {
         return cmd_status(base);
