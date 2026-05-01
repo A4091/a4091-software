@@ -16,3 +16,6 @@
 [submodule "3rdparty/ODFileSystem"]
 	path = 3rdparty/ODFileSystem
 	url = ../../reinauer/ODFileSystem
+[submodule "3rdparty/TinySetPatch"]
+	path = 3rdparty/TinySetPatch
+	url = ../../reinauer/TinySetPatch

@@ -11,6 +11,10 @@ fi
 VER=$FULL_VERSION
 DISK=scsi_$VER.adf
 THIRDPARTY=../3rdparty
+TINYSETPATCH_DIR=$THIRDPARTY/TinySetPatch
+TINYSETPATCH_BIN=$TINYSETPATCH_DIR/TinySetPatch
+MMULIB_DIR=$TINYSETPATCH_DIR/MMULib/Libs
+MMULIB_LIBS="mmu 680x0 68020 68030 68040 68060"
 DEVICE_NAME=${DEVNAME:-}
 FLASH_DEVICE=0
 ALL_DEVICES="a4091 a4092 a4770 scsi710 scsi770"
@@ -125,13 +129,31 @@ if [ "$FLASH_DEVICE" -eq 1 ] && [ ! -r "../${DEVICE_NAME}_cdfs.rom" ]; then
   exit 1
 fi
 
+if [ ! -r "$TINYSETPATCH_BIN" ]; then
+  echo "Missing $TINYSETPATCH_BIN. Build TinySetPatch before creating the disk."
+  exit 1
+fi
+
+for lib in $MMULIB_LIBS; do
+  if [ ! -r "$MMULIB_DIR/${lib}.library" ]; then
+    echo "Missing $MMULIB_DIR/${lib}.library. Extract MMULib before creating the disk."
+    exit 1
+  fi
+done
+
 ./system-configuration.sh
 echo "Creating disk..."
 xdftool $DISK format "Amiga4091"
+xdftool $DISK makedir C
 xdftool $DISK makedir Devs
+xdftool $DISK makedir Libs
 xdftool $DISK makedir ROMs
 xdftool $DISK makedir S
 xdftool $DISK makedir Tools
+xdftool $DISK write $TINYSETPATCH_BIN C/TinySetPatch
+for lib in $MMULIB_LIBS; do
+  xdftool $DISK write "$MMULIB_DIR/${lib}.library" "Libs/${lib}.library"
+done
 xdftool $DISK write welcome Tools/welcome
 xdftool $DISK write rdb Tools/rdb
 xdftool $DISK write ../ncr7xx Tools/ncr7xx

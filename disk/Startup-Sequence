@@ -1,4 +1,6 @@
 ; Startup-Sequence
 
+C:TinySetPatch QUIET
+
 PATH Tools ADD
 welcome
