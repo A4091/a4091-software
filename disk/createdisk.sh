@@ -20,11 +20,10 @@ GUIDE_INFO_SOURCE=A4091.guide.info
 TOOLS_INFO_SOURCE=Tools.info
 A4092FLASH_INFO_SOURCE=a4092flash.info
 GUIDE_TMP=A4091.guide.tmp
-STARTUP_SEQUENCE_TMP=Startup-Sequence.tmp
 UPDATE_SCRIPT_TMP=update.tmp
 
 cleanup() {
-  rm -f "$STARTUP_SEQUENCE_TMP" "$UPDATE_SCRIPT_TMP" "$GUIDE_TMP"
+  rm -f "$UPDATE_SCRIPT_TMP" "$GUIDE_TMP"
 }
 trap cleanup EXIT
 
@@ -126,20 +125,6 @@ if [ "$FLASH_DEVICE" -eq 1 ] && [ ! -r "../${DEVICE_NAME}_cdfs.rom" ]; then
   exit 1
 fi
 
-# Create centered version and copyright lines (80 column terminal)
-COLUMNS=80
-YEAR=$(date +%Y)
-VERSION_TEXT="v${VER}"
-COPYRIGHT_TEXT='\xa9'" 2023-${YEAR} Stefan Reinauer \\& Chris Hooper"
-VERSION_SPACES=$(( (${COLUMNS} - ${#VERSION_TEXT}) / 2 ))
-COPYRIGHT_SPACES=$(( (${COLUMNS} - ${#COPYRIGHT_TEXT}) / 2 ))
-VERSION_LINE=$(printf "%*s%s" $VERSION_SPACES "" "$VERSION_TEXT")
-COPYRIGHT_LINE=$(printf "%*s%s" $COPYRIGHT_SPACES "" "$COPYRIGHT_TEXT")
-
-sed -e "s|@A4091_DISK_VERSION_LINE@|$VERSION_LINE|" \
-    -e "s|@A4091_DISK_COPYRIGHT_LINE@|$COPYRIGHT_LINE|" \
-    < Startup-Sequence > "$STARTUP_SEQUENCE_TMP"
-
 ./system-configuration.sh
 echo "Creating disk..."
 xdftool $DISK format "Amiga4091"
@@ -147,6 +132,7 @@ xdftool $DISK makedir Devs
 xdftool $DISK makedir ROMs
 xdftool $DISK makedir S
 xdftool $DISK makedir Tools
+xdftool $DISK write welcome Tools/welcome
 xdftool $DISK write rdb Tools/rdb
 xdftool $DISK write ../ncr7xx Tools/ncr7xx
 xdftool $DISK write ../a4091d Tools/a4091d
@@ -169,7 +155,7 @@ fi
 write_guide_files "$DISK" "$DEVICE_NAME"
 write_flash_tool_icons "$DISK" "$DEVICE_NAME"
 xdftool $DISK write Disk.info
-xdftool $DISK write "$STARTUP_SEQUENCE_TMP" S/Startup-Sequence
+xdftool $DISK write Startup-Sequence S/Startup-Sequence
 xdftool $DISK boot install
 
 printf "Looking for additional files... "

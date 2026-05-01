@@ -1,8 +1,17 @@
 AGUIDECHECK=Tools/AGuideCheck/AGuideCheck
 THIRDPARTY=../3rdparty
 DEVTEST=$(THIRDPARTY)/devtest/devtest
+AMIGA_CC ?= m68k-amigaos-gcc
+AMIGA_STRIP ?= m68k-amigaos-strip
+FULL_VERSION ?= $(shell git -C .. describe --tags --dirty | sed -r 's/^(release_|v)//')
+YEAR ?= $(shell date +%Y)
 
-disk: scsifix $(DEVTEST) rdb
+WELCOME_CFLAGS := -Wall -Wextra -Os -fomit-frame-pointer -m68020-60 -msoft-float
+WELCOME_CFLAGS += -DA4091_DISK_FULL_VERSION=\"$(FULL_VERSION)\"
+WELCOME_CFLAGS += -DA4091_DISK_COPYRIGHT_YEAR=\"$(YEAR)\"
+WELCOME_LDFLAGS := -noixemul -lamiga
+
+disk: welcome scsifix $(DEVTEST) rdb
 	DEVICE=$(DEVICE) DEVNAME=$(DEVNAME) FULL_VERSION="$(FULL_VERSION)" ADATE="$(ADATE)" ./createdisk.sh
 
 $(DEVTEST): FORCE
@@ -16,7 +25,7 @@ clean:
 	rm -f *_??.??.adf
 	rm -f NDK3.2.lha
 	rm -rf Tools
-	rm -f scsifix.o scsifix rdb
+	rm -f welcome scsifix.o scsifix rdb
 	$(MAKE) -C $(THIRDPARTY)/devtest clean
 
 FORCE:
@@ -31,6 +40,10 @@ $(AGUIDECHECK):
 
 daynascsi.lha:
 	wget https://github.com/RobSmithDev/daynaport-amiga/releases/download/1.3/daynascsi.lha
+
+welcome: welcome.c
+	$(AMIGA_CC) $(WELCOME_CFLAGS) $< $(WELCOME_LDFLAGS) -o $@
+	$(AMIGA_STRIP) -s $@
 
 scsifix.o: scsifix.asm
 	vasmm68k_mot -Fhunk -o scsifix.o scsifix.asm
