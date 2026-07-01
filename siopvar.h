@@ -163,6 +163,7 @@ struct	siop_softc {
 	u_char	sc_ctest7;
 #else
 	u_char	sc_ctest0;
+	u_char	sc_ctest3;
 #endif
 #if defined(ARCH_770)
 #define MAX_SCF_ENTRIES 6

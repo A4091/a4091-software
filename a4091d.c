@@ -1955,11 +1955,11 @@ main(int argc, char *argv[])
         struct siop_softc *sc = asave->as_device_private;
 //      printf("    sc_siop_si=%p\n", sc->sc_siop_si);
 #if defined(ARCH_710)
-        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u sc_sstat1=%u\n",
-               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1);
+        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u\n",
+               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0);
 #else
-        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u sc_sstat1=%u sc_sist=%u\n",
-               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0, sc->sc_sstat1,
+        printf("    sc_istat=%u sc_dstat=%u sc_sstat0=%u sc_sist=%u\n",
+               sc->sc_istat, sc->sc_dstat, sc->sc_sstat0,
                sc->sc_sist);
 #endif
         printf("    sc_intcode=%04lx\n", sc->sc_intcode);

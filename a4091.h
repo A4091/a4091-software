@@ -64,7 +64,7 @@
 # define HW_OFFSET_REGISTERS     A4091_OFFSET_REGISTERS
 # define HW_OFFSET_SWITCHES      A4091_OFFSET_SWITCHES
 # if defined(DRIVER_A4770)
-#  define HW_SCLK_CLOCK_FREQ     50     /* 53C770 SCLK input before doubling */
+#  define HW_SCLK_CLOCK_FREQ     40     /* 53C770 SCLK input before doubling */
 # else
 #  define HW_SCLK_CLOCK_FREQ     50     /* SCSI clock input = 50 MHz */
 # endif

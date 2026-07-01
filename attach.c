@@ -630,6 +630,11 @@ init_chan(device_t self, UBYTE *boardnum)
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst
 #elif NCR53C770
     sc->sc_ctest0 = SIOP_CTEST0_CDIS;  // Disable burst
+#if defined(DRIVER_A4770)
+    sc->sc_ctest3 = SIOP_CTEST3_SM;  // Enable SC0 snoop mode for A4770 DMA arbitration
+#else
+    sc->sc_ctest3 = 0;
+#endif
 #else
 #error "Unsupported SCSI Host Controller"
 #endif

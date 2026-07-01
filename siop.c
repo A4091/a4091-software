@@ -1719,7 +1719,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         int reselid = rp->siop_scratch & 0x7f;
         int reselun = rp->siop_sfbr & 0x07;
 
-        sc->sc_sstat1 = rp->siop_sbcl;  /* XXXX save current SBCL */
 #ifdef DEBUG
         if (siop_debug & 0x100)
             printf ("%s: target ID %02x reselected dsps %lx\n",

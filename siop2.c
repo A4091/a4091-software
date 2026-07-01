@@ -974,7 +974,13 @@ siopngreset(struct siop_softc *sc)
 	rp->siop_stest3 |= SIOP_STEST3_TE;	/* TolerANT enable */
 	rp->siop_scntl0 = SIOP_ARB_FULL | /*SIOP_SCNTL0_EPC |*/ SIOP_SCNTL0_EPG;
 	rp->siop_dcntl = sc->sc_dcntl;
+#if defined(DRIVER_A4770)
+	rp->siop_dmode = 0x80;		/* 53C770 burst length 8 */
+#else
 	rp->siop_dmode = 0xc0;		/* XXX burst length */
+#endif
+	rp->siop_ctest0 = sc->sc_ctest0;
+	rp->siop_ctest3 = (rp->siop_ctest3 & SIOP_CTEST3_V) | sc->sc_ctest3;
 	rp->siop_sien = 0x00;	/* don't enable interrupts yet */
 	rp->siop_dien = 0x00;	/* don't enable interrupts yet */
 	rp->siop_scid = sc->sc_channel.chan_id |
@@ -1768,7 +1774,6 @@ siopng_dump(sc);
 #endif
 			int reselun = rp->siop_sfbr & 0x07;
 
-		sc->sc_sstat1 = rp->siop_sbcl;	/* XXXX save current SBCL */
 #ifdef DEBUG
 		if (siopng_debug & 0x100)
 			printf ("%s: target ID %02x reselected dsps %lx\n",
