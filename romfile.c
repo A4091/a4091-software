@@ -170,7 +170,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
             fse->fse_Node.ln_Name = (UBYTE*)device_id_string;
             fse->fse_DosType = rom->romfile_dostype[slot];
             fse->fse_Version = ((LONG)DEVICE_VERSION) << 16 | DEVICE_REVISION;
-            fse->fse_PatchFlags = 0x190; // SegList and GlobalVec
+            fse->fse_PatchFlags = 0x190; // StackSize, SegList and GlobalVec
             fse->fse_SegList = fs_seglist >> 2;
             fse->fse_GlobalVec = -1;
             //fse->fse_StackSize = 5120;
