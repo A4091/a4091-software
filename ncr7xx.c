@@ -4688,8 +4688,8 @@ test_dma(uint extended)
     int      rc2 = 0;
     uint32_t pos;
     uint     dma_len = 2048;
-    APTR    *tsrc;
-    APTR    *src;
+    uint8_t *tsrc;
+    uint8_t *src;
     ULONG    buf_handled;
     uint32_t diff;
     uint32_t addr;
@@ -4918,9 +4918,9 @@ test_dma_copy(uint extended)
     uint      bf_buffers    = 0;
     uint      bf_notram     = 0;
     VAPTR    *src_backup;
-    APTR     *src;
-    APTR     *dst;
-    APTR     *dst_buf;
+    uint8_t  *src;
+    uint8_t  *dst;
+    uint8_t  *dst_buf;
     uint32_t *bf_addr;
     uint32_t *bf_mem;
     uint8_t   bf_flags[32][32];
@@ -4965,7 +4965,7 @@ test_dma_copy(uint extended)
     }
 
     /* Land DMA in the middle of the buffer */
-    dst = (APTR) ((uint32_t) dst_buf + dma_len);
+    dst = dst_buf + dma_len;
 
     bf_addr = AllocMem(BFADDR_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
     bf_mem = AllocMem(BFADDR_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
