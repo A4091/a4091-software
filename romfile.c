@@ -144,7 +144,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
     if (r != NULL) {
         if (r && r->rt_Init) {
             printf("Initializing FS @%p... ", r);
-            InitResident(r, fs_seglist);
+            InitResident(r, fs_seglist >> 2);
             printf("done.\n");
 	    return 1;
         } else
