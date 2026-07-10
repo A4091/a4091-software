@@ -31,7 +31,7 @@ fi
 # Create temp file and ensure cleanup on exit
 TEMP=$(mktemp)
 trap 'rm -f "$TEMP"' EXIT
-SALVADOR=3rdparty/salvador/salvador
+SALVADOR=$(dirname $0)/../3rdparty/salvador/salvador
 
 # Function to write a 32-bit integer as big-endian binary
 write_be32() {
@@ -68,7 +68,7 @@ fi
 
 if [ "$need_build" -ne 0 ]; then
   echo "Building salvador"
-  ( cd 3rdparty/salvador && make -s clean all )
+  ( cd $(dirname $0)/../3rdparty/salvador && make -s clean all )
   echo "done"
 fi
 
