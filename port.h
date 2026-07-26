@@ -60,8 +60,21 @@ int irq_and_timer_handler(void);
 void *device_private(device_t dev);
 const char *device_xname(void *dev);
 
-int bsd_splbio(void);
-void bsd_splx(int ilevel);
+/* Block interrupts. The level is vestigial, only kept for the BSD callers. */
+static inline int
+bsd_splbio(void)
+{
+    Disable();
+    return (1);
+}
+
+/* Unblock interrupts. Disable()/Enable() already nest, so this is one-to-one. */
+static inline void
+bsd_splx(int ilevel)
+{
+    __USE(ilevel);
+    Enable();
+}
 
 #define hz TICKS_PER_SECOND
 #define mstohz(m) ((m) * TICKS_PER_SECOND / 1000)

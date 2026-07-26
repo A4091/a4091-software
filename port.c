@@ -51,9 +51,6 @@
 //
 short bug=TRUE;
 
-/* Interrupt Level, >0 means interrupts are disabled */
-static int bsd_ilevel = 0;
-
 void
 panic(const char *fmt, ...)
 {
@@ -132,7 +129,7 @@ delay(int usecs)
     struct timerequest *tr;
     struct timeval tv;
 
-    if(bsd_ilevel > 0) {
+    if (SysBase->IDNestCnt >= 0) {
         printf("delay(%d): Interrupts disabled, using delay loop.\n", usecs);
         for (unsigned long i = 0; i < ((unsigned long)usecs << 3); i++)
             asm("nop");
@@ -153,23 +150,6 @@ delay(int usecs)
     tv.tv_micro = usecs % 1000000;
     wait_for_timer(tr, &tv);
     delete_timer(tr);
-}
-
-/* Block (nesting) interrupts */
-int
-bsd_splbio(void)
-{
-    Disable();
-    return (bsd_ilevel++);
-}
-
-/* Enable (nesting) interrupts */
-void
-bsd_splx(int ilevel)
-{
-    bsd_ilevel = ilevel;
-    if (bsd_ilevel == 0)
-        Enable();
 }
 
 const char *
