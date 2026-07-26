@@ -86,8 +86,17 @@ int Load_BattMem(void)
 #endif
 
     BattMemBase = OpenResource(BATTMEMNAME);
-    if (!BattMemBase)
+    if (!BattMemBase) {
+        /* No battmem.resource (e.g. missing/dead clock chip): fail open
+         * with the defaults - CDROM boot on, everything else off. */
+        asave->cdrom_boot  = 1;
+        asave->ignore_last = 0;
+#ifdef ENABLE_QUICKINTS
+        asave->quick_int   = 0;
+#endif
+        asave->allow_disc  = 0;
         return 0;
+    }
 
     ObtainBattSemaphore();
     printf("Retrieving settings from BattMem\n");
