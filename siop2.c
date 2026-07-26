@@ -543,6 +543,7 @@ siopng_poll(struct siop_softc *sc, struct siop_acb *acb)
 				i = 50000;
 				--to;
 				if (to <= 0) {
+                                        bsd_splx(s);
 					siopngreset(sc);
 					return;
 				}
