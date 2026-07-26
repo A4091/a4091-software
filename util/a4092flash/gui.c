@@ -425,9 +425,15 @@ static void ui_format_mfg_date(uint32_t ts, char *buf, size_t len)
 {
     static const int mdays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     uint32_t days = ts / 86400;
+    unsigned int year;
+    unsigned int month;
+    unsigned int day;
     int y = 1970;
     int m;
     int leap;
+
+    if (len == 0)
+        return;
 
     if (ts == 0) {
         buf[0] = '\0';
@@ -450,7 +456,15 @@ static void ui_format_mfg_date(uint32_t ts, char *buf, size_t len)
         days -= md;
     }
 
-    snprintf(buf, len, "%04d-%02d-%02lu", y, m + 1, (unsigned long)days + 1);
+    year = (unsigned int)y;
+    month = (unsigned int)m + 1;
+    day = (unsigned int)days + 1;
+    if (year > 9999 || month > 12 || day > 31) {
+        buf[0] = '\0';
+        return;
+    }
+
+    snprintf(buf, len, "%04u-%02u-%02u", year, month, day);
 }
 
 static void ui_format_mfg_summary(char *buf, size_t buf_len,
