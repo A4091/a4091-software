@@ -389,10 +389,10 @@ ___________________________________________________________________________
 
 Q:      All of a sudden, I can't boot from CD anymore but it worked before.
 
-A:      Please check whether you have the RDBFF_LAST flag is set in the
-        RDB of your disk. If it is, the driver might just be ignoring all
-	CDROM drives coming after this disk. There is an option in the A4091
-	boot menu to ignore the RDBFF_LAST flag.
+A:      Check whether the RDBFF_LAST flag is set in the RDB of your disk.
+        When it is set, the driver stops probing after that disk, so CD-ROM
+        drives at higher SCSI IDs are not detected. Enable "Scan past
+        RDBFF_LAST" in the A4091 boot menu to scan the remaining targets.
 
 A:      Booting from CD requires a functioning RTC.
 ____________________________________________________________________________
