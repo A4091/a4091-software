@@ -361,7 +361,7 @@ static void print_usage(const char *name)
 	       "   -o | --output <filename>              output filename\n"
 	       "   -D | --device <filename>              path to driver image\n"
 	       "   -F | --filesystem <filename>          path to CDFileSystem\n"
-	       "   -T | --dostype <val>                  DosType (eg. 0x43443031)\n"
+	       "   -T | --dostype <val>                  DosType (eg. 0x43443031), required with -F\n"
 	       "   -s | --skip                           skip first filesystem slot\n"
 	       "   -r | --resize [32|64}                 resize rom image to 32kB or 64kB\n"
 	       "   -v | --version:                       print the version\n"
@@ -456,6 +456,17 @@ int main(int argc, char *argv[])
 	if (optind + 1 != argc) {
 		fprintf(stderr, "You need to specify a file.\n\n");
 		fprintf(stderr, "run '%s -h' for usage\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	if ((filesystem1_filename && filesystem1_dostype == 0) ||
+	    (filesystem2_filename && filesystem2_dostype == 0)) {
+		fprintf(stderr, "Error: no DosType (-T) given for %s.\n"
+			"The driver loads filesystems on demand, keyed by"
+			" DosType; a slot\nwithout one would never be"
+			" loaded.\n",
+			(filesystem1_filename && filesystem1_dostype == 0) ?
+			filesystem1_filename : filesystem2_filename);
 		exit(EXIT_FAILURE);
 	}
 
