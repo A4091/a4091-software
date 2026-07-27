@@ -18,6 +18,7 @@
 #include "printf.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "device.h"
 #include "attach.h"
 #include "reloc.h"
@@ -25,7 +26,10 @@
 #include "version.h"
 #include "romfile.h"
 
-static void add_fs_from_kickstart(void)
+#define DOSTYPE_CD01 0x43443031
+#define DOSTYPE_CDVD 0x43445644
+
+static int add_fs_from_kickstart(void)
 {
     struct Resident *r = NULL;
 
@@ -38,14 +42,14 @@ static void add_fs_from_kickstart(void)
             printf("Initializing CDFS @%p... ", r);
             InitResident(r, 0);
             printf("done.\n");
+            return 1;
         } else
             printf("No rt_Init.\n");
     }
+    return 0;
 }
 
 #if HAVE_ROM
-extern const char cdfs_id_string[];
-
 typedef struct {
 	uint32_t romfile[3], romfile_len[3], romfile_dostype[3];
 } romfiles_t;
@@ -66,7 +70,8 @@ static void parse_romfiles(romfiles_t *rom)
 {
     int i;
 
-    rom->romfile_len[0] = 0;
+    /* If no end-of-rom signature is found below, all slots stay empty */
+    memset(rom, 0, sizeof(*rom));
 
     for (i=1; i<=2; i++) {
         /* Look for end-of-rom signature */
@@ -101,6 +106,9 @@ static void parse_romfiles(romfiles_t *rom)
             if(rom->romfile_len[i]) {
                 printf("  FS %d   @ 0x%05x (%d bytes): %08x\n", i, rom->romfile[i],
                             rom->romfile_len[i], rom->romfile_dostype[i]);
+                if (rom->romfile_dostype[i] == 0)
+                    printf("            no DosType: FS can not be "
+                           "demand-loaded (romtool -T missing?)\n");
                 if (RomFetch32(rom->romfile[i]) == 0x524e4301) {
                     rom->romfile_len[i] = RomFetch32(rom->romfile[i] + 4);
                     printf("            compressed (%d bytes)\n",
@@ -185,14 +193,86 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
 }
 #endif
 
-void init_romfiles(void)
+static int fs_is_registered(ULONG id1, ULONG id2)
 {
-	add_fs_from_kickstart();
-#if HAVE_ROM
-	romfiles_t rom;
+	struct FileSysResource *FileSysResBase;
+	struct FileSysEntry *fse;
+	int found = 0;
 
-	parse_romfiles(&rom);
-	add_romfilesystem(&rom, 1);
-	add_romfilesystem(&rom, 2);
+	Forbid();
+	FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME);
+	if (FileSysResBase) {
+		for (fse = (struct FileSysEntry *)
+				FileSysResBase->fsr_FileSysEntries.lh_Head;
+		     fse->fse_Node.ln_Succ;
+		     fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+			if ((id1 && fse->fse_DosType == id1) ||
+			    (id2 && fse->fse_DosType == id2)) {
+				found = 1;
+				break;
+			}
+		}
+	}
+	Permit();
+	return found;
+}
+
+/*
+ * LoadFileSys() is called by the mounter whenever it needs a
+ * filesystem for one of the given DosTypes. If a matching
+ * FileSysEntry is already registered in FileSystem.resource, it does
+ * nothing. Otherwise, filesystems are loaded from the A4091 ROM (or
+ * initialized from Kickstart) on demand, i.e. when a partition or
+ * medium actually requires them: the mounter only asks for CD01/CDVD
+ * when it finds a data CD (and CDROM boot is enabled), and only asks
+ * for other DosTypes when it finds a partition of that type. Returns
+ * nonzero if a filesystem was initialized; the caller scans
+ * FileSystem.resource for the result, since a filesystem with a
+ * romtag (e.g. ODFileSystem) registers its own FileSysEntry inside
+ * InitResident().
+ */
+LONG LoadFileSys(ULONG id1, ULONG id2)
+{
+	static int kickstart_tried;
+	LONG loaded = 0;
+
+	/* Already available? Nothing to do. */
+	if (fs_is_registered(id1, id2))
+		return 0;
+
+	printf("Mounter requests filesystem %08lx/%08lx\n", id1, id2);
+
+	/* A Kickstart-resident CDFS can only serve CD DosTypes. Only try
+	 * once: InitResident() must not run again on a later request. */
+	if (!kickstart_tried &&
+	    (id1 == DOSTYPE_CD01 || id1 == DOSTYPE_CDVD ||
+	     id2 == DOSTYPE_CD01 || id2 == DOSTYPE_CDVD)) {
+		kickstart_tried = 1;
+		loaded |= add_fs_from_kickstart();
+	}
+
+#if HAVE_ROM
+	static romfiles_t rom;
+	static int rom_parsed;
+	static int slot_tried[3];
+	int slot;
+
+	if (!rom_parsed) {
+		parse_romfiles(&rom);
+		rom_parsed = 1;
+	}
+
+	for (slot = 1; slot < 3; slot++) {
+		if (slot_tried[slot] ||
+		    rom.romfile_len[slot] == 0 ||
+		    rom.romfile_dostype[slot] == 0)
+			continue;
+		if (rom.romfile_dostype[slot] == id1 ||
+		    rom.romfile_dostype[slot] == id2) {
+			slot_tried[slot] = 1;
+			loaded |= add_romfilesystem(&rom, slot);
+		}
+	}
 #endif
+	return loaded;
 }

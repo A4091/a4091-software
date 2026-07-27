@@ -466,7 +466,6 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         AddDevice((struct Device *)mydev);
 
         if (romboot) {
-            init_romfiles();
             mount_drives(asave->as_cd, dev);
             boot_menu();
         }

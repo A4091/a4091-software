@@ -14,6 +14,14 @@
 #ifndef ROMFILE_H
 #define ROMFILE_H 1
 
-void init_romfiles(void);
+#include <exec/types.h>
+
+/*
+ * Demand-load a filesystem matching one of the given DosTypes from the
+ * controller ROM or Kickstart. Called by the mounter when it finds no
+ * matching FileSysEntry in FileSystem.resource. Returns nonzero if a
+ * filesystem was initialized (the caller should rescan the resource).
+ */
+LONG LoadFileSys(ULONG id1, ULONG id2);
 
 #endif
