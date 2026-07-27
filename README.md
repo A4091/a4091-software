@@ -178,7 +178,7 @@ Additional options:
 ncr7xx -t -L
 ```
 
-Runs all tests in a continuous loop, counting how many passes have completed. This is useful for burn-in testing—500+ passes are recommended for validating new builds.
+Runs all tests in a continuous loop, counting how many passes have completed. This is useful for burn-in testing - 500+ passes are recommended for validating new builds.
 
 ```bash
 ncr7xx -t56
@@ -270,4 +270,4 @@ This universal ROM will use the default CD-ROM driver for CDs and automatically 
 
 Feedback, pull requests, and issue reports are welcome at [github.com/A4091/a4091-software](https://github.com/A4091/a4091-software). If you're unsure where to start, browse the open issues or join the discussion on the project's GitHub page.
 
-If you are using the A4091 and find a bug, please include as much detail as possible — including ROM version, Kickstart version, and any SCSI devices connected.
+If you are using the A4091 and find a bug, please include as much detail as possible - including ROM version, Kickstart version, and any SCSI devices connected.
