@@ -121,7 +121,7 @@ The A4091 ROM includes an optional boot-time diagnostic and configuration menu. 
 The boot menu allows configuration of firmware features and diagnostics. It includes:
 
 - ✔️ **CD-ROM Boot Enable/Disable**: Controls whether the controller attempts to boot from a CD.  
-- ✔️ **Ignore `RDBFF_LAST`**: Allows the system to scan all drives even if one RDB flags it as final. Useful if a misconfigured or defective drive prevents other drives from being detected.
+- ✔️ **Scan past `RDBFF_LAST`**: By default, an RDB with this flag stops the scan, so devices at higher SCSI IDs, including CD-ROM drives, are not probed. Enable this option to scan all remaining SCSI targets.
 - 📜 **SCSI Device Summary**: Displays all detected SCSI targets, gathered by the driver.
 - 🎛️ **DIP Switch Viewer**: Shows the current DIP switch configuration for the controller.
 

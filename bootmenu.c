@@ -1048,7 +1048,7 @@ static void debug_page(void)
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, cdrom_boot, TAG_DONE);
 
     ng.ng_TopEdge    = 76;
-    ng.ng_GadgetText = "Ignore ~RDBFF_LAST";
+    ng.ng_GadgetText = "Scan past ~RDBFF_LAST";
     ng.ng_GadgetID   = DEBUG_IGNORE_LAST_ID;
     LastAdded = create_gadget(CHECKBOX_KIND);
     GT_SetGadgetAttrs(LastAdded, NULL, NULL, GTCB_Checked, ignore_last, TAG_DONE);
