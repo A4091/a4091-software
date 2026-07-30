@@ -689,7 +689,8 @@ void close_script ()
 	if (dsps == 0)
 		return;
 	if (outfp) {
-		fprintf (outfp, "const u_int32_t %s[] = {\n", script_name);
+		fprintf (outfp, "const u_int32_t %s[] "
+		    "__attribute__((aligned(4))) = {\n", script_name);
 		for (i = 0; i < dsps / 4; i += 2) {
 			fprintf (outfp, "\t0x%08x, 0x%08x", script[i],
 				script[i + 1]);
