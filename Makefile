@@ -352,6 +352,7 @@ clean:
 
 distclean: clean
 	@echo Cleaning really good.
+	$(QUIET)$(MAKE) -s -C 3rdparty/ODFileSystem clean
 	$(QUIET)rm -f $(PROGU) $(PROGD) *.device *.zx0 *.rom *.kick scsi_assets.kick a4091_*.lha
 	$(QUIET)rm -rf $(OBJDIR)
 

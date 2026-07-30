@@ -1,5 +1,5 @@
 //
-// Copyright 2022-2025 Stefan Reinauer
+// Copyright 2022-2026 Stefan Reinauer
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -22,12 +22,28 @@
 #include "device.h"
 #include "attach.h"
 #include "reloc.h"
+#include <exec/resident.h>
 #include <resources/filesysres.h>
+#if HAVE_ROM
+#include <dos/dos.h>
+#include <dos/dosextens.h>
+#include <exec/execbase.h>
+#include <exec/lists.h>
+#include <libraries/expansion.h>
+#include <libraries/expansionbase.h>
+#include <proto/dos.h>
+#include <proto/expansion.h>
+#endif
 #include "version.h"
 #include "romfile.h"
 
 #define DOSTYPE_CD01 0x43443031
 #define DOSTYPE_CDVD 0x43445644
+
+#if HAVE_ROM
+static void track_rom_cd_filesystem(struct FileSysEntry *newROMEntry,
+				    struct ExecBase *SysBase);
+#endif
 
 static int add_fs_from_kickstart(void)
 {
@@ -47,6 +63,30 @@ static int add_fs_from_kickstart(void)
             printf("No rt_Init.\n");
     }
     return 0;
+}
+
+static struct FileSysEntry *find_registered_filesystem(ULONG id1, ULONG id2)
+{
+    struct FileSysResource *FileSysResBase;
+    struct FileSysEntry *fse;
+    struct FileSysEntry *found = NULL;
+
+    Forbid();
+    FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME);
+    if (FileSysResBase) {
+        for (fse = (struct FileSysEntry *)
+                    FileSysResBase->fsr_FileSysEntries.lh_Head;
+             fse->fse_Node.ln_Succ;
+             fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+            if ((id1 && fse->fse_DosType == id1) ||
+                (id2 && fse->fse_DosType == id2)) {
+                found = fse;
+                break;
+            }
+        }
+    }
+    Permit();
+    return found;
 }
 
 #if HAVE_ROM
@@ -121,14 +161,18 @@ static void parse_romfiles(romfiles_t *rom)
         printf("  Driver not found. Huh?\n");
 }
 
-static int add_romfilesystem(romfiles_t *rom, int slot)
+static int add_romfilesystem(romfiles_t *rom, int slot,
+                             struct FileSysEntry **newEntry)
 {
     uint32_t fs_seglist = 0;
     struct Resident *r = NULL;
     struct FileSysResource *FileSysResBase;
     struct FileSysEntry *fse = NULL;
+    struct FileSysEntry *created = NULL;
 
     unsigned int i;
+    if (newEntry)
+        *newEntry = NULL;
     printf("Looking for FS in A4091 ROM slot %d... ", slot);
 
     if (rom->romfile_len[slot])
@@ -154,6 +198,13 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
             printf("Initializing FS @%p... ", r);
             InitResident(r, fs_seglist >> 2);
             printf("done.\n");
+            created = find_registered_filesystem(
+                        rom->romfile_dostype[slot], 0);
+            if (created &&
+                created->fse_SegList != (BPTR)(fs_seglist >> 2))
+                created = NULL;
+            if (newEntry)
+                *newEntry = created;
 	    return 1;
         } else
             printf("No rt_Init.\n");
@@ -186,36 +237,15 @@ static int add_romfilesystem(romfiles_t *rom, int slot)
             fse->fse_Priority = 10;
 
             AddHead(&FileSysResBase->fsr_FileSysEntries,&fse->fse_Node);
+            created = fse;
 	}
     }
     Permit();
+    if (newEntry)
+        *newEntry = created;
     return (fse!=NULL);
 }
 #endif
-
-static int fs_is_registered(ULONG id1, ULONG id2)
-{
-	struct FileSysResource *FileSysResBase;
-	struct FileSysEntry *fse;
-	int found = 0;
-
-	Forbid();
-	FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME);
-	if (FileSysResBase) {
-		for (fse = (struct FileSysEntry *)
-				FileSysResBase->fsr_FileSysEntries.lh_Head;
-		     fse->fse_Node.ln_Succ;
-		     fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
-			if ((id1 && fse->fse_DosType == id1) ||
-			    (id2 && fse->fse_DosType == id2)) {
-				found = 1;
-				break;
-			}
-		}
-	}
-	Permit();
-	return found;
-}
 
 /*
  * LoadFileSys() is called by the mounter whenever it needs a
@@ -237,7 +267,7 @@ LONG LoadFileSys(ULONG id1, ULONG id2)
 	LONG loaded = 0;
 
 	/* Already available? Nothing to do. */
-	if (fs_is_registered(id1, id2))
+	if (find_registered_filesystem(id1, id2))
 		return 0;
 
 	printf("Mounter requests filesystem %08lx/%08lx\n", id1, id2);
@@ -263,6 +293,8 @@ LONG LoadFileSys(ULONG id1, ULONG id2)
 	}
 
 	for (slot = 1; slot < 3; slot++) {
+		struct FileSysEntry *created = NULL;
+
 		if (slot_tried[slot] ||
 		    rom.romfile_len[slot] == 0 ||
 		    rom.romfile_dostype[slot] == 0)
@@ -270,9 +302,362 @@ LONG LoadFileSys(ULONG id1, ULONG id2)
 		if (rom.romfile_dostype[slot] == id1 ||
 		    rom.romfile_dostype[slot] == id2) {
 			slot_tried[slot] = 1;
-			loaded |= add_romfilesystem(&rom, slot);
+			loaded |= add_romfilesystem(&rom, slot, &created);
+			if (created)
+				track_rom_cd_filesystem(created, SysBase);
 		}
 	}
 #endif
 	return loaded;
 }
+
+#if HAVE_ROM
+
+#define ROM_CD_MAX 16
+#define RESMODULE_NEXT 0x80000000UL
+
+static BOOL trackingIncomplete;
+static struct FileSysEntry *romCDFSE;
+static ULONG afterDOSModules[2];
+static APTR previousResModules;
+static BOOL afterDOSRegistered;
+static BOOL afterDOSDone;
+
+static APTR cd_cleanup_after_dos(BPTR segList asm("a0"),
+				 struct ExecBase *SysBase asm("a6"));
+
+static const char afterDOSName[] = XSTR(DEVNAME) ".cdcleanup";
+static const char afterDOSId[] = XSTR(DEVNAME) " CD cleanup";
+
+static const struct Resident afterDOSResident = {
+	.rt_MatchWord = RTC_MATCHWORD,
+	.rt_MatchTag = (struct Resident *)&afterDOSResident,
+	.rt_EndSkip = (APTR)(&afterDOSResident + 1),
+	.rt_Flags = RTF_AFTERDOS,
+	.rt_Version = 0,
+	.rt_Type = NT_UNKNOWN,
+	.rt_Pri = -100,
+	.rt_Name = (char *)afterDOSName,
+	.rt_IdString = (char *)afterDOSId,
+	.rt_Init = (APTR)cd_cleanup_after_dos
+};
+
+static BOOL is_cd_type(ULONG dosType)
+{
+	return dosType == DOSTYPE_CD01 || dosType == DOSTYPE_CDVD;
+}
+
+static void install_after_dos(struct ExecBase *SysBase)
+{
+	if (afterDOSRegistered)
+		return;
+
+	/*
+	 * InitCode() does not re-sort a live ResModules array. Put this
+	 * one-shot callback at its head so it runs before ramlib.
+	 */
+	Forbid();
+	previousResModules = SysBase->ResModules;
+	afterDOSModules[0] = (ULONG)&afterDOSResident;
+	if (previousResModules)
+		afterDOSModules[1] =
+		    (ULONG)previousResModules | RESMODULE_NEXT;
+	else
+		afterDOSModules[1] = 0;
+	SysBase->ResModules = afterDOSModules;
+	afterDOSRegistered = TRUE;
+	Permit();
+}
+
+static void track_rom_cd_filesystem(struct FileSysEntry *newROMEntry,
+				    struct ExecBase *SysBase)
+{
+	if (!newROMEntry || !SysBase ||
+	    SysBase->LibNode.lib_Version < 39 ||
+	    !is_cd_type(newROMEntry->fse_DosType))
+		return;
+
+	if (romCDFSE && romCDFSE != newROMEntry) {
+		trackingIncomplete = TRUE;
+		return;
+	}
+
+	romCDFSE = newROMEntry;
+	install_after_dos(SysBase);
+}
+
+/*
+ * DOS copies fse_SegList into every DeviceNode which uses that handler.
+ * Locate the ROM users after DOS has started them instead of requiring
+ * the mounter to report each node as it is created.
+ */
+static LONG collect_rom_nodes(struct MsgPort *bootTask,
+			      struct DeviceNode **nodes, UWORD *nodeCount,
+			      struct MsgPort **tasks, UWORD *taskCount,
+			      struct DosLibrary *DOSBase)
+{
+	struct DosList *entry;
+	LONG result = 0;
+	ULONG flags = LDF_DEVICES | LDF_READ;
+
+	*nodeCount = 0;
+	*taskCount = 0;
+	entry = LockDosList(flags);
+	if (!entry)
+		return -1;
+
+	while ((entry = NextDosEntry(entry, LDF_DEVICES))) {
+		struct DeviceNode *deviceNode = (struct DeviceNode *)entry;
+
+		if (deviceNode->dn_SegList != romCDFSE->fse_SegList)
+			continue;
+		if (deviceNode->dn_Task == bootTask)
+			result = 1;
+		if (*nodeCount >= ROM_CD_MAX) {
+			result = -1;
+			break;
+		}
+		nodes[(*nodeCount)++] = deviceNode;
+
+		if (deviceNode->dn_Task) {
+			UWORD i;
+
+			for (i = 0; i < *taskCount; i++) {
+				if (tasks[i] == deviceNode->dn_Task)
+					break;
+			}
+			if (i == *taskCount)
+				tasks[(*taskCount)++] = deviceNode->dn_Task;
+		}
+	}
+	UnLockDosList(flags);
+	return result;
+}
+
+static LONG rom_nodes_running(struct DosLibrary *DOSBase)
+{
+	struct DosList *entry;
+	LONG result = 0;
+	ULONG flags = LDF_DEVICES | LDF_READ;
+
+	entry = LockDosList(flags);
+	if (!entry)
+		return -1;
+
+	while ((entry = NextDosEntry(entry, LDF_DEVICES))) {
+		struct DeviceNode *deviceNode = (struct DeviceNode *)entry;
+
+		if (deviceNode->dn_SegList == romCDFSE->fse_SegList &&
+		    deviceNode->dn_Task) {
+			result = 1;
+			break;
+		}
+	}
+	UnLockDosList(flags);
+	return result;
+}
+
+static BOOL remove_boot_node(struct DeviceNode *deviceNode,
+			     struct ExpansionBase *ExpansionBase,
+			     struct ExecBase *SysBase)
+{
+	struct BootNode *bootNode;
+	struct BootNode *next;
+	BOOL removed = FALSE;
+
+	for (bootNode = (struct BootNode *)ExpansionBase->MountList.lh_Head;
+	     bootNode->bn_Node.ln_Succ;
+	     bootNode = next) {
+		next = (struct BootNode *)bootNode->bn_Node.ln_Succ;
+		if (bootNode->bn_DeviceNode == deviceNode) {
+			Remove(&bootNode->bn_Node);
+			removed = TRUE;
+		}
+	}
+	return removed;
+}
+
+static void unlink_owned_fse(struct ExecBase *SysBase)
+{
+	struct FileSysResource *FileSysResBase;
+	struct FileSysEntry *fse;
+	BOOL found = FALSE;
+
+	FileSysResBase = (struct FileSysResource *)OpenResource(FSRNAME);
+	if (!FileSysResBase)
+		return;
+
+	Forbid();
+	for (fse = (struct FileSysEntry *)
+		     FileSysResBase->fsr_FileSysEntries.lh_Head;
+	     fse->fse_Node.ln_Succ;
+	     fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+		if (fse == romCDFSE) {
+			Remove(&fse->fse_Node);
+			found = TRUE;
+			break;
+		}
+	}
+	Permit();
+
+	if (found)
+		printf("Removed ROM CD filesystem from FileSystem.resource\n");
+	else
+		printf("ROM CD filesystem was already unregistered\n");
+
+	/*
+	 * The entry and relocated handler remain allocated until reboot.
+	 * This avoids invalidating pointers into the handler image.
+	 */
+	romCDFSE = NULL;
+}
+
+static APTR cd_cleanup_after_dos(BPTR segList asm("a0"),
+				 struct ExecBase *SysBase asm("a6"))
+{
+	struct DosLibrary *DOSBase;
+	struct ExpansionBase *ExpansionBase = NULL;
+	struct MsgPort *bootTask;
+	struct MsgPort *tasks[ROM_CD_MAX];
+	struct DeviceNode *originalNodes[ROM_CD_MAX];
+	struct DeviceNode *remainingNodes[ROM_CD_MAX];
+	struct DosList *entry;
+	struct DosList *list;
+	BOOL cleanupOK = TRUE;
+	LONG romUse;
+	LONG running;
+	UWORD originalCount;
+	UWORD remainingCount;
+	UWORD taskCount;
+	ULONG lockFlags = LDF_DEVICES | LDF_WRITE;
+
+	(void)segList;
+
+	Forbid();
+	if (SysBase->ResModules == afterDOSModules)
+		SysBase->ResModules = previousResModules;
+	Permit();
+
+	if (afterDOSDone)
+		return NULL;
+	afterDOSDone = TRUE;
+
+	if (!romCDFSE)
+		return NULL;
+
+	DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 36);
+	if (!DOSBase)
+		return NULL;
+
+	bootTask = DOSBase->dl_Root ? DOSBase->dl_Root->rn_BootProc : NULL;
+	if (!bootTask) {
+		printf("Keeping ROM CD filesystem: boot state is incomplete\n");
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	romUse = collect_rom_nodes(bootTask, originalNodes, &originalCount,
+				   tasks, &taskCount, DOSBase);
+	if (romUse > 0) {
+		printf("Keeping ROM CD filesystem for boot handler\n");
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+	if (romUse < 0 || trackingIncomplete) {
+		printf("Keeping ROM CD filesystem: cleanup state is incomplete\n");
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	if (originalCount == 0) {
+		unlink_owned_fse(SysBase);
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	ExpansionBase = (struct ExpansionBase *)
+				OpenLibrary("expansion.library", 34);
+	if (!ExpansionBase) {
+		printf("Keeping ROM CD filesystem: expansion unavailable\n");
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	for (UWORD i = 0; i < taskCount; i++) {
+		if (!DoPkt0(tasks[i], ACTION_DIE))
+			printf("ROM CD handler rejected ACTION_DIE\n");
+	}
+
+	running = rom_nodes_running(DOSBase);
+	for (UWORD retry = 0; running > 0 && retry < 10; retry++) {
+		Delay(1);
+		running = rom_nodes_running(DOSBase);
+	}
+	if (running != 0) {
+		printf("Keeping ROM CD filesystem: handler did not exit\n");
+		CloseLibrary(&ExpansionBase->LibNode);
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	list = LockDosList(lockFlags);
+	if (!list) {
+		printf("Keeping ROM CD filesystem: DosList lock failed\n");
+		CloseLibrary(&ExpansionBase->LibNode);
+		CloseLibrary(&DOSBase->dl_lib);
+		return NULL;
+	}
+
+	remainingCount = 0;
+	entry = list;
+	while ((entry = NextDosEntry(entry, LDF_DEVICES))) {
+		struct DeviceNode *deviceNode = (struct DeviceNode *)entry;
+
+		if (deviceNode->dn_SegList != romCDFSE->fse_SegList)
+			continue;
+		if (deviceNode->dn_Task || remainingCount >= ROM_CD_MAX) {
+			cleanupOK = FALSE;
+			break;
+		}
+		remainingNodes[remainingCount++] = deviceNode;
+	}
+
+	if (cleanupOK) {
+		for (UWORD i = 0; i < remainingCount; i++) {
+			struct DeviceNode *deviceNode = remainingNodes[i];
+
+			if (!RemDosEntry((struct DosList *)deviceNode)) {
+				printf("Could not remove unused CD device\n");
+				cleanupOK = FALSE;
+				continue;
+			}
+			printf("Removed unused CD device %s\n",
+			       (UBYTE *)BADDR(deviceNode->dn_Name) + 1);
+		}
+	}
+	UnLockDosList(lockFlags);
+
+	if (cleanupOK) {
+		for (UWORD i = 0; i < originalCount; i++) {
+			BOOL removed;
+
+			Forbid();
+			removed = remove_boot_node(originalNodes[i],
+						   ExpansionBase, SysBase);
+			Permit();
+			if (!removed)
+				printf("No expansion boot node for CD device %p\n",
+				       originalNodes[i]);
+		}
+	}
+
+	CloseLibrary(&ExpansionBase->LibNode);
+
+	if (cleanupOK)
+		unlink_owned_fse(SysBase);
+
+	CloseLibrary(&DOSBase->dl_lib);
+	return NULL;
+}
+
+#endif
