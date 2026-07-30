@@ -32,14 +32,11 @@ struct ConfigDev;
 typedef struct {
     uint32_t              as_addr;
     struct ExecBase      *as_SysBase;
-    int8_t                as_timer_running;
-    uint8_t               as_irq_signal;
     uint32_t              as_irq_count;   // Total interrupts
     uint32_t              as_int_mask;
     uint32_t              as_timer_mask;
     struct Task          *as_svc_task;
     struct Interrupt     *as_isr;         // My interrupt server
-    volatile uint8_t      as_exiting;
     struct siop_softc    *as_device_private;
     struct MsgPort       *as_timerport;
     struct timerequest   *as_timerio;
@@ -48,6 +45,14 @@ typedef struct {
     /* scripts copy (for Zorro II systems) */
     void                 *as_scripts_copy;
     uint32_t              as_scripts_copy_size;
+#ifdef ENABLE_QUICKINTS
+    /* quick interrupt support */
+    ULONG                 quick_vec_num;
+#endif
+    /* Keep byte-sized state after the hot longword fields. */
+    int8_t                as_timer_running;
+    uint8_t               as_irq_signal;
+    volatile uint8_t      as_exiting;
     /* Zorro II DMA workaround flag */
     uint8_t               need_chip_ram_dma;
     /* battmem */
@@ -55,9 +60,7 @@ typedef struct {
     uint8_t              ignore_last;
     uint8_t              allow_disc;
 #ifdef ENABLE_QUICKINTS
-    uint8_t              quick_int;
-    /* quick interrupt support */
-    ULONG                quick_vec_num;
+    uint8_t               quick_int;
 #endif
 #if defined(FLASH_PARALLEL) || defined(FLASH_SPI)
     /* Cached NVRAM and dirty flags (A4092 only) */
