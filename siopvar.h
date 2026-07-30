@@ -73,7 +73,7 @@ struct siop_ds {
 		unsigned long datalen;
 		char *databuf;
 	} chain[DMAMAXIO];
-};
+} __attribute__((aligned(4)));
 
 /*
  * ACB. Holds additional information for each SCSI command Comments: We
@@ -104,6 +104,39 @@ struct siop_acb {
 	char	*daddr;		/* Saved data pointer */
 	int	 dleft;		/* Residue */
 };
+
+#ifdef PORT_AMIGA
+/*
+ * The NCR SCRIPTS programs use fixed byte offsets into siop_ds, and DSA
+ * points directly at the embedded instance in siop_acb.
+ */
+_Static_assert(__alignof__(struct siop_ds) >= 4,
+    "siop_ds must be longword-aligned");
+_Static_assert(__builtin_offsetof(struct siop_ds, scsi_addr) == 0,
+    "siop_ds device descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, idlen) == 4,
+    "siop_ds message-out descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, cmdlen) == 12,
+    "siop_ds command descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, stslen) == 20,
+    "siop_ds status descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, msglen) == 28,
+    "siop_ds message descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, msginlen) == 36,
+    "siop_ds message-in descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, extmsglen) == 44,
+    "siop_ds extended-message descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, synmsglen) == 52,
+    "siop_ds negotiation descriptor offset changed");
+_Static_assert(__builtin_offsetof(struct siop_ds, chain) == 60,
+    "siop_ds data-chain offset changed");
+_Static_assert(sizeof(((struct siop_ds *)0)->chain[0]) == 8,
+    "siop_ds data-chain element size changed");
+_Static_assert((__builtin_offsetof(struct siop_acb, ds) & 3) == 0,
+    "siop_acb.ds must be longword-aligned");
+_Static_assert((sizeof(struct siop_acb) & 3) == 0,
+    "siop_acb array stride must preserve DSA alignment");
+#endif
 
 /*
  * Some info about each (possible) target on the SCSI bus.  This should

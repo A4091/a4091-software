@@ -690,7 +690,8 @@ void close_script ()
 		return;
 	if (outfp) {
 		fprintf (outfp, "const u_int32_t %s[] "
-		    "__attribute__((aligned(4))) = {\n", script_name);
+		    "__attribute__((section(\".data.ncr_scripts\"), "
+		    "aligned(4))) = {\n", script_name);
 		for (i = 0; i < dsps / 4; i += 2) {
 			fprintf (outfp, "\t0x%08x, 0x%08x", script[i],
 				script[i + 1]);
@@ -703,7 +704,10 @@ void close_script ()
 			if ((script[i] & 0xe0000000) == 0xc0000000)
 				++i;
 		}
-		fprintf (outfp, "};\n\n");
+		fprintf (outfp, "};\n");
+		fprintf (outfp, "_Static_assert(__alignof__(%s) >= 4, "
+		    "\"NCR SCRIPTS must be longword-aligned\");\n\n",
+		    script_name);
 	}
 	dsps = 0;
 }

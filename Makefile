@@ -135,7 +135,7 @@ CFLAGS_TOOLS := -Wall -Wextra -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=6
 CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"
 
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
-LDFLAGS        = -nostartfiles -nostdlib -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
+LDFLAGS        = -nostartfiles -nostdlib -Tdevice.ld -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
 LDFLAGS_TOOLS  = -mcrt=clib2 -lgcc -lc -lamiga $(LDFLAGS_COMMON)
 
 #CFLAGS  += -g
@@ -242,7 +242,7 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
-$(PROG): $(OBJS) $(ASMOBJS)
+$(PROG): $(OBJS) $(ASMOBJS) device.ld
 	@echo "Building $@ v$(DEVICE_VERSION).$(DEVICE_REVISION) (v$(FULL_VERSION))"
 	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
 	$(QUIET)$(STRIP) $@
