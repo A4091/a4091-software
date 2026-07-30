@@ -119,7 +119,7 @@ struct siop_tinfo {
 	u_char  flags;
 	u_char  period;		/* Period suggestion */
 	u_char  offset;		/* Offset suggestion */
-};
+} __attribute__((aligned(4)));
 
 struct	siop_softc {
 	device_t sc_dev;
