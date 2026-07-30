@@ -470,6 +470,9 @@ struct scsipi_periph {
 	 * Information gleaned from the inquiry data.
 	 */
 	u_int8_t periph_type;		/* basic device type */
+#ifdef PORT_AMIGA
+	u_int8_t periph_pad[3];		/* align frequently accessed fields */
+#endif
 	int	periph_cap;		/* capabilities */
 	int	periph_quirks;		/* device's quirks */
 
