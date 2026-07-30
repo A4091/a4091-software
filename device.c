@@ -49,8 +49,8 @@
 
 #define DEVICE_NAME XSTR(DEVNAME) ".device"
 
-struct ExecBase *SysBase;
-struct MsgPort *myPort;
+struct ExecBase *SysBase __attribute__((aligned(4)));
+struct MsgPort *myPort __attribute__((aligned(4)));
 
 static BPTR saved_seg_list;
 
