@@ -309,6 +309,8 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
         case TD_REMCHANGEINT:
             printf("TD_REMCHANGEINT\n");
             td_remchangeint(ior);
+            if ((ior->io_Flags & IOF_QUICK) == 0)
+                ReplyMsg(&ior->io_Message);
             return;
         case CMD_START:
             /*
