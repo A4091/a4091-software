@@ -219,11 +219,19 @@ td_addchangeint(struct IORequest *ior)
 {
     struct scsipi_periph *periph = (struct scsipi_periph *)ior->io_Unit;
 
+    /*
+     * TD_ADDCHANGEINT remains pending until the same request is submitted
+     * with TD_REMCHANGEINT.  Make that true even when BeginIO received the
+     * add request with IOF_QUICK set.
+     */
+    ior->io_Message.mn_Node.ln_Type = NT_MESSAGE;
+    ior->io_Flags &= ~IOF_QUICK;
+    ior->io_Error = 0;
+
     Forbid();
     AddHeadMinList(&periph->periph_changeintlist,
                    (struct MinNode *) &ior->io_Message.mn_Node);
     Permit();
-    ior->io_Error = 0;  // Success
 }
 
 void
