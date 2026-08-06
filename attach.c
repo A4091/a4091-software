@@ -299,6 +299,8 @@ a4091_find(UBYTE *boardnum)
     uint32_t          as_addr  = 0;  /* Default to not found */
     int               count = 0;
 
+    asave->as_configdev_claimed = 0;
+
     if ((ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library", 0)) == 0) {
         printf("Can't open expansion.library.\n");
         return (0);
@@ -310,15 +312,21 @@ a4091_find(UBYTE *boardnum)
          * than FindConfigDev() to get the current board.
          */
         ULONG res;
-        struct CurrentBinding cb;
+        struct CurrentBinding cb = { 0 };
         res = GetCurrentBinding(&cb, sizeof (cb));
         printf("gcb=%"PRIu32" fn='%s' ps='%s'\n", res,
                 (char *)cb.cb_FileName ?: "", (char *)cb.cb_ProductString ?: "");
-        if (!res)
+        if (res < sizeof (cb)) {
+            CloseLibrary((struct Library *)ExpansionBase);
             return (0);
+        }
         if (cb.cb_ConfigDev != NULL) {
             struct ConfigDev *cd = cb.cb_ConfigDev;
             cdev = cd;
+            if (cdev->cd_Flags & CDF_CONFIGME) {
+                cdev->cd_Flags &= ~CDF_CONFIGME;
+                asave->as_configdev_claimed = 1;
+            }
             as_addr = (uint32_t) (cdev->cd_BoardAddr);
             do {
                 printf("configdev %p board=%08x flags=%02x configme=%u driver=%p\n",
@@ -332,6 +340,7 @@ a4091_find(UBYTE *boardnum)
             cdev = FindConfigDev(cdev, ZORRO_MFG_ID, ZORRO_PROD_ID);
             if ((cdev != NULL) && (cdev->cd_Flags & CDF_CONFIGME)) {
                 cdev->cd_Flags &= ~CDF_CONFIGME;
+                asave->as_configdev_claimed = 1;
                 as_addr = (uint32_t) (cdev->cd_BoardAddr);
                 *boardnum = count;
                 break;
@@ -482,11 +491,16 @@ get_target_count(void)
 static void
 a4091_release(uint32_t as_addr)
 {
-    if (asave->as_addr != as_addr)
+    if (asave->as_cd == NULL)
+        return;
+    if (asave->as_addr != as_addr) {
         printf("Releasing wrong card.\n");
-#if HW_IS_ZORRO3
-    asave->as_cd->cd_Flags |= CDF_CONFIGME;
-#endif
+        return;
+    }
+    if (asave->as_configdev_claimed) {
+        asave->as_cd->cd_Flags |= CDF_CONFIGME;
+        asave->as_configdev_claimed = 0;
+    }
 }
 
 static int
@@ -612,8 +626,10 @@ init_chan(device_t self, UBYTE *boardnum)
     }
 
     printf(XSTR(DEVNAME)": board #%u found at 0x%x\n", *boardnum, dev_base);
-    if ((rc = a4091_validate(dev_base)))
+    if ((rc = a4091_validate(dev_base))) {
+        a4091_release(dev_base);
         return (rc);
+    }
 
     memset(sc, 0, sizeof (*sc));
     dip_switches = get_dip_switches();
@@ -729,8 +745,10 @@ init_chan(device_t self, UBYTE *boardnum)
 #endif
         rc = a4091_add_local_irq_handler();
 
-    if (rc != 0)
+    if (rc != 0) {
+        a4091_release(dev_base);
         return (rc);
+    }
 
     Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
 #ifdef NCR53C710
