@@ -321,16 +321,17 @@ a4091_find(UBYTE *boardnum)
             cdev = cd;
             as_addr = (uint32_t) (cdev->cd_BoardAddr);
             do {
-                printf("configdev %p board=%08x flags=%02x configme=%x driver=%p\n",
-                        cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags, CDB_CONFIGME, cd->cd_Driver);
+                printf("configdev %p board=%08x flags=%02x configme=%u driver=%p\n",
+                        cd, (uint32_t) cd->cd_BoardAddr, cd->cd_Flags,
+                        !!(cd->cd_Flags & CDF_CONFIGME), cd->cd_Driver);
                 cd = cd->cd_NextCD;
             } while (cd != NULL);
         }
     } else {
         do {
             cdev = FindConfigDev(cdev, ZORRO_MFG_ID, ZORRO_PROD_ID);
-            if ((cdev != NULL) && (cdev->cd_Flags & CDB_CONFIGME)) {
-                cdev->cd_Flags &= ~CDB_CONFIGME;
+            if ((cdev != NULL) && (cdev->cd_Flags & CDF_CONFIGME)) {
+                cdev->cd_Flags &= ~CDF_CONFIGME;
                 as_addr = (uint32_t) (cdev->cd_BoardAddr);
                 *boardnum = count;
                 break;
@@ -484,7 +485,7 @@ a4091_release(uint32_t as_addr)
     if (asave->as_addr != as_addr)
         printf("Releasing wrong card.\n");
 #if HW_IS_ZORRO3
-    asave->as_cd->cd_Flags |= CDB_CONFIGME;
+    asave->as_cd->cd_Flags |= CDF_CONFIGME;
 #endif
 }
 
