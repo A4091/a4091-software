@@ -466,6 +466,7 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 
     if (mydev != NULL) {
         AddDevice((struct Device *)mydev);
+        a4091_set_configdev_driver(mydev);
 
         if (romboot) {
             mount_drives(asave->as_cd, dev);

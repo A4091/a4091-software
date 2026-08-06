@@ -28,6 +28,7 @@ struct MsgPort;
 struct timerequest;
 struct callout;
 struct ConfigDev;
+struct Library;
 
 typedef struct {
     uint32_t              as_addr;
@@ -95,6 +96,7 @@ uint8_t get_dip_switches(void);
 uint8_t get_host_id(void);
 uint8_t get_lun_count(void);
 uint8_t get_target_count(void);
+void a4091_set_configdev_driver(struct Library *driver);
 void decode_unit_number(ULONG unit_num, int *target, int *lun);
 ULONG calculate_unit_number(int target, int lun);
 

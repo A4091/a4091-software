@@ -488,6 +488,13 @@ get_target_count(void)
     return get_sc_target_count(dip_switches);
 }
 
+void
+a4091_set_configdev_driver(struct Library *driver)
+{
+    if ((asave->as_cd != NULL) && asave->as_configdev_claimed)
+        asave->as_cd->cd_Driver = &driver->lib_Node;
+}
+
 static void
 a4091_release(uint32_t as_addr)
 {
@@ -498,6 +505,7 @@ a4091_release(uint32_t as_addr)
         return;
     }
     if (asave->as_configdev_claimed) {
+        asave->as_cd->cd_Driver = NULL;
         asave->as_cd->cd_Flags |= CDF_CONFIGME;
         asave->as_configdev_claimed = 0;
     }
