@@ -55,6 +55,8 @@ typedef struct {
     volatile uint8_t      as_exiting;
     /* Zorro II DMA workaround flag */
     uint8_t               need_chip_ram_dma;
+    /* ConfigDev ownership */
+    uint8_t               as_configdev_claimed;
     /* battmem */
     uint8_t              cdrom_boot;
     uint8_t              ignore_last;
