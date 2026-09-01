@@ -255,6 +255,13 @@ sd_media_unloaded(struct scsipi_periph *periph)
     if (periph->periph_flags & PERIPH_MEDIA_LOADED) {
         periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
         periph->periph_changenum++;
+        /*
+         * Force a fresh sd_blocksize() probe for the next medium: a
+         * block size latched from an empty drive (falls through to the
+         * 512-byte default) or a previous disc must not be trusted for
+         * whatever shows up next.
+         */
+        periph->periph_blkshift = 0;
         call_changeintlist(periph);
         printf("Media unloaded\n");
     }
@@ -266,6 +273,7 @@ sd_media_loaded(struct scsipi_periph *periph)
     if ((periph->periph_flags & PERIPH_MEDIA_LOADED) == 0) {
         periph->periph_flags |= PERIPH_MEDIA_LOADED;
         periph->periph_changenum++;
+        periph->periph_blkshift = 0;
         call_changeintlist(periph);
         printf("Media loaded\n");
     }

@@ -333,6 +333,10 @@ validate_etd:
                     iotd->iotd_Req.io_Offset, iotd->iotd_Req.io_Length);
             if (iotd->iotd_Req.io_Length == 0)
                 goto io_done;
+            /* Ensure periph_blkshift reflects the current medium (it is
+             * reset to 0 on every load/unload transition) before trusting
+             * it for offset/length conversion. */
+            (void) sd_blocksize((struct scsipi_periph *) ior->io_Unit);
             blkshift = ((struct scsipi_periph *) ior->io_Unit)->periph_blkshift;
             blkno = iotd->iotd_Req.io_Offset >> blkshift;
             iotd->iotd_Req.io_Actual = 0;
