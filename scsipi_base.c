@@ -1250,6 +1250,16 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 				error = ENODEV; /* Medium not present */
 				if (xs->xs_control & XS_CTL_SILENT_NODEV)
 					return error;
+			} else if (sense->asc == 0x04 && sense->ascq == 0x01) {
+				/*
+				 * In progress of becoming ready (e.g. spin-up).
+				 * Transitional state - worth a retry.
+				 */
+				if (xs->xs_retries != 0) {
+					xs->xs_retries--;
+					error = ERESTART;
+				} else
+					error = EIO;
 			} else
 				error = EIO;
 			if ((xs->xs_control & XS_CTL_SILENT) != 0)
