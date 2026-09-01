@@ -1371,8 +1371,13 @@ sd_tur_complete(struct scsipi_xfer *xs)
                 sd_media_unloaded(periph);
                 actual = -1;  // Drive is not present
             } else {
-                actual  = 0;  // Drive present, though not ready
-                sd_media_loaded(periph);
+                /*
+                 * Not ready, but sense doesn't confirm media is present
+                 * or absent (e.g. 04/01 spin-up, 04/03 manual
+                 * intervention). Leave the tracked state as-is instead
+                 * of asserting either way.
+                 */
+                actual = !(periph->periph_flags & PERIPH_MEDIA_LOADED);
             }
             rc = 0;
         } else {
