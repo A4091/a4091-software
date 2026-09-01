@@ -1073,6 +1073,11 @@ geom_done_get_capacity(struct scsipi_xfer *xs)
         return;
     }
 
+    if (xs->error == XS_SENSE && translate_xs_error(xs) == TDERR_DiskChanged) {
+        cmd_complete(xs->amiga_ior, TDERR_DiskChanged);
+        return;
+    }
+
     /* Try a mode sense 3 / 4 combination */
     queue_get_mode_page(xs, 3, SMS_DBD, NULL, geom_done_mode_page_3);
 }
