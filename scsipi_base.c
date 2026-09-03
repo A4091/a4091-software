@@ -912,6 +912,7 @@ scsipi_channel_timed_thaw(void *arg)
 
 	scsipi_channel_thaw(chan, 1);
 }
+#endif /* !PORT_AMIGA */
 
 /*
  * scsipi_periph_freeze:

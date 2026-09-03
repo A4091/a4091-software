@@ -22,6 +22,7 @@
 #include <inline/exec.h>
 #include <exec/memory.h>
 #include <clib/exec_protos.h>
+#include <dos/dos.h>  /* TICKS_PER_SECOND for the hz/mstohz macros below */
 
 typedef uint32_t __attribute__((__may_alias__)) aliased_uint32_t;
 
