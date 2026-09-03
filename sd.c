@@ -439,7 +439,13 @@ sd_blocksize(void *periph_p)
             goto got_blocksize;
     }
 
-    blksize = TD_SECTOR; // Just give up and accept 512 as the default
+    /*
+     * All probes failed (e.g. the device is still becoming ready).
+     * Fall back to 512 bytes for this caller, but don't latch it in
+     * periph_blkshift: the next call must probe again rather than
+     * trust a value the device never reported.
+     */
+    return (TD_SECTOR);
 
 got_blocksize:
     periph->periph_blkshift = calc_blkshift(blksize);
