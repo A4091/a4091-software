@@ -489,9 +489,9 @@ struct scsipi_periph {
 
 	int	periph_version;		/* ANSI SCSI version */
 
-#ifndef PORT_AMIGA
 	int	periph_qfreeze;		/* queue freeze count */
 
+#ifndef PORT_AMIGA
 	/* available opcodes and timeout information */
 	struct scsipi_opcodes *periph_opcs;
 #endif

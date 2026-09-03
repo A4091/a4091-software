@@ -59,6 +59,15 @@
 
 #define ERESTART 100  // Needs restart
 
+/*
+ * Maximum number of paced requeues of a single transfer while a unit
+ * reports "in the process of becoming ready" (sense 02/04/01). Each
+ * requeue is preceded by a several-second quiet period (see
+ * scsipi_interpret_sense), so this bounds the total time a transfer
+ * can wait for spin-up.
+ */
+#define SCSIPI_SPINUP_MAX 10
+
 extern struct ExecBase *SysBase;
 
 #else /* !PORT_AMIGA */
@@ -944,9 +953,11 @@ scsipi_periph_thaw_locked(struct scsipi_periph *periph, int count)
 		panic(pc);
 	}
 #endif
+#ifndef PORT_AMIGA
 	if (periph->periph_qfreeze == 0 &&
 	    (periph->periph_flags & PERIPH_WAITING) != 0)
 		cv_broadcast(periph_cv_periph(periph));
+#endif
 }
 
 void
@@ -982,24 +993,25 @@ scsipi_periph_timed_thaw(void *arg)
 
 	mutex_enter(chan_mtx(chan));
 	scsipi_periph_thaw_locked(periph, 1);
-	if ((periph->periph_channel->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
+	if ((chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
 		/*
 		 * Kick the channel's queue here.  Note, we're running in
 		 * interrupt context (softclock), so the adapter driver
 		 * had better not sleep.
 		 */
 		mutex_exit(chan_mtx(chan));
-		scsipi_run_queue(periph->periph_channel);
+		scsipi_run_queue(chan);
 	} else {
 		/*
 		 * Tell the completion thread to kick the channel's queue here.
 		 */
-		periph->periph_channel->chan_tflags |= SCSIPI_CHANT_KICK;
+		chan->chan_tflags |= SCSIPI_CHANT_KICK;
 		cv_broadcast(chan_cv_complete(chan));
 		mutex_exit(chan_mtx(chan));
 	}
 }
 
+#ifndef PORT_AMIGA
 /*
  * scsipi_wait_drain:
  *
@@ -1253,11 +1265,24 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 					return error;
 			} else if (sense->asc == 0x04 && sense->ascq == 0x01) {
 				/*
-				 * In progress of becoming ready (e.g. spin-up).
-				 * Transitional state - worth a retry.
+				 * Unit in the process of becoming ready
+				 * (e.g. spin-up after power-on with media
+				 * present). Retry, but pace the retries:
+				 * freeze the periph queue and thaw it a few
+				 * seconds later so the device gets quiet
+				 * time to finish initializing. Old CD-ROM
+				 * drives can take 10+ seconds to become
+				 * ready, and hammering them with commands
+				 * during spin-up can restart their
+				 * initialization.
 				 */
-				if (xs->xs_retries != 0) {
-					xs->xs_retries--;
+				if (xs->xs_requeuecnt < SCSIPI_SPINUP_MAX) {
+					if (!callout_pending(
+					    &periph->periph_callout))
+						scsipi_periph_freeze(periph, 1);
+					callout_reset(&periph->periph_callout,
+					    3 * hz, scsipi_periph_timed_thaw,
+					    periph);
 					error = ERESTART;
 				} else
 					error = EIO;
@@ -2523,6 +2548,7 @@ scsipi_run_queue(struct scsipi_channel *chan)
 
 #ifdef PORT_AMIGA
 			if ((periph->periph_sent >= periph->periph_openings) ||
+			    periph->periph_qfreeze != 0 ||
 			    (periph->periph_flags & PERIPH_UNTAG) != 0) {
                             /*
                              * PERIPH_UNTAG means the device is running a
