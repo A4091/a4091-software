@@ -217,12 +217,15 @@ callout_remove(callout_t *c)
         callout_head = c->co_next;
         if (callout_head != NULL)
             callout_head->co_prev = NULL;
-        return;
+    } else {
+        if (c->co_prev != NULL)
+            c->co_prev->co_next = c->co_next;
+        if (c->co_next != NULL)
+            c->co_next->co_prev = c->co_prev;
     }
-    if (c->co_prev != NULL)
-        c->co_prev->co_next = c->co_next;
-    if (c->co_next != NULL)
-        c->co_next->co_prev = c->co_prev;
+    /* Neutralize the links so a redundant remove can't corrupt the list */
+    c->co_prev = NULL;
+    c->co_next = NULL;
 }
 
 void
@@ -230,6 +233,8 @@ callout_init(callout_t *c, u_int flags)
 {
     (void)flags;
     c->func = NULL;
+    c->co_prev = NULL;
+    c->co_next = NULL;
 }
 
 #ifdef DEBUG
@@ -291,8 +296,14 @@ void
 callout_run_timeouts(void)
 {
     callout_t *cur;
+    callout_t *next;
 
-    for (cur = callout_head; cur != NULL; cur = cur->co_next) {
+    /*
+     * Capture the successor before dispatching: a callout function may
+     * stop (unlink) its own callout, which clears the node's links.
+     */
+    for (cur = callout_head; cur != NULL; cur = next) {
+        next = cur->co_next;
         if (cur->ticks == 1) {
             cur->ticks = 0;
             callout_call(cur);
