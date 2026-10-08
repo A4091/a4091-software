@@ -409,7 +409,7 @@ static void list_filesystems(void)
 static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 {
 	extern char real_device_name[];
-	struct MountStruct ms;
+	struct MountStruct ms = {0};
 	int i, j = 1, ret = 0;
 	UBYTE dip_switches = get_dip_switches();
 	UBYTE hostid = get_host_id();
@@ -434,6 +434,8 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ms.creatorName = NULL;
 	ms.configDev = cd;
 	ms.SysBase = SysBase;
+	ms.LoadFileSys = LoadFileSysCallback;
+	ms.LoadFileSysCtx = NULL;
 	ms.luns = (get_lun_count() > 1);
 	ms.slowSpinup = !(dip_switches & BIT(4));  // 0: Short Spinup 1: Long Spinup
 	ms.cdBoot = asave->cdrom_boot;

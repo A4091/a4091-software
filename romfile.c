@@ -254,7 +254,8 @@ static int add_romfilesystem(romfiles_t *rom, int slot,
  * nothing. Otherwise, filesystems are loaded from the A4091 ROM (or
  * initialized from Kickstart) on demand, i.e. when a partition or
  * medium actually requires them: the mounter only asks for CD01/CDVD
- * when it finds a data CD (and CDROM boot is enabled), and only asks
+ * when it finds a CDTV/AMIGA BOOT ISO (and CDROM boot is enabled),
+ * scans RDB CDs for partition filesystems, and only asks
  * for other DosTypes when it finds a partition of that type. Returns
  * nonzero if a filesystem was initialized; the caller scans
  * FileSystem.resource for the result, since a filesystem with a
@@ -309,6 +310,12 @@ LONG LoadFileSys(ULONG id1, ULONG id2)
 	}
 #endif
 	return loaded;
+}
+
+LONG LoadFileSysCallback(ULONG id1, ULONG id2, void *ctx)
+{
+	(void)ctx;
+	return LoadFileSys(id1, id2);
 }
 
 #if HAVE_ROM

@@ -24,4 +24,7 @@
  */
 LONG LoadFileSys(ULONG id1, ULONG id2);
 
+/* Mounter callback adapter; no per-call context is required. */
+LONG LoadFileSysCallback(ULONG id1, ULONG id2, void *ctx);
+
 #endif

@@ -152,7 +152,9 @@ The A4091 driver is a hybrid, combining a robust, battle-tested SCSI core with A
 
 A key component for ease of use is the **mounter**. It is included in the ROM and is responsible for mounting hard drives at boot time, using the filesystems stored in Kickstart or the ROM (like `ODFileSystem` or `fat95`).
 
-Filesystems embedded in the A4091 ROM are loaded **on demand**. Hard-disk filesystems are requested when the mounter finds a partition whose DosType has no matching entry in `FileSystem.resource`. A data CD similarly causes the mounter to load the CD filesystem and create a CD device node.
+Filesystems embedded in the A4091 ROM are loaded **on demand** through a driver callback. Hard-disk filesystems are requested when the mounter finds a partition whose DosType has no matching entry in `FileSystem.resource`. With CD-ROM boot enabled, an ISO disc with a `CDTV` or `AMIGA BOOT` System ID similarly causes the mounter to request the CD filesystem and create a CD device node. RDB-formatted CDs are scanned for partitions and their filesystems.
+
+Ordinary data CDs and audio CDs are left to the installed OS. This avoids loading the stripped-down ROM CD filesystem for everyday use, where the disk-based filesystem can provide full functionality, including audio-CD support, without a handover from the ROM handler.
 
 On Kickstart 3.0 or newer, the driver retains the exact `FileSysEntry` created from its ROM. Once DOS has selected the real boot filesystem and started the remaining handlers, a driver-owned `RTF_AFTERDOS` callback finds every CD node using that entry's handler segment and compares its task with `rn_BootProc`. A CD boot keeps the ROM filesystem. After a hard-disk boot, the callback stops the unused ROM handlers, removes their DOS and expansion boot nodes, and unlinks the exact ROM-created entry from `FileSystem.resource`. The detached nodes, entry, and relocated handler remain allocated until reboot, but a fuller disk-based handler is no longer shadowed by the stripped ROM version.
 
