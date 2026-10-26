@@ -1615,6 +1615,7 @@ scsipi_prevent(struct scsipi_periph *periph, int type, int flags)
 	return (scsipi_command(periph, (void *)&cmd, sizeof(cmd), 0, 0,
 	    SCSIPIRETRIES, 5000, NULL, flags));
 }
+#endif
 
 /*
  * scsipi_start:
@@ -1634,7 +1635,6 @@ scsipi_start(struct scsipi_periph *periph, int type, int flags)
 	return scsipi_command(periph, (void *)&cmd, sizeof(cmd), 0, 0,
 	    SCSIPIRETRIES, (type & SSS_START) ? 60000 : 10000, NULL, flags);
 }
-#endif
 
 /*
  * scsipi_mode_sense, scsipi_mode_sense_big:

@@ -41,6 +41,7 @@
 #include "scsi_all.h"
 #include "scsi_spc.h"
 #include "scsipiconf.h"
+#include "scsipi_all.h"
 #include "sd.h"
 #include "sys_queue.h"
 #include "siopreg.h"
@@ -882,6 +883,26 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
     }
 
     scsipi_insert_periph(chan, periph);
+
+    /*
+     * Spin up disks which wait for a START UNIT command before they
+     * become ready (drives with the "motor start" jumper set, or
+     * emulators which report NOT READY "initializing command required"
+     * after a reset). A running drive completes this immediately.
+     * Not ready (e.g. no media) and unsupported command errors are
+     * ignored. CD-ROMs are left alone so their tray is not closed.
+     */
+    switch (periph->periph_type) {
+        case T_DIRECT:
+        case T_SIMPLE_DIRECT:
+        case T_OPTICAL:
+            rc = scsipi_start(periph, SSS_START,
+                              XS_CTL_SILENT | XS_CTL_IGNORE_NOT_READY |
+                              XS_CTL_IGNORE_ILLEGAL_REQUEST |
+                              XS_CTL_IGNORE_MEDIA_CHANGE);
+            printf("  Target %d: start unit rc=%d\n", target, rc);
+            break;
+    }
 
     /* Check if device supports disconnect/reconnect */
     if (asave->allow_disc) {
