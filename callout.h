@@ -14,6 +14,8 @@
 #ifndef _CALLOUT_H
 #define _CALLOUT_H
 
+#include <sys/types.h>
+
 typedef struct callout callout_t;
 struct callout {
     int ticks;             /* ticks remaining */

@@ -15,6 +15,8 @@
 #define _PORT_H
 
 #include <stdint.h>
+/* Parse libc declarations and inlines before replacing memcpy below. */
+#include <string.h>
 #include "printf.h"
 #include "callout.h"
 #include <proto/exec.h>
