@@ -14,7 +14,7 @@ jobs:
   build:
     name: Build release artifacts
     runs-on: ubuntu-latest
-    container: stefanreinauer/amiga-gcc:gcc-v13.4
+    container: stefanreinauer/amiga-gcc:gcc-v16.2
 
     steps:
       - name: Checkout repository
