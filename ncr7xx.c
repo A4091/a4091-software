@@ -2080,7 +2080,7 @@ a4091_state_takeover(int flag_suspend)
  * 0x98080000 = Transfer Control, Opcode=011 (Interrupt)
  * 0xc8080000 = Memory-to-memory copy
  */
-__attribute__((aligned(16)))
+__attribute__((aligned(8)))
 uint32_t dma_mem_move_script[] = {
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
@@ -2088,7 +2088,7 @@ uint32_t dma_mem_move_script[] = {
     0x98080000, 0x00000000,  // Transfer Control Opcode=011 (Interrupt and stop)
 };
 
-__attribute__((aligned(16)))
+__attribute__((aligned(8)))
 uint32_t dma_mem_move_script_quad[] = {
     0xc0000000,              // Memory Move command: lower 24 bits are length
     0x00000000,              // Source address (DSPS)
@@ -2105,7 +2105,7 @@ uint32_t dma_mem_move_script_quad[] = {
     0x98080000, 0x00000000,  // Transfer Control Opcode=011 (Interrupt and stop)
 };
 
-__attribute__((aligned(16)))
+__attribute__((aligned(8)))
 uint32_t script_write_to_reg[] = {
     /*
      * Command
