@@ -306,6 +306,17 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
 
     /* These commands are forced to always execute in immediate mode */
     switch (ior->io_Command) {
+        case TD_ADDCHANGEINT:
+            /*
+             * Link the request now, even without IOF_QUICK. If it were
+             * queued for the driver task, a TD_REMCHANGEINT issued right
+             * after SendIO() could run first, find nothing to remove,
+             * and let the caller free a request still on our port.
+             * The request stays pending until TD_REMCHANGEINT.
+             */
+            printf("TD_ADDCHANGEINT\n");
+            td_addchangeint(ior);
+            return;
         case TD_REMCHANGEINT:
             printf("TD_REMCHANGEINT\n");
             td_remchangeint(ior);
@@ -324,10 +335,6 @@ drv_begin_io(struct Library *dev asm("a6"), struct IORequest *ior asm("a1"))
     /* These commands may optionally execute in immediate mode */
     if (ior->io_Flags & IOF_QUICK) {
         switch (ior->io_Command) {
-            case TD_ADDCHANGEINT:
-                printf("TD_ADDCHANGEINT\n");
-                td_addchangeint(ior);
-                return;
             case TD_REMOVE:
                 printf("TD_REMOVE\n");
                 td_remove(ior);
