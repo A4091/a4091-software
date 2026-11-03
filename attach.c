@@ -969,23 +969,57 @@ decode_unit_number(ULONG unit_num, int *target, int *lun)
 void
 detach(struct scsipi_periph *periph)
 {
+    struct scsipi_channel *chan;
+    int timeout = 6;  // Seconds
+
+    if (periph == NULL)
+        return;
+
     printf("detach(%p, %d)\n",
            periph, calculate_unit_number(periph->periph_target, periph->periph_lun));
 
-    if (periph != NULL) {
-        int timeout = 6;  // Seconds
-        struct scsipi_channel *chan = periph->periph_channel;
-        while (periph->periph_sent > 0) {
-            /* Need to wait for outstanding commands to complete */
-            timeout -= irq_and_timer_handler();
-            if (timeout == 0) {
-                printf("Detach timeout waiting for periph to quiesce\n");
-                return;
-            }
+    chan = periph->periph_channel;
+
+    /*
+     * The last opener is gone, so nothing can remove these with TD_REMOVE
+     * or TD_REMCHANGEINT any more. Drop them so the media change poll
+     * stops sending TEST UNIT READY to this unit, and so a completion
+     * below cannot Cause() an interrupt its owner has already freed.
+     */
+    Forbid();
+    periph->periph_changeint = NULL;
+    NewMinList(&periph->periph_changeintlist);
+    Permit();
+
+    /*
+     * Wait until every xfer allocated for this periph has been released
+     * (periph_active counts them from scsipi_get_xs() to scsipi_put_xs()).
+     * periph_sent alone is not enough: a command that failed (such as
+     * TEST UNIT READY on an empty drive, or the one TD_EJECT sends after
+     * it completes) has already left the adapter, but it waits on
+     * chan_complete until scsipi_completion_poll() fetches sense and runs
+     * its completion callback, which still uses the periph.
+     */
+    for (;;) {
+        scsipi_completion_poll(chan);
+        if (periph->periph_active == 0)
+            break;
+
+        timeout -= irq_and_timer_handler();
+        if (timeout <= 0) {
+            /*
+             * Commands still reference the periph, so it can't be freed.
+             * Unlink it anyway: otherwise the next open of this unit
+             * would find it in the channel, skip the probe, and attach
+             * a second periph for the same target.
+             */
+            printf("Detach timeout waiting for periph to quiesce\n");
+            scsipi_remove_periph(chan, periph);
+            return;
         }
-        scsipi_remove_periph(chan, periph);
-        scsipi_free_periph(periph);
     }
+    scsipi_remove_periph(chan, periph);
+    scsipi_free_periph(periph);
 }
 
 int

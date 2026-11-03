@@ -609,6 +609,7 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
     xs->amiga_ior = NULL;
 
     chan->chan_active++;
+    periph->periph_active++;  // detach() waits for this to drain
 
 #if 0
     printf("get_xs(%p) active=%u\n", xs, chan->chan_active);
@@ -745,6 +746,7 @@ scsipi_put_xs(struct scsipi_xfer *xs)
     struct scsipi_channel *chan = periph->periph_channel;
 
     chan->chan_active--;
+    periph->periph_active--;
 
     /*
      * Insert this entry at the top of the free list. It's really just

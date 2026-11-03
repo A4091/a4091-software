@@ -458,9 +458,7 @@ struct scsipi_periph {
 							points */
 #endif
 	int	periph_openings;	/* max # of outstanding commands */
-#ifndef PORT_AMIGA
 	int	periph_active;		/* current # of outstanding commands */
-#endif
 	int	periph_sent;		/* current # of commands sent to adapt*/
 
 	int	periph_mode;		/* operation modes, CAP bits */
@@ -797,6 +795,7 @@ void    scsipi_free_opcodeinfo(struct scsipi_periph *periph);
 struct scsipi_periph *scsipi_alloc_periph(int);
 void	scsipi_free_periph(struct scsipi_periph *);
 void scsipi_free_all_xs(struct scsipi_channel *chan);
+void scsipi_completion_poll(struct scsipi_channel *chan);
 
 /* Function pointers for scsiverbose module */
 #if 0
