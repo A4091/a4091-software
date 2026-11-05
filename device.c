@@ -480,7 +480,15 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         if (romboot) {
             mount_drives(asave->as_cd, dev);
             boot_menu();
-        }
+        } else {
+        	// driver loaded from disk via BindDrivers, Sys:Expansion
+        	struct CurrentBinding cb;
+			
+        	ObtainConfigBinding();
+	        GetCurrentBinding(&cb, sizeof(cb));
+    	    mount_drives((struct ConfigDev *)cb.cb_ConfigDev, dev);
+        	ReleaseConfigBinding();
+    	}
     }
 
     return mydev;
