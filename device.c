@@ -459,6 +459,60 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	return ret;
 }
 
+/*
+ * loaded_by_binddrivers
+ * ---------------------
+ * Returns TRUE when this disk-loaded driver was started by BindDrivers
+ * from SYS:Expansion for the board it has just claimed, and FALSE when
+ * ramlib loaded it from DEVS: for an OpenDevice() caller such as
+ * HDToolBox. Only the first case should mount volumes.
+ *
+ * - ramlib calls InitResident() from its own process for every module
+ *   it loads from disk, so a load on that task is an OpenDevice().
+ * - BindDrivers fills in the current binding, including cb_FileName
+ *   (Kickstart's ROM pass leaves it NULL), and calls InitResident() from
+ *   its own process. Nobody clears the binding afterwards, so it must
+ *   also list the board we claimed: BindDrivers only chains boards that
+ *   were still CDF_CONFIGME, and a4091_find() only claims such a board.
+ */
+static BOOL
+loaded_by_binddrivers(struct ConfigDev *claimed)
+{
+    struct ExpansionBase  *ExpansionBase;
+    struct CurrentBinding  cb = { 0 };
+    struct ConfigDev      *cd;
+    const char            *task_name = FindTask(NULL)->tc_Node.ln_Name;
+    BOOL                   ret = FALSE;
+    int                    i;
+
+    if (claimed == NULL)
+        return (FALSE);
+
+    if ((task_name != NULL) && (strcmp(task_name, "ramlib") == 0))
+        return (FALSE);
+
+    ExpansionBase = (struct ExpansionBase *)
+                    OpenLibrary("expansion.library", 37);
+    if (ExpansionBase == NULL)
+        return (FALSE);
+
+    if ((GetCurrentBinding(&cb, sizeof (cb)) >= sizeof (cb)) &&
+        (cb.cb_FileName != NULL)) {
+        /* A stale chain is still valid ConfigDevs; bound the walk anyway */
+        for (cd = cb.cb_ConfigDev, i = 0; (cd != NULL) && (i < 32);
+             cd = cd->cd_NextCD, i++) {
+            if (cd == claimed) {
+                ret = TRUE;
+                break;
+            }
+        }
+    }
+    CloseLibrary((struct Library *)ExpansionBase);
+
+    printf("BindDrivers load: %s\n", ret ? "yes" : "no");
+    return (ret);
+}
+
 static struct Library __used __saveds *
 init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
 {
@@ -480,6 +534,13 @@ init(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
         if (romboot) {
             mount_drives(asave->as_cd, dev);
             boot_menu();
+        } else if (asave->as_configdev_claimed &&
+                   loaded_by_binddrivers(asave->as_cd)) {
+            /*
+             * No-driver ROM with a4091.device in SYS:Expansion: DOS is
+             * already running, so the mounter adds the volumes directly.
+             */
+            mount_drives(asave->as_cd, dev);
         }
     }
 
