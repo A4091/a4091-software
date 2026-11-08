@@ -2059,7 +2059,7 @@ siopng_select(struct siop_softc *sc)
 
 	siopng_start(sc, acb->xs->xs_periph->periph_target,
 		acb->xs->xs_periph->periph_lun,
-	    (u_char *)&acb->cmd, acb->clen, acb->daddr, acb->dleft);
+	    (u_char *)&acb->cmd, acb->clen, acb->daddr, acb->xs->datalen);
 
 	return;
 }
