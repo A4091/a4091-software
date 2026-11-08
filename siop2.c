@@ -785,6 +785,20 @@ siopng_scsidone(struct siop_acb *acb, int stat)
 		}
 		SIOP_TRACE('d','n',stat,0);
 	}
+
+#ifdef PORT_AMIGA
+	/*
+	 * One CachePostDMA for the whole buffer, from its start address,
+	 * after the CachePreDMA/DMA_Continue sequence in siopng_start().
+	 * Clear the fields so a reused ACB that never reaches siopng_start()
+	 * does not post a stale buffer.
+	 */
+	if (acb->iob_buf != NULL && acb->iob_len != 0)
+		CachePostDMA(acb->iob_buf, (LONG *)&acb->iob_len, 0);
+	acb->iob_buf = NULL;
+	acb->iob_len = 0;
+#endif
+
 	/* Put it on the free list. */
 	acb->flags = ACB_FREE;
 	TAILQ_INSERT_HEAD(&sc->free_list, acb, chain);
@@ -1295,10 +1309,28 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	count = len;
 	addr = buf;
 	dmaend = NULL;
+#ifdef PORT_AMIGA
+	/*
+	 * Flags must match the single CachePostDMA call in siopng_scsidone().
+	 * DMA_ReadFromRAM would only be correct for transfers to the device,
+	 * and the transfer direction is not known here.
+	 */
+	ULONG flags = 0;
+#endif
 	while (count > 0) {
+#ifdef PORT_AMIGA
+		tcount = count;
+		if (tcount > AMIGA_MAX_TRANSFER)
+			tcount = AMIGA_MAX_TRANSFER;
+		/* CachePreDMA may shorten tcount to a physically contiguous run */
+		acb->ds.chain[nchain].databuf = (char *)
+		    CachePreDMA((APTR) addr, (LONG *)&tcount, flags);
+		flags |= DMA_Continue;
+#else
 		acb->ds.chain[nchain].databuf = (char *) kvtop (addr);
 		if (count < (tcount = PAGE_SIZE - ((int) addr & PGOFSET)))
 			tcount = count;
+#endif
 
 #if DEBUG_ONLY_IF_DESPERATE
 		printf("chain[%d]: count %d tcount %d vaddr %p paddr %p\n",
