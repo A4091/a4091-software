@@ -914,9 +914,8 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 #ifdef PORT_AMIGA
 	periph->periph_channel = chan;
 
-	/* Allocate inquiry buffer in appropriate memory type for DMA */
-	inqbuf = AllocMem(sizeof(*inqbuf),
-	    (asave->need_chip_ram_dma ? MEMF_CHIP : 0) | MEMF_PUBLIC | MEMF_CLEAR);
+	/* Allocate inquiry buffer in memory the chip can DMA to */
+	inqbuf = alloc_dma_buffer(sizeof(*inqbuf), MEMF_CLEAR);
 	if (inqbuf == NULL) {
 		*failed = ERROR_NO_MEMORY;
 		return (docontinue);

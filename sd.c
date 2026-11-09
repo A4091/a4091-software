@@ -306,11 +306,7 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
      * if it uses a region which is in the same cacheline,
      * cache flush ops against the data buffer won't work properly.
      */
-    datap = AllocMem(sizeof (*datap), MEMF_PUBLIC);
-    if (__predict_false(datap != NULL && is_zorro_ii_address(datap, sizeof (*datap)))) {
-        FreeMem(datap, sizeof (*datap));
-        datap = AllocMem(sizeof (*datap), MEMF_CHIP | MEMF_PUBLIC);
-    }
+    datap = alloc_dma_buffer(sizeof (*datap), 0);
     if (datap == NULL)
         return (ERROR_NO_MEMORY);
 
@@ -756,11 +752,7 @@ sd_getgeometry(void *periph_p, void *geom_p, void *ior)
     cmd.unused[0] = 0;  /* Page Code */
     cmd.length = SCSIPI_INQUIRY_LENGTH_SCSI2;
 
-    inq = AllocMem(sizeof (*inq), MEMF_PUBLIC);
-    if (__predict_false(inq != NULL && is_zorro_ii_address(inq, sizeof (*inq)))) {
-        FreeMem(inq, sizeof (*inq));
-        inq = AllocMem(sizeof (*inq), MEMF_CHIP | MEMF_PUBLIC);
-    }
+    inq = alloc_dma_buffer(sizeof (*inq), 0);
     if (inq == NULL)
         return (ERROR_NO_MEMORY);
 
@@ -881,11 +873,7 @@ queue_get_mode_page(struct scsipi_xfer *oxs, uint8_t page, uint8_t dbd,
     int rc;
 
     if (modepage == NULL) {
-        modepage = AllocMem(sizeof (*modepage), MEMF_PUBLIC | MEMF_CLEAR);
-        if (__predict_false(modepage != NULL && is_zorro_ii_address(modepage, sizeof (*modepage)))) {
-            FreeMem(modepage, sizeof (*modepage));
-            modepage = AllocMem(sizeof (*modepage), MEMF_CHIP | MEMF_PUBLIC | MEMF_CLEAR);
-        }
+        modepage = alloc_dma_buffer(sizeof (*modepage), MEMF_CLEAR);
         if (__predict_false(modepage == NULL)) {
             cmd_complete(oxs->amiga_ior, ERROR_NO_MEMORY);
             return;

@@ -107,6 +107,13 @@ is_zorro_ii_address(void *address, uint32_t length)
     return 0;
 }
 
+/*
+ * Allocate memory the SCSI chip can DMA to and from. Zorro III boards
+ * cannot reach Zorro II RAM, so an allocation that lands there is retried
+ * in Chip RAM. Free with FreeMem(ptr, size).
+ */
+void *alloc_dma_buffer(uint32_t size, uint32_t flags);
+
 #define B_WRITE         0x00000000      /* Write buffer (pseudo flag). */
 #define B_READ          0x00100000      /* Read buffer. */
 
