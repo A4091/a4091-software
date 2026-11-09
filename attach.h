@@ -54,8 +54,6 @@ typedef struct {
     int8_t                as_timer_running;
     uint8_t               as_irq_signal;
     volatile uint8_t      as_exiting;
-    /* Zorro II DMA workaround flag */
-    uint8_t               need_chip_ram_dma;
     /* ConfigDev ownership */
     uint8_t               as_configdev_claimed;
     /* battmem */
