@@ -591,11 +591,8 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
         chan->chan_xs_free = *(struct scsipi_xfer **) xs;  /* ->next link */
         memset(xs, 0, sizeof (*xs));
     } else {
-        xs = AllocMem(sizeof (*xs), MEMF_CLEAR | MEMF_PUBLIC);
-        if (xs != NULL && is_zorro_ii_address(xs, sizeof (*xs))) {
-            FreeMem(xs, sizeof (*xs));
-            xs = AllocMem(sizeof (*xs), MEMF_CLEAR | MEMF_CHIP | MEMF_PUBLIC);
-        }
+        /* The chip reads the command and writes sense data inside the xs */
+        xs = alloc_dma_buffer(sizeof (*xs), MEMF_CLEAR);
         if (xs == NULL)
             return (xs);
     }

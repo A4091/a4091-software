@@ -314,3 +314,15 @@ callout_run_timeouts(void)
         }
     }
 }
+
+void *
+alloc_dma_buffer(uint32_t size, uint32_t flags)
+{
+    void *buf = AllocMem(size, flags | MEMF_PUBLIC);
+
+    if (buf != NULL && is_zorro_ii_address(buf, size)) {
+        FreeMem(buf, size);
+        buf = AllocMem(size, flags | MEMF_PUBLIC | MEMF_CHIP);
+    }
+    return (buf);
+}
