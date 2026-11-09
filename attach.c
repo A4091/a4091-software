@@ -906,20 +906,31 @@ attach(device_t self, uint scsi_target, struct scsipi_periph **periph_p,
 
     /* Check if device supports disconnect/reconnect */
     if (asave->allow_disc) {
-        struct {
+        struct disc_modepage {
             struct scsi_mode_parameter_header_6 hdr;
             struct scsi_disconnect_reconnect_page drp;
-        } modepage;
+        } *modepage;
+        int ms_rc;
+        int disc_ok;
 
-        int ms_rc = scsipi_mode_sense(periph, SMS_DBD,
+        /* Not on the stack: the driver task's stack may be in Zorro II RAM */
+        modepage = alloc_dma_buffer(sizeof (*modepage), 0);
+        if (modepage != NULL) {
+            ms_rc = scsipi_mode_sense(periph, SMS_DBD,
                         SCSI_DISCONNECT_RECONNECT_PAGE,
-                        &modepage.hdr,
-                        sizeof(modepage),
+                        &modepage->hdr,
+                        sizeof(*modepage),
                         XS_CTL_SIMPLE_TAG,
                         0,      /* retries */
                         5000);  /* timeout ms */
-        if (ms_rc == 0 &&
-            (modepage.drp.pg_code & 0x3f) == SCSI_DISCONNECT_RECONNECT_PAGE) {
+            disc_ok = (ms_rc == 0) &&
+                ((modepage->drp.pg_code & 0x3f) ==
+                 SCSI_DISCONNECT_RECONNECT_PAGE);
+            FreeMem(modepage, sizeof (*modepage));
+        } else {
+            disc_ok = 0;
+        }
+        if (disc_ok) {
             /* Device supports disconnect-reconnect mode page */
             printf("  Target %d: disconnect/reconnect enabled\n", target);
 #if defined(ARCH_710)
