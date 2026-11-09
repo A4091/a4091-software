@@ -790,19 +790,26 @@ sd_get_protstatus(void *periph_p, ULONG *status)
     struct scsipi_periph *periph = periph_p;
     int                   flags = XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;
     int                   rc;
-    scsi_mode_sense_t     modepage;
+    scsi_mode_sense_t    *modepage;
 
-    if ((rc = scsipi_mode_sense(periph, SMS_DBD, 3, &modepage.hdr,
-                          sizeof (modepage.hdr) +
-                          sizeof (modepage.pg.control_params),
+    /* Not on the stack: the driver task's stack may be in Zorro II RAM */
+    modepage = alloc_dma_buffer(sizeof (*modepage), 0);
+    if (modepage == NULL) {
+        *status = 0;
+        return (ERROR_NO_MEMORY);
+    }
+
+    if ((rc = scsipi_mode_sense(periph, SMS_DBD, 3, &modepage->hdr,
+                          sizeof (modepage->hdr) +
+                          sizeof (modepage->pg.control_params),
                           flags, 0, 2000)) == 0) {
-        *status = !!(modepage.pg.control_params.ctl_flags3 & CTL3_SWP);
-        return (0);
+        *status = !!(modepage->pg.control_params.ctl_flags3 & CTL3_SWP);
     } else {
         /* Failure */
         *status = 0;
-        return (rc);
     }
+    FreeMem(modepage, sizeof (*modepage));
+    return (rc);
 }
 
 /*
@@ -1046,18 +1053,20 @@ conv_sectors_to_chs(ULONG total, ULONG *c_p, ULONG *h_p, ULONG *s_p)
 static void
 geom_done_get_capacity(struct scsipi_xfer *xs)
 {
+    struct scsipi_read_capacity_10_data *cap_buf = (void *) xs->data;
+    uint32_t last_lba = _4btol(cap_buf->addr);
+    uint32_t blksize = _4btol(cap_buf->length);
+
+    FreeMem(cap_buf, sizeof (*cap_buf));
+
     if (xs->error == 0) {
         /*
-         * Geometry struct was used as a holding buffer for TotalSectors
-         * and SectorSize. SCSI has them in the opposite order of what
-         * the Amiga struct specifies, so they must be swapped (below).
-         * Also, SCSI READ_CAPACITY_10 reports the highest sector number,
-         * and the dg_TotalSectors is the count of sectors, so need to
+         * READ_CAPACITY_10 returns the highest sector number followed by
+         * the block length. dg_TotalSectors is the count of sectors, so
          * add 1 there.
          */
         struct DriveGeometry *geom = xs->xs_callback_arg;
-        uint32_t blksize = geom->dg_TotalSectors;
-        geom->dg_TotalSectors = geom->dg_SectorSize;
+        geom->dg_TotalSectors = last_lba;
 	if (geom->dg_TotalSectors != 0xffffffff)
 		geom->dg_TotalSectors++;
         geom->dg_SectorSize = blksize;
@@ -1093,10 +1102,10 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
     struct scsipi_periph *periph = oxs->xs_periph;
     struct scsipi_inquiry_data *inq = (struct scsipi_inquiry_data *) oxs->data;
     struct scsipi_generic cmd;
-    void                 *cap_buf;
+    struct scsipi_read_capacity_10_data *cap_buf;
     int rc = oxs->error;
     int cmd_len;
-    int cap_len = 8;
+    int cap_len = sizeof (*cap_buf);
     int flags = XS_CTL_ASYNC | XS_CTL_SIMPLE_TAG | XS_CTL_DATA_IN;
 
     if (rc == 0) {
@@ -1122,7 +1131,15 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
     cmd.opcode = READ_CAPACITY_10;
     cmd_len = 10;  // Size of READ_CAPACITY_10
 
-    cap_buf = &geom->dg_SectorSize;
+    /*
+     * The caller's DriveGeometry may be anywhere, including Zorro II RAM
+     * or a stack, so the chip must not write the result there directly.
+     */
+    cap_buf = alloc_dma_buffer(cap_len, MEMF_CLEAR);
+    if (__predict_false(cap_buf == NULL)) {
+        cmd_complete(oxs->amiga_ior, TDERR_NoMem);
+        return;
+    }
 
     xs = scsipi_make_xs_locked(periph,
                                (struct scsipi_generic *) &cmd, cmd_len,
@@ -1137,8 +1154,10 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
 
         rc = scsipi_execute_xs(xs);
     }
-    if (rc != 0)
+    if (rc != 0) {
+        FreeMem(cap_buf, cap_len);
         cmd_complete(oxs->amiga_ior, rc);
+    }
 }
 
 int
