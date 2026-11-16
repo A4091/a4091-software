@@ -124,7 +124,8 @@ CFLAGS  += -DENABLE_QUICKINTS # Disable for A4091 Mini
 CFLAGS  += -Os -fomit-frame-pointer -noixemul
 #CFLAGS  += -fbaserel -resident -DUSING_BASEREL
 CFLAGS  += -msmall-code
-CFLAGS  += -Wall -Wextra -Wno-pointer-sign
+CFLAGS  += -Wall -Wextra -Wno-pointer-sign -Wshadow -Wcast-align -Wcast-qual
+CFLAGS  += -Wstrict-prototypes -Wmissing-prototypes -fanalyzer
 CFLAGS += -mcpu=68060
 CFLAGS += -DDEVICE_VERSION=$(DEVICE_VERSION)
 CFLAGS += -DDEVICE_REVISION=$(DEVICE_REVISION)
