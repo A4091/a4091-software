@@ -645,11 +645,13 @@ siop_scsidone(struct siop_acb *acb, int stat)
      *
      */
     if (acb->iob_buf != NULL && acb->iob_len != 0) {
-        CachePostDMA(acb->iob_buf, (LONG *)&acb->iob_len, 0);
+        CachePostDMA(acb->iob_buf, (LONG *)&acb->iob_len,
+                     acb->iob_dmaflags);
     }
     /* A reused ACB that never reaches siop_start() must not post again. */
     acb->iob_buf = NULL;
     acb->iob_len = 0;
+    acb->iob_dmaflags = 0;
 #endif
 
     /* Put it on the free list. */
@@ -1092,13 +1094,17 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     dmaend = NULL;
 #ifdef PORT_AMIGA
     /*
-     * ReadFromRAM should only be set when writing to the device
-     * When this flag is set, CachePreDMA doesn't turn off copyback mode
-     * Maybe there's some way to know here what the direction of the transfer is?
-     * We also need to match this flag at the other side
+     * DMA_ReadFromRAM tells CachePreDMA() that the chip only reads the
+     * buffer (a transfer to the device), so an MMU library can leave
+     * copyback enabled for it. Only set it for known data-out transfers.
+     * siop_scsidone() passes the same flags to CachePostDMA().
      */
-    //ULONG flags = DMA_ReadFromRAM;
     ULONG flags = 0;
+    if (acb->xs != NULL &&
+        (acb->xs->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT)) ==
+        XS_CTL_DATA_OUT)
+        flags = DMA_ReadFromRAM;
+    acb->iob_dmaflags = flags;
 #endif
 
     while (count > 0) {
