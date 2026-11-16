@@ -231,6 +231,12 @@ register access without checking an A4091 Autoconfig header; test 4 skips the
 A4091 ROM-as-SCRIPTS check. Autoconfig decoding (`-c`), DIP switches (`-s`) and
 Zorro III quick interrupts (`-Q`) are not supported on this board.
 
+The separate experimental [bppcid utility](util/bppcid/README.md) can change
+the Blizzard PPC ROM's SCSI identity prefix between H and I. Its default is
+read-only; writing requires an expected ID and a verified backup. This tests
+whether identification affects a retrofitted controller and is not a proven
+remedy for a failed reset-release check.
+
 ### Using the `a4091d` Debug Utility
 
 The `a4091d` utility provides a "behind-the-scenes" look at the internal state of the `a4091.device` driver. Run it from the Shell to get a snapshot of the driver's status.
