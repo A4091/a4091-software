@@ -99,6 +99,18 @@ __KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.71 2022/04/07 19:33:37 andvar Exp $");
 #include <amiga/amiga/custom.h>
 #else
 #define dma_cachectl(addr, len) CacheClearE(addr, len, CACRF_ClearD)
+
+/*
+ * siop_start() puts the unaligned head of a data buffer in its own
+ * scatter/gather entry so the rest of the transfer starts on this
+ * boundary. Override with -DSIOP_SG_ALIGN=<n> to benchmark.
+ */
+#ifndef SIOP_SG_ALIGN
+#define SIOP_SG_ALIGN 16
+#endif
+_Static_assert(SIOP_SG_ALIGN >= 4 && SIOP_SG_ALIGN <= 32 &&
+               (SIOP_SG_ALIGN & (SIOP_SG_ALIGN - 1)) == 0,
+               "SIOP_SG_ALIGN must be a power of two from 4 to 32");
 #endif
 
 #include "scsi_all.h"
@@ -1100,6 +1112,8 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
      * siop_scsidone() passes the same flags to CachePostDMA().
      */
     ULONG flags = 0;
+    int align_split;
+
     if (acb->xs != NULL &&
         (acb->xs->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT)) ==
         XS_CTL_DATA_OUT)
@@ -1113,7 +1127,8 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
         tcount = count;
         if (tcount > AMIGA_MAX_TRANSFER)
             tcount = AMIGA_MAX_TRANSFER;
-        if ((((ULONG) addr) & 3) && (tcount > 30)) {
+        align_split = 0;
+        if ((((ULONG) addr) & (SIOP_SG_ALIGN - 1)) && (tcount > 30)) {
             /*
              * First sg should align transfer, unless it's a small transfer.
              *
@@ -1121,7 +1136,8 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
              *      one more sg entry takes CPU time and some bus bandwidth
              *      to process.
              */
-            tcount = 4 - (((ULONG) addr) & 3);
+            tcount = SIOP_SG_ALIGN - (((ULONG) addr) & (SIOP_SG_ALIGN - 1));
+            align_split = 1;
         }
         acb->ds.chain[nchain].databuf = (char *)
                 CachePreDMA((APTR) addr, &tcount, flags);
@@ -1152,6 +1168,15 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
                 ++siopdma_misses;
 #endif
         }
+#ifdef PORT_AMIGA
+        /*
+         * Keep the alignment entry on its own. Otherwise the merge above
+         * folds the next, physically contiguous entry back into it and
+         * the chip gets one unaligned transfer again.
+         */
+        if (align_split)
+            dmaend = NULL;
+#endif
         ++nchain;
     }
 #ifdef DEBUG
