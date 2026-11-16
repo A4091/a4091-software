@@ -1369,8 +1369,11 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	/* push data cache for all data the 53c720/770 needs to access */
 	dma_cachectl ((void *)acb, sizeof (struct siop_acb));
 	dma_cachectl (cbuf, clen);
+#ifndef PORT_AMIGA
+	/* On AmigaOS the CachePreDMA() loop above already handled buf */
 	if (buf != NULL && len != 0)
 		dma_cachectl (buf, len);
+#endif
 
 #ifdef DEBUG
 	if (siopng_debug & 0x100 && rp->siop_sbcl & SIOP_BSY) {

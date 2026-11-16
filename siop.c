@@ -1161,8 +1161,11 @@ siop_start(struct siop_softc *sc, int target, int lun, u_char *cbuf, int clen,
     /* push data cache for all data the 53c710 needs to access */
     dma_cachectl ((void *)acb, sizeof (struct siop_acb));
     dma_cachectl (cbuf, clen);
+#ifndef PORT_AMIGA
+    /* On AmigaOS the CachePreDMA() loop above already handled buf */
     if (buf != NULL && len != 0)
         dma_cachectl (buf, len);
+#endif
 
 #ifndef PORT_AMIGA
 #ifdef DEBUG
