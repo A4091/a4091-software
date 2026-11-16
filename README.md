@@ -190,6 +190,47 @@ ncr7xx -t56
 
 Runs only test numbers 5 and 6. You may specify any subset of test numbers 0 through 8 after `-t`. **Note:** Skipping a failing test may cause subsequent tests to behave unpredictably.
 
+For a SCSI-equipped Blizzard PPC (603e+), select its NCR53C710 explicitly:
+
+```bash
+ncr7xx -a bppc -r
+ncr7xx -a bppc -t
+```
+
+`-a f40000` is equivalent. The fixed register address and byte order follow
+WinUAE's `blizzardppc_add_scsi_unit()` and `ncr710_io_bget()` implementation.
+When `blizzppc.device` is loaded, `-P` lists the controller after the supported
+Zorro cards, and it can also be selected by index or as the default controller.
+With the driver disabled, use the explicit address or `bppc` selector.
+
+Use `ncr7xx -a bppc -d -r` to include the board's reset, interrupt and
+INT_LVL registers, ROM identification bytes, and firmware resident/driver
+presence. It also lists readable `$VER:` tags in the first 64 KiB of the
+board ROM, so the bootstrap and SCSI driver versions can be identified even
+when the driver is not loaded. No tags found does not prove a driver is absent.
+If SCSI reset is asserted, this board-state dump is printed even
+without `-d`; the utility leaves reset unchanged and skips NCR register access.
+The reset bit alone does not explain why firmware did not start the controller.
+
+If reset is asserted and `blizzppc.device` is not loaded, the separate command
+`ncr7xx -a bppc -R` repeats the firmware's reset-release readback check. It
+briefly releases SCSI reset, reads the board's reset register, then asserts
+reset again. It reports all three register values and whether the release
+was accepted and reset restored. This changes the hardware reset line; it
+does not access NCR registers or start DMA. The probe refuses a loaded driver
+even with `-f`, and skips an already released controller. It cannot be combined
+with register dumps or other test operations. An accepted release confirms
+only the board control bit, not that the NCR710 works.
+
+Disable the SCSI driver before tests or DMA, and keep the controller out of
+hardware reset. Driver suspension/removal (`-S`/`-k`) is not implemented for
+Blizzard PPC. The existing `-f` option overrides the active-driver check.
+Blizzard tests use the normal level-2 interrupt server and temporarily enable
+the board's SCSI interrupt gate, restoring it on exit. Test 0 checks ROM and
+register access without checking an A4091 Autoconfig header; test 4 skips the
+A4091 ROM-as-SCRIPTS check. Autoconfig decoding (`-c`), DIP switches (`-s`) and
+Zorro III quick interrupts (`-Q`) are not supported on this board.
+
 ### Using the `a4091d` Debug Utility
 
 The `a4091d` utility provides a "behind-the-scenes" look at the internal state of the `a4091.device` driver. Run it from the Shell to get a snapshot of the driver's status.

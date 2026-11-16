@@ -58,6 +58,17 @@ extern struct ExecBase *SysBase;
 #define FLAG_DEBUG            0x01        /* Debug output */
 #define FLAG_MORE_DEBUG       0x02        /* More debug output */
 #define FLAG_IS_A4000T        0x04        /* A4000T onboard SCSI controller */
+#define FLAG_IS_BPPC          0x08        /* Blizzard PPC onboard SCSI */
+
+/* WinUAE: blizzardppc_add_scsi_unit() and cpuboard.cpp CSIII_REG_IRQ. */
+#define BPPC_SCSI_BASE        0x00f40000
+#define BPPC_ROM_BASE         0x00f00000
+#define BPPC_RESET_REG        0x00f60000
+#define BPPC_IRQ_REG          0x00f60008
+#define BPPC_INT_LVL_REG      0x00f60038
+#define BPPC_SCSI_RESET       BIT(0)      /* Set when SCSI reset is released */
+#define BPPC_SCSI_IRQ_DISABLE BIT(1)      /* Active-low interrupt enable */
+#define BPPC_SET_BITS         BIT(7)
 
 #define SUPERVISOR_STATE_ENTER()    { \
                                       APTR old_stack = SuperState()
@@ -240,10 +251,14 @@ extern struct ExecBase *SysBase;
 
 #define AMIGA_BERR_DSACK 0x00de0000  // Bit7=1 for BERR on timeout, else DSACK
 #define BERR_DSACK_SAVE() \
-        uint8_t old_berr_dsack = *ADDR8(AMIGA_BERR_DSACK); \
-        *ADDR8(AMIGA_BERR_DSACK) &= ~BIT(7);
+        uint8_t old_berr_dsack = 0; \
+        if (!(runtime_flags & FLAG_IS_BPPC)) { \
+            old_berr_dsack = *ADDR8(AMIGA_BERR_DSACK); \
+            *ADDR8(AMIGA_BERR_DSACK) &= ~BIT(7); \
+        }
 #define BERR_DSACK_RESTORE() \
-        *ADDR8(AMIGA_BERR_DSACK) = old_berr_dsack;
+        if (!(runtime_flags & FLAG_IS_BPPC)) \
+            *ADDR8(AMIGA_BERR_DSACK) = old_berr_dsack;
 
 #define DMA_LEN_BIT  12 // 4K DMA
 #define DMA_COPY_LEN BIT(DMA_LEN_BIT)
@@ -257,6 +272,124 @@ static uint               runtime_flags = 0;
 static uint               runtime_burst_len = 0;
 static const char * const expansion_library_name = "expansion.library";
 static const char        *current_board_name = "NCR53C7xx board";
+static const char        *bppc_driver_name = "blizzppc.device";
+
+/* A loaded driver identifies the SCSI-equipped model without probing MMIO. */
+static int
+bppc_driver_present(void)
+{
+    int present;
+
+    Forbid();
+    present = FindName(&SysBase->DeviceList, bppc_driver_name) != NULL;
+    Permit();
+    return (present);
+}
+
+/* The lower 64 KiB remains ROM even while the NCR window is enabled. */
+static void
+bppc_show_rom_versions(void)
+{
+    volatile const uint8_t *rom = ADDR8(BPPC_ROM_BASE);
+    static const char marker[] = "$VER:";
+    char tag[160];
+    uint offset, i, count = 0;
+
+    printf("  ROM version tags (first 64 KiB):\n");
+    for (offset = 0; offset <= 0x10000 - (sizeof (marker) - 1); offset++) {
+        for (i = 0; i < sizeof (marker) - 1; i++) {
+            if (rom[offset + i] != marker[i])
+                break;
+        }
+        if (i != sizeof (marker) - 1)
+            continue;
+        for (i = 0; i < sizeof (tag) - 1 && offset + i < 0x10000; i++) {
+            uint8_t c = rom[offset + i];
+            if (c < 0x20 || c > 0x7e)
+                break;
+            tag[i] = c;
+        }
+        tag[i] = '\0';
+        printf("    %s\n", tag);
+        count++;
+    }
+    if (count == 0)
+        printf("    none found\n");
+}
+
+/* Read board state without releasing reset or touching the SCSI window. */
+static void
+bppc_show_status(uint8_t reset)
+{
+    uint8_t id[8];
+    uint i;
+
+    printf("Blizzard PPC board state:\n"
+           "  RESET   [00f60000] = %02x (SCSI reset %s)\n"
+           "  IRQ     [00f60008] = %02x\n"
+           "  INT_LVL [00f60038] = %02x\n",
+           reset, (reset & BPPC_SCSI_RESET) ? "released" : "asserted",
+           *ADDR8(BPPC_IRQ_REG), *ADDR8(BPPC_INT_LVL_REG));
+    printf("  ROM ID  [00f00010] =");
+    for (i = 0; i < sizeof (id); i++) {
+        id[i] = *ADDR8(BPPC_ROM_BASE + 0x10 + i);
+        printf(" %02x", id[i]);
+    }
+    printf("  \"");
+    for (i = 0; i < sizeof (id); i++)
+        putchar((id[i] >= 0x20 && id[i] <= 0x7e) ? id[i] : '.');
+    printf("\"\n"
+           "  BlizzardPPC.IDTag resident: %s\n"
+           "  BlizzardPPCSCSI resident: %s\n"
+           "  blizzppc.device loaded: %s\n",
+           FindResident("BlizzardPPC.IDTag") ? "present" : "absent",
+           FindResident("BlizzardPPCSCSI") ? "present" : "absent",
+           bppc_driver_present() ? "yes" : "no");
+    bppc_show_rom_versions();
+}
+
+/* Repeat the firmware's latch check, without accessing the NCR window. */
+static int
+bppc_probe_reset(void)
+{
+    uint8_t before, released, restored;
+
+    Forbid();
+    if (bppc_driver_present()) {
+        Permit();
+        printf("Reset probe refused: blizzppc.device is loaded.\n");
+        return (1);
+    }
+    Disable();
+    before = *ADDR8(BPPC_RESET_REG);
+    released = restored = before;
+    if (!(before & BPPC_SCSI_RESET)) {
+        *ADDR8(BPPC_RESET_REG) = BPPC_SET_BITS | BPPC_SCSI_RESET;
+        __asm__ volatile ("nop" : : : "memory");
+        released = *ADDR8(BPPC_RESET_REG);
+        __asm__ volatile ("nop" : : : "memory");
+        *ADDR8(BPPC_RESET_REG) = BPPC_SCSI_RESET;
+        __asm__ volatile ("nop" : : : "memory");
+        restored = *ADDR8(BPPC_RESET_REG);
+    }
+    Enable();
+    Permit();
+
+    if (before & BPPC_SCSI_RESET) {
+        printf("Reset probe skipped: SCSI reset is already released "
+               "(RESET=%02x).\n", before);
+        return (1);
+    }
+    printf("Blizzard PPC SCSI reset-release probe:\n"
+           "  RESET before=%02x released=%02x restored=%02x\n"
+           "  Release request: %s\n"
+           "  Original SCSI reset state: %s\n"
+           "  NCR registers were not accessed.\n",
+           before, released, restored,
+           (released & BPPC_SCSI_RESET) ? "accepted" : "NOT accepted",
+           (restored & BPPC_SCSI_RESET) ? "NOT restored" : "restored");
+    return (!(released & BPPC_SCSI_RESET) || (restored & BPPC_SCSI_RESET));
+}
 
 typedef enum {
     NCR_BOARD_NONE = 0,
@@ -315,6 +448,7 @@ typedef struct {
     struct List      driver_rtask; // SCSI driver ready task list
     struct List      driver_wtask; // SCSI driver waiting task list
     uint8_t  use_quick_int;        // Using quick interrupts
+    uint8_t  bppc_irq_disable;     // Saved Blizzard SCSI interrupt gate
     ULONG    quick_vec_num;        // Quick interrupt vector number
 } a4091_save_t;
 
@@ -463,8 +597,8 @@ static uint32_t a4091_ac_serial;      // Serial from expansion.library (CPLD)
 static uint8_t
 get_rom(uint off)
 {
-    if (runtime_flags & FLAG_IS_A4000T) {
-        return (0);  // No Zorro config for 53C710 in A4000T
+    if (runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC)) {
+        return (0);  // No Zorro config for onboard SCSI
     } else {
         /*
          * ROM byte bits 7:4 are in base[addr] 31:28
@@ -480,8 +614,8 @@ get_creg(uint reg)
 {
     uint8_t hi;
     uint8_t lo;
-    if (runtime_flags & FLAG_IS_A4000T) {
-        return (0);  // No Zorro config for 53C710 in A4000T
+    if (runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC)) {
+        return (0);  // No Zorro config for onboard SCSI
     } else {
         /*
          * CREG byte bits 7:4 are in base[addr + 0x000] 7:4
@@ -1029,7 +1163,8 @@ ncr_runtime_select_710(void)
     ncr_runtime.chip_name = "53C710";
     ncr_runtime.revision = get_ncrreg8(REG_CTEST8) >> 4;
     ncr_runtime.istat_reg = REG_ISTAT;
-    ncr_runtime.write_shadow_offset = NCR_WRITE_SHADOW_710;
+    ncr_runtime.write_shadow_offset = (runtime_flags & FLAG_IS_BPPC) ?
+                                     0 : NCR_WRITE_SHADOW_710;
     ncr_runtime.irq_sien_capture_reg = REG_SIEN;
     ncr_runtime.irq_scsi_capture_reg = REG_SSTAT0;
     ncr_runtime.irq_scsi_capture_size = 1;
@@ -1089,6 +1224,12 @@ detect_ncr_chip(void)
     uint8_t prev_chip_type = 0xff;
     uint8_t saw_valid_72x = 0;
     uint attempt;
+
+    /* The Blizzard has a known 710, with mirrored rather than 72x registers. */
+    if (runtime_flags & FLAG_IS_BPPC) {
+        ncr_runtime_select_710();
+        return;
+    }
 
     for (attempt = 0; attempt < max_attempts; attempt++) {
         uint8_t gpcntl = get_ncrreg8(REG72X_GPCNTL);
@@ -1349,7 +1490,7 @@ ncr_scsi_host_id(void)
         a4091_base == A4000T770_SCSI_BASE) {
         return ((~get_ncrreg8(REG72X_GPREG)) & 0x0f);
     }
-    if (!(runtime_flags & FLAG_IS_A4000T))
+    if (!(runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC)))
         return (*ADDR8(a4091_switch_base) & 0x07);
     return (7);
 }
@@ -1399,7 +1540,7 @@ a4091_reset(void)
 {
     uint8_t dcntl = 0;
 
-    if ((runtime_flags & FLAG_IS_A4000T) ||
+    if ((runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC)) ||
         (a4091_base == A4000T770_SCSI_BASE)) {
         dcntl |= REG_DCNTL_EA;   // Enable Ack: allow reg writes
     }
@@ -1466,7 +1607,7 @@ a4091_reset(void)
     set_ncrreg8(REG_DMODE, ncr_dmode_init());
 
     if (ncr_runtime_supports_710_tests() &&
-        ((runtime_flags & FLAG_IS_A4000T) == 0)) {
+        ((runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC)) == 0)) {
         /* REG_CTEST7 only exists on the 53C710 register map. */
         set_ncrreg8(REG_CTEST7, get_ncrreg8(REG_CTEST7) | REG_CTEST4_CDIS);
     }
@@ -1972,6 +2113,11 @@ a4091_state_restore(int skip_reset)
             set_ncr_istat(0);
             a4091_reset();
         }
+        if (runtime_flags & FLAG_IS_BPPC) {
+            /* Restore only the SCSI gate, leaving PPC interrupt bits alone. */
+            *ADDR8(BPPC_IRQ_REG) = BPPC_SCSI_IRQ_DISABLE |
+                (a4091_save.bppc_irq_disable ? BPPC_SET_BITS : 0);
+        }
         a4091_enable_driver_irq_handler();
         if (a4091_save.use_quick_int) {
             a4091_remove_quick_irq_handler();
@@ -2066,6 +2212,11 @@ a4091_state_takeover(int flag_suspend)
         if (runtime_flags & FLAG_DEBUG)
             printf("Soft resetting SIOP\n");
         a4091_reset();
+        if (runtime_flags & FLAG_IS_BPPC) {
+            a4091_save.bppc_irq_disable =
+                *ADDR8(BPPC_IRQ_REG) & BPPC_SCSI_IRQ_DISABLE;
+            *ADDR8(BPPC_IRQ_REG) = BPPC_SCSI_IRQ_DISABLE;
+        }
     }
 }
 
@@ -3000,7 +3151,7 @@ test_device_access(uint extended)
         goto fail;
     }
 
-    if (runtime_flags & FLAG_IS_A4000T)
+    if (runtime_flags & (FLAG_IS_A4000T | FLAG_IS_BPPC))
         goto fail;  // Skip autoconfig test
 
     /* Verify ROM area header contents (overlaps with autoconfig test below) */
@@ -4493,9 +4644,12 @@ test_bus_access(uint extended)
      *    11111111 = Mask to compare
      *    00000000 = Data to be compared
      */
-    rc = execute_script((uint32_t *) a4091_rom_base, 0x10, 1);
-    if (rc != 0) {
-        printf("SCRIPTS fetch from controller ROM %08x failed\n", a4091_rom_base);
+    if (!(runtime_flags & FLAG_IS_BPPC)) {
+        rc = execute_script((uint32_t *) a4091_rom_base, 0x10, 1);
+        if (rc != 0) {
+            printf("SCRIPTS fetch from controller ROM %08x failed\n",
+                   a4091_rom_base);
+        }
     }
 
     /* Try to execute a script from each power-of-2 address */
@@ -5520,6 +5674,17 @@ a4091_list(uint32_t addr)
         printf("\n");
     } while (cdev != NULL);
 
+    if (bppc_driver_present()) {
+        count++;
+        if ((addr == 0) || (addr == count) || (addr == BPPC_SCSI_BASE)) {
+            if (did_header == 0)
+                printf("  Index Address  Size     Type   Flags\n");
+            did_header = 1;
+            printf("  %-3d   %08x %08x Blizzard PPC (fixed address)\n",
+                   count, BPPC_SCSI_BASE, 0x40);
+        }
+    }
+
     if (count == 0)
         printf("No supported cards detected\n");
     else if (did_header == 0)
@@ -5567,6 +5732,12 @@ a4091_find(uint32_t pos)
     } while (cdev != NULL);
 
     CloseLibrary(ExpansionBase);
+
+    if ((addr == (uint32_t)-1) &&
+        ((pos == 0) || (pos == count + 1)) && bppc_driver_present()) {
+        addr = BPPC_SCSI_BASE;
+        current_board_name = "Blizzard PPC";
+    }
 
     return (addr);
 }
@@ -5659,6 +5830,7 @@ usage(void)
            "correct operation.\n"
            "Options:\n"
            "\t-a  specify card address (slot or physical address): <addr>\n"
+           "\t    use bppc for Blizzard PPC NCR710 at 00f40000\n"
            "\t-b  set DMA burst length: <1|2|4|8|16> (chip-specific)\n"
            "\t-c  decode device autoconfig area\n"
            "\t-d  enable debug output\n"
@@ -5672,6 +5844,8 @@ usage(void)
            "\t-q  quiet mode (only show errors)\n"
            "\t-Q  use Zorro III quick interrupts (lower latency)\n"
            "\t-r  display detected NCR53C7xx registers\n"
+           "\t-R  Blizzard PPC only: briefly release SCSI reset, then restore\n"
+           "\t    use alone with -a bppc; does not access NCR registers\n"
            "\t-s  decode device external switches\n"
            "\t-S  attempt to suspend all supported drivers while testing\n"
            "\t-t  test card\n"
@@ -5697,6 +5871,7 @@ main(int argc, char **argv)
     int      flag_list      = 0;  /* List all supported cards found */
     int      flag_quick_int = 0;  /* Use Zorro III quick interrupts */
     int      flag_regs      = 0;  /* Decode device registers */
+    int      flag_reset_probe = 0; /* Probe Blizzard PPC SCSI reset latch */
     int      flag_switches  = 0;  /* Decode device external switches */
     int      flag_test      = 0;  /* Test card */
     int      flag_suspend   = 0;  /* Suspend supported drivers while testing */
@@ -5737,7 +5912,9 @@ main(int argc, char **argv)
                             printf("You must specify an address\n");
                             exit(1);
                         }
-                        if ((argv[arg][0] == '.') && (argv[arg][1] == '\0')) {
+                        if (strcmp(argv[arg], "bppc") == 0) {
+                            addr = BPPC_SCSI_BASE;
+                        } else if ((argv[arg][0] == '.') && (argv[arg][1] == '\0')) {
                             addr = A4000T_SCSI_BASE;
                         } else if ((sscanf(argv[arg], "%x%n",
                                            &addr, &pos) != 1) ||
@@ -5844,6 +6021,9 @@ main(int argc, char **argv)
                     case 'r':
                         flag_regs = 1;
                         break;
+                    case 'R':
+                        flag_reset_probe = 1;
+                        break;
                     case 's':
                         flag_switches = 1;
                         break;
@@ -5872,6 +6052,15 @@ main(int argc, char **argv)
         }
     }
 
+    if (flag_reset_probe &&
+        (addr != BPPC_SCSI_BASE || flag_config || flag_dma || flag_regs ||
+         flag_switches || flag_test || test_flags || flag_kill ||
+         flag_suspend || flag_zautocfg || flag_list || flag_quick_int ||
+         flag_loop || runtime_burst_len)) {
+        printf("Use -R alone with -a bppc (optional -d).\n");
+        exit(1);
+    }
+
     if (flag_list)
         rc += a4091_list(addr);
 
@@ -5883,7 +6072,7 @@ main(int argc, char **argv)
     a4091_save.use_quick_int = flag_quick_int;
 
     if (!(flag_config | flag_dma | flag_regs | flag_switches | flag_test |
-          flag_kill | flag_zautocfg)) {
+          flag_kill | flag_zautocfg | flag_reset_probe)) {
         if (flag_list)
             exit(rc);
         usage();
@@ -5909,6 +6098,28 @@ main(int argc, char **argv)
     }
     if (a4091_base == A4000T_SCSI_BASE)
         runtime_flags |= FLAG_IS_A4000T;
+    if (a4091_base == BPPC_SCSI_BASE) {
+        uint8_t reset;
+
+        runtime_flags |= FLAG_IS_BPPC;
+        current_board_name = "Blizzard PPC";
+        if (flag_config || flag_switches || flag_quick_int ||
+            flag_kill || flag_suspend) {
+            printf("Blizzard PPC does not support -c, -s, -Q, -k or -S.\n"
+                   "Disable blizzppc.device before running tests or DMA.\n");
+            exit(1);
+        }
+        reset = *ADDR8(BPPC_RESET_REG);
+        if ((runtime_flags & FLAG_DEBUG) || !(reset & BPPC_SCSI_RESET))
+            bppc_show_status(reset);
+        if (flag_reset_probe)
+            exit(bppc_probe_reset());
+        if (!(reset & BPPC_SCSI_RESET)) {
+            printf("Blizzard PPC SCSI reset is asserted. NCR register "
+                   "access skipped; reset state left unchanged.\n");
+            exit(1);
+        }
+    }
     if (flag_verbose) {
         printf("%s at 0x%08x\n",
                (runtime_flags & FLAG_IS_A4000T) ? "A4000T" : current_board_name,
@@ -5919,6 +6130,10 @@ main(int argc, char **argv)
         a4091_reg_base    = A4000T_SCSI_BASE + A4000T_OFFSET_REGISTERS;
         a4091_rom_base    = 0x00f80000;  // Kickstart ROM base
         a4091_switch_base = A4000T_SCSI_BASE + A4000T_OFFSET_SWITCHES;
+    } else if (runtime_flags & FLAG_IS_BPPC) {
+        a4091_reg_base    = BPPC_SCSI_BASE;
+        a4091_rom_base    = BPPC_ROM_BASE;
+        a4091_switch_base = 0;  // No DIP switches
     } else {
         a4091_reg_base    = a4091_base + A4091_OFFSET_REGISTERS;
         a4091_rom_base    = a4091_base + A4091_OFFSET_ROM;
@@ -5967,10 +6182,17 @@ main(int argc, char **argv)
     }
 
     if (flag_dma || flag_test) {
+        if ((runtime_flags & FLAG_IS_BPPC) && !flag_force &&
+            bppc_driver_present()) {
+            printf("blizzppc.device is active; disable the driver before "
+                   "running tests or DMA.\n");
+            exit(1);
+        }
         /* Check if the board is owned by a driver */
-        attempt_driver_expunge();
+        if (!(runtime_flags & FLAG_IS_BPPC))
+            attempt_driver_expunge();
 
-        if ((flag_suspend == 0) &&
+        if (!(runtime_flags & FLAG_IS_BPPC) && (flag_suspend == 0) &&
             (flag_force == 0) &&
             (a4091_show_or_disable_driver_irq_handler(0, 1) +
              a4091_show_or_disable_driver_task(0, 1) > 0)) {
