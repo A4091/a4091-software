@@ -75,7 +75,8 @@ delete_guide_files() {
 
 render_guide_file() {
   local dev=$1
-  sed -e "s|@A4091_DISK_FULL_VERSION@|${VER}|g" \
+  # Preserve the AmigaGuide's 8-bit text under UTF-8 host locales.
+  LC_ALL=C sed -e "s|@A4091_DISK_FULL_VERSION@|${VER}|g" \
       -e "s|@A4091_DISK_BUILD_DATE@|${ADATE}|g" \
       -e "s|@A4091_DISK_DEVICE_NAME@|${dev}.device|g" \
       < "$GUIDE_SOURCE" > "$GUIDE_TMP"
