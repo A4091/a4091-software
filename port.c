@@ -60,7 +60,7 @@ panic(const char *fmt, ...)
         sizeof (es),
         0,
         XSTR(DEVNAME)" Panic",
-        (char *) fmt,
+        __UNCONST(fmt),
         "OK",
     };
     printf("PANIC: ");

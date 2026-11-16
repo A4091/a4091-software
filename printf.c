@@ -273,7 +273,7 @@ put(int ch, buf_t *desc)
  *
  * @see         kdoprnt().
  */
-int
+static int
 kprintn(buf_t *desc, UINTMAX_T value, uint base, int flags, int width, int dot)
 {
     int   ret = 0;

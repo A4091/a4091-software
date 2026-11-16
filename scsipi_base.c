@@ -1902,7 +1902,9 @@ scsipi_done(struct scsipi_xfer *xs)
 {
 	struct scsipi_periph *periph = xs->xs_periph;
 	struct scsipi_channel *chan = periph->periph_channel;
+#ifndef PORT_AMIGA
 	int freezecnt;
+#endif
 
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_done\n"));
 #ifdef SCSIPI_DEBUG
@@ -1955,12 +1957,12 @@ scsipi_done(struct scsipi_xfer *xs)
 	 * periph's queue.  Freeze it again if we were requested
 	 * to do so in the xfer.
 	 */
+#ifndef PORT_AMIGA
 	freezecnt = 0;
 	if (xs->error != XS_NOERROR)
 		freezecnt++;
 	if (xs->xs_control & XS_CTL_FREEZE_PERIPH)
 		freezecnt++;
-#ifndef PORT_AMIGA
 	if (freezecnt != 0)
 		scsipi_periph_freeze_locked(periph, freezecnt);
 #endif

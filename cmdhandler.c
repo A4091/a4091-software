@@ -568,7 +568,7 @@ CMD_SEEK_continue:
                 nsd->SizeAvailable       = sizeof (*nsd);
                 nsd->DeviceType          = NSDEVTYPE_TRACKDISK;
                 nsd->DeviceSubType       = 0;
-                nsd->SupportedCommands   = (UWORD *) nsd_supported_cmds;
+                nsd->SupportedCommands   = __UNCONST(nsd_supported_cmds);
                 iotd->iotd_Req.io_Actual = sizeof (*nsd);
             }
             ReplyMsg(&ior->io_Message);
@@ -783,7 +783,7 @@ cmd_handler(void)
     task = (struct Task *) FindTask((char *)NULL);
 
     msgport = CreatePort(NULL, 0);
-    while ((msg = (start_msg_t *)*((volatile APTR *)&task->tc_UserData)) == NULL) {
+    while ((msg = *(start_msg_t * volatile *)&task->tc_UserData) == NULL) {
 
         printf(".");
     }

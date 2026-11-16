@@ -148,10 +148,10 @@ static const int8_t error_code_mapping[] = {
 uint32_t
 get_scripts_dma_addr(const void *scripts, uint32_t size)
 {
-    if (__predict_false(is_zorro_ii_address((APTR)scripts, size))) {
+    if (__predict_false(is_zorro_ii_address(scripts, size))) {
         void *copy = AllocMem(size, MEMF_CHIP | MEMF_PUBLIC);
         if (copy != NULL) {
-            CopyMem((APTR)scripts, copy, size);
+            CopyMem(scripts, copy, size);
             printf("Scripts copied to Chip RAM at %lx\n", (unsigned long)copy);
             asave->as_scripts_copy = copy;
             asave->as_scripts_copy_size = size;
@@ -500,7 +500,7 @@ IsMinListEmpty(const struct MinList *list)
 {
     BOOL is_empty;
 
-    is_empty = (BOOL)(list->mlh_TailPred == (struct MinNode *)list);
+    is_empty = (BOOL)(list->mlh_TailPred == (const struct MinNode *)list);
 
     return(is_empty);
 }
@@ -1100,7 +1100,7 @@ geom_done_inquiry(struct scsipi_xfer *oxs)
     struct scsipi_xfer *xs;
     struct DriveGeometry *geom = oxs->xs_callback_arg;
     struct scsipi_periph *periph = oxs->xs_periph;
-    struct scsipi_inquiry_data *inq = (struct scsipi_inquiry_data *) oxs->data;
+    struct scsipi_inquiry_data *inq = (void *)oxs->data;
     struct scsipi_generic cmd;
     struct scsipi_read_capacity_10_data *cap_buf;
     int rc = oxs->error;

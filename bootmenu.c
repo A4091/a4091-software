@@ -578,7 +578,7 @@ static void draw_dipswitches(UWORD x, UWORD y)
 
     if (asave) {
         dip_switches = get_dip_switches();
-        printf("addr=%x\n",asave->as_addr);
+        printf("addr=%lx\n",asave->as_addr);
         printf("dip_switches=%x\n",dip_switches);
     } else {
         dip_switches = 0xff;
@@ -735,7 +735,7 @@ static void about_page(void)
     if (asave->mfg_serial[0])
         Print(asave->mfg_serial, 110, 155, FALSE);
 #endif
-    Print((char *)device_id_string, 100,178,FALSE);
+    Print(__UNCONST(device_id_string), 100,178,FALSE);
 
     ng.ng_LeftEdge   = 400;
     ng.ng_TopEdge    = 145;
@@ -869,21 +869,21 @@ static int scan_disks(void)
 
                 if (err == 0) {
                     unsigned int t_len;
-                    int target, lun;
+                    int target, unit_lun;
                     char unit_str[5];
 
-                    decode_unit_number(unitNum, &target, &lun);
+                    decode_unit_number(unitNum, &target, &unit_lun);
 
                     if (target > 9) {
                         unit_str[0] = '1';
                         unit_str[1] = '0' + (target - 10);
                         unit_str[2] = '.';
-                        unit_str[3] = '0' + lun;
+                        unit_str[3] = '0' + unit_lun;
                         unit_str[4] = 0;
                     } else {
                         unit_str[0] = '0' + target;
                         unit_str[1] = '.';
-                        unit_str[2] = '0' + lun;
+                        unit_str[2] = '0' + unit_lun;
                         unit_str[3] = 0;
                     }
 
@@ -912,11 +912,11 @@ static int scan_disks(void)
                     const char *dtype=devtype_str(inq_res.device & SID_TYPE);
                     Text(rp,dtype,strlen(dtype));
                     printf(" %-*.*s %-*.*s %-*.*s %-7s\n",
-                           sizeof (inq_res.vendor), sizeof (inq_res.vendor),
+                           (int)sizeof (inq_res.vendor), (int)sizeof (inq_res.vendor),
                            inq_res.vendor,
-                           sizeof (inq_res.product), sizeof (inq_res.product),
+                           (int)sizeof (inq_res.product), (int)sizeof (inq_res.product),
                            inq_res.product,
-                           sizeof (inq_res.revision), sizeof (inq_res.revision),
+                           (int)sizeof (inq_res.revision), (int)sizeof (inq_res.revision),
                            inq_res.revision,
                            devtype_str(inq_res.device & SID_TYPE));
                 }

@@ -169,7 +169,7 @@ init_device(BPTR seg_list asm("a0"), struct Library *dev asm("d0"))
     dev->lib_Flags = LIBF_SUMUSED | LIBF_CHANGED;
     dev->lib_Version = DEVICE_VERSION;
     dev->lib_Revision = DEVICE_REVISION;
-    dev->lib_IdString = (APTR)device_id_string;
+    dev->lib_IdString = __UNCONST(device_id_string);
 
     /* Start thread to manage board and process commands */
     InitSemaphore(&entry_sem);
@@ -393,7 +393,7 @@ static void list_filesystems(void)
 		putchar((fse->fse_DosType & 0xFF) < 0x30
 						? (fse->fse_DosType & 0xFF) + 0x30
 						: (fse->fse_DosType & 0xFF));
-		printf("    %3d.%-3d", (fse->fse_Version >> 16), (fse->fse_Version & 0xFFFF));
+		printf("    %3lu.%-3lu", (fse->fse_Version >> 16), (fse->fse_Version & 0xFFFF));
 		if(fse->fse_Node.ln_Name[0]) {
 			char term;
 			int name_len = strlen(fse->fse_Node.ln_Name);
@@ -453,7 +453,7 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 
 	printf("ret = %x\nunitNum = { ", ret);
 	for (i=0; i<max_targets; i++)
-		printf("%x%s", unitNum[i], i < (max_targets - 1) ? ", " : " }\n");
+		printf("%lx%s", unitNum[i], i < (max_targets - 1) ? ", " : " }\n");
 
 	list_filesystems();
 	return ret;

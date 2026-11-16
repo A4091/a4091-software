@@ -92,7 +92,7 @@ void delay(int usecs);
  * This is a simple check based on common Zorro II address ranges.
  */
 static inline int
-is_zorro_ii_address(void *address, uint32_t length)
+is_zorro_ii_address(const void *address, uint32_t length)
 {
     uint32_t start_addr = (uint32_t)address;
     uint32_t end_addr = start_addr + length - 1;

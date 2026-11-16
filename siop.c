@@ -358,8 +358,8 @@ siop_poll(struct siop_softc *sc, struct siop_acb *acb)
             (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0) {
             if (--i <= 0) {
 #ifdef DEBUG
-                long dcmd_val;
-                memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+                __unused long dcmd_val;
+                dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
                 printf ("waiting: tgt %d cmd %02x sbcl %02x dsp %lx (+%lx) dcmd %lx ds %p timeout %d\n",
                     xs->xs_periph->periph_target, acb->cmd.opcode,
                     rp->siop_sbcl, rp->siop_dsp,
@@ -1577,8 +1577,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #ifdef DEBUG
         SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
         if (siop_debug & 9) {
-	    long dcmd_val;
-	    memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+	    __unused long dcmd_val;
+	    dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
             printf ("Phase mismatch: %x dsp +%lx dcmd %lx\n",
                 rp->siop_sbcl,
                 rp->siop_dsp - sc->sc_scriptspa,
@@ -1952,8 +1952,8 @@ bad_phase:
      */
     printf ("siopchkintr: target %x ds %p\n", target, acb ? &acb->ds : NULL);
     if (acb != NULL) {
-        long dcmd_val;
-        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
+        __unused long dcmd_val;
+        dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
         printf ("scripts %lx ds %x rp %x dsp %lx dcmd %lx\n",
             sc->sc_scriptspa, (unsigned)kvtop((void *)&acb->ds),
             (unsigned)kvtop((void *)__UNVOLATILE(rp)), rp->siop_dsp,
@@ -1966,7 +1966,7 @@ bad_phase:
 #ifdef PORT_AMIGA
     if (siop_debug & 0x20) {
         long dcmd_val;
-        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(dcmd_val));
+        dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
         panic("Unhandled Interrupt\n\n"
               "istat %lx dstat %lx sstat0 %lx\n"
               "dsps %lx dsa %lx sbcl %lx sfbr %lx\n"
