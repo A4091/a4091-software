@@ -28,7 +28,14 @@ jobs:
 
     - uses: reinauer/coverity-scan-action@v1
       with:
-        configure: --compiler m68k-amigaos-gcc --comptype gcc --template
+        # GCC 16 defaults to C23, where <stdarg.h> expands va_start() to
+        # __builtin_c23_va_start(). Coverity doesn't model that builtin and
+        # reports every va_list as an uninitialized pointer read, so map it
+        # back to __builtin_va_start() in the source Coverity analyzes.
+        configure: >-
+          --compiler m68k-amigaos-gcc --comptype gcc --template
+          --xml-option=append_arg@C:--ppp_translator
+          --xml-option=append_arg@C:replace/__builtin_c23_va_start/__builtin_va_start
         email: ${{ secrets.COVERITY_SCAN_EMAIL }}
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
