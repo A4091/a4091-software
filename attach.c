@@ -553,10 +553,10 @@ a4091_validate(uint32_t dev_base)
      * expose the TEMP/SCRATCH write shadows at +0x80.
      */
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092)
-    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x40);
+    siop_regmap_p rp_write = (siop_regmap_p)((uintptr_t)rp + 0x40);
 #elif defined(DRIVER_A4770) || defined(DRIVER_A4000T) || \
     defined(DRIVER_A4000T770)
-    siop_regmap_p rp_write = (siop_regmap_p)((char *)rp + 0x80);
+    siop_regmap_p rp_write = (siop_regmap_p)((uintptr_t)rp + 0x80);
 #endif
 
     scratch = rp->siop_scratch;
@@ -583,8 +583,8 @@ a4091_validate(uint32_t dev_base)
          *    reads (shadow registers of the 53C710 in the A4091 are
          *    used for the write accesses).
          */
-        CacheClearE((void *)(&rp->siop_scratch), 4, CACRF_ClearD);
-        CacheClearE((void *)(&rp->siop_temp), 4, CACRF_ClearD);
+        CacheClearE(__UNVOLATILE(&rp->siop_scratch), 4, CACRF_ClearD);
+        CacheClearE(__UNVOLATILE(&rp->siop_temp), 4, CACRF_ClearD);
 
         got_scratch = rp->siop_scratch;
         got_temp = rp->siop_temp;
@@ -650,7 +650,7 @@ init_chan(device_t self, UBYTE *boardnum)
 #endif
 
     sc->sc_dev = self;
-    sc->sc_siopp = (siop_regmap_p)((char *)dev_base + HW_OFFSET_REGISTERS);
+    sc->sc_siopp = (siop_regmap_p)(dev_base + HW_OFFSET_REGISTERS);
     sc->sc_clock_freq = HW_SCLK_CLOCK_FREQ; /* Physical SCLK input */
 #ifdef NCR53C710
     sc->sc_ctest7 = SIOP_CTEST7_CDIS;  // Disable burst

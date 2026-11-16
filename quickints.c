@@ -124,7 +124,7 @@ ULONG __stdargs ObtainQuickVector(APTR vector)
 }
 
 // Function to release a quick vector
-void ReleaseQuickVector(ULONG vectorNum)
+static void ReleaseQuickVector(ULONG vectorNum)
 {
     __unused APTR oldVec;
 

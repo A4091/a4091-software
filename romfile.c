@@ -140,18 +140,18 @@ static void parse_romfiles(romfiles_t *rom)
 
     printf("Detected %dkB ROM.\n", i*32);
     if(rom->romfile_len[0]) {
-        printf("  Driver @ 0x%05x (%d bytes)\n", rom->romfile[0], rom->romfile_len[0]);
+        printf("  Driver @ 0x%05lx (%lu bytes)\n", rom->romfile[0], rom->romfile_len[0]);
 
         for (i=1; i<3; i++) {
             if(rom->romfile_len[i]) {
-                printf("  FS %d   @ 0x%05x (%d bytes): %08x\n", i, rom->romfile[i],
+                printf("  FS %d   @ 0x%05lx (%lu bytes): %08lx\n", i, rom->romfile[i],
                             rom->romfile_len[i], rom->romfile_dostype[i]);
                 if (rom->romfile_dostype[i] == 0)
                     printf("            no DosType: FS can not be "
                            "demand-loaded (romtool -T missing?)\n");
                 if (RomFetch32(rom->romfile[i]) == 0x524e4301) {
                     rom->romfile_len[i] = RomFetch32(rom->romfile[i] + 4);
-                    printf("            compressed (%d bytes)\n",
+                    printf("            compressed (%lu bytes)\n",
                                     rom->romfile_len[i]);
                 }
             } else
@@ -226,7 +226,7 @@ static int add_romfilesystem(romfiles_t *rom, int slot,
 
         fse = AllocMem(sizeof(struct FileSysEntry), MEMF_PUBLIC | MEMF_CLEAR);
         if (fse) {
-            fse->fse_Node.ln_Name = (UBYTE*)device_id_string;
+            fse->fse_Node.ln_Name = __UNCONST(device_id_string);
             fse->fse_DosType = rom->romfile_dostype[slot];
             fse->fse_Version = ((LONG)DEVICE_VERSION) << 16 | DEVICE_REVISION;
             fse->fse_PatchFlags = 0x190; // StackSize, SegList and GlobalVec
@@ -338,14 +338,14 @@ static const char afterDOSId[] = XSTR(DEVNAME) " CD cleanup";
 
 static const struct Resident afterDOSResident = {
 	.rt_MatchWord = RTC_MATCHWORD,
-	.rt_MatchTag = (struct Resident *)&afterDOSResident,
-	.rt_EndSkip = (APTR)(&afterDOSResident + 1),
+	.rt_MatchTag = __UNCONST(&afterDOSResident),
+	.rt_EndSkip = __UNCONST(&afterDOSResident + 1),
 	.rt_Flags = RTF_AFTERDOS,
 	.rt_Version = 0,
 	.rt_Type = NT_UNKNOWN,
 	.rt_Pri = -100,
-	.rt_Name = (char *)afterDOSName,
-	.rt_IdString = (char *)afterDOSId,
+	.rt_Name = __UNCONST(afterDOSName),
+	.rt_IdString = __UNCONST(afterDOSId),
 	.rt_Init = (APTR)cd_cleanup_after_dos
 };
 

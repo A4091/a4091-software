@@ -532,8 +532,8 @@ siopng_poll(struct siop_softc *sc, struct siop_acb *acb)
 		    (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0) {
 			if (--i <= 0) {
 #ifdef DEBUG
-                                long dcmd_val;
-                                memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+                                __unused long dcmd_val;
+                                dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
 				printf ("waiting: tgt %d cmd %02x sbcl %02x istat %02x sbdl %04x\n         dsp %lx (+%lx) dcmd %lx ds %p timeout %d\n",
 				    xs->xs_periph->periph_target, acb->cmd.opcode,
 				    rp->siop_sbcl, istat, rp->siop_sbdl, rp->siop_dsp,
@@ -1622,7 +1622,6 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #endif
 		if (acb->iob_len) {
 			int adjust;
-                        long dcmd_val;
 			adjust = ((dfifo - (dbc & 0x7f)) & 0x7f);
 			if (sstat0 & SIOP_SSTAT0_OLF)	/* sstat0 SODL lsb */
 				++adjust;
@@ -1632,7 +1631,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 				++adjust;
 			if (sstat2 & SIOP_SSTAT2_ORF1)	/* sstat2 SODR msb */
 				++adjust;
-                        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+                        dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
 			acb->iob_curlen = dcmd_val & 0xffffff;
 			acb->iob_curlen += adjust;
 			acb->iob_curbuf = 
@@ -1658,8 +1657,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #ifdef DEBUG
 		SIOP_TRACE('m',rp->siop_sbcl,(rp->siop_dsp>>8),rp->siop_dsp);
 		if (siopng_debug & 9) {
-                        long dcmd_val;
-                        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+                        dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
 			printf ("Phase mismatch: %x dsp +%lx dcmd %lx\n",
 			    rp->siop_sbcl,
 			    rp->siop_dsp - sc->sc_scriptspa,
@@ -2027,7 +2025,7 @@ bad_phase:
 	 * then panics.
 	 * XXXX need to clean this up to print out the info, reset, and continue
 	 */
-        memcpy(&dcmd_val, (void *)&rp->siop_dcmd, sizeof(long));
+        dcmd_val = *ADDR32((uintptr_t)&rp->siop_dcmd);
 	printf ("siopngchkintr: target %x ds %p\n", target, &acb->ds);
 	printf ("scripts %lx ds %x rp %x dsp %lx dcmd %lx\n",
 	    sc->sc_scriptspa, (unsigned)kvtop((void *)&acb->ds),
@@ -2273,7 +2271,7 @@ siopng_dump_trace(void)
 void
 siopng_dump_acb(struct siop_acb *acb)
 {
-	u_char *b = (u_char *) &acb->cmd;
+	__unused u_char *b = (u_char *) &acb->cmd;
 	int i;
 
 	printf("acb@%p ", acb);
@@ -2297,7 +2295,7 @@ void
 siopng_dump(struct siop_softc *sc)
 {
 	struct siop_acb *acb;
-	siop_regmap_p rp = sc->sc_siopp;
+	__unused siop_regmap_p rp = sc->sc_siopp;
 	int s;
 	int i;
 
