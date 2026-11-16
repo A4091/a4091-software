@@ -733,7 +733,7 @@ siopabort(register struct siop_softc *sc, siop_regmap_p rp, const char *where)
     }
 }
 
-void
+int
 siopinitialize(struct siop_softc *sc)
 {
     int i;
@@ -744,22 +744,25 @@ siopinitialize(struct siop_softc *sc)
 #endif
 
     /*
-     * Need to check that scripts is on a long word boundary
-     * Also should verify that dev doesn't span non-contiguous
-     * physical pages.
-     */
-    sc->sc_scriptspa = get_scripts_dma_addr(scripts, sizeof(scripts));
-
-    /*
      * malloc sc_acb to ensure that DS is on a long word boundary.
+     * Done first so that a failure has nothing else to undo.
      */
 
 #ifdef PORT_AMIGA
     sc->sc_acb = alloc_dma_buffer(sizeof(struct siop_acb) * SIOP_NACB,
                                   MEMF_CLEAR);
+    if (sc->sc_acb == NULL)
+        return (ENOMEM);
 #else
     sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB);
 #endif
+
+    /*
+     * Need to check that scripts is on a long word boundary
+     * Also should verify that dev doesn't span non-contiguous
+     * physical pages.
+     */
+    sc->sc_scriptspa = get_scripts_dma_addr(scripts, sizeof(scripts));
 
     sc->sc_tcp[1] = 1000 / sc->sc_clock_freq;
     sc->sc_tcp[2] = 1500 / sc->sc_clock_freq;
@@ -799,6 +802,7 @@ siopinitialize(struct siop_softc *sc)
     }
 
     siopreset(sc);
+    return (0);
 }
 
 #ifdef PORT_AMIGA
