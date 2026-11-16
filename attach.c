@@ -285,6 +285,18 @@ a4091_remove_local_irq_handler(void)
     }
 }
 
+static void
+a4091_remove_irq_handler(void)
+{
+#ifdef ENABLE_QUICKINTS
+    // Remove quick or normal interrupt based on what was installed
+    if (asave->quick_int && asave->quick_vec_num != 0)
+        a4091_remove_quick_irq_handler();
+    else
+#endif
+        a4091_remove_local_irq_handler();
+}
+
 #if defined(DRIVER_A4091) || defined(DRIVER_A4092) || defined(DRIVER_A4770)
 /*
  * a4091_find
@@ -761,12 +773,18 @@ init_chan(device_t self, UBYTE *boardnum)
 
     Signal(asave->as_svc_task, BIT(asave->as_irq_signal));
 #ifdef NCR53C710
-    siopinitialize(sc);
+    rc = siopinitialize(sc);
 #elif NCR53C770
-    siopnginitialize(sc);
+    rc = siopnginitialize(sc);
 #else
 #error "Need to define NCR53C710 or NCR53C770"
 #endif
+    if (rc != 0) {
+        printf("Failed to allocate command blocks\n");
+        a4091_remove_irq_handler();
+        a4091_release(dev_base);
+        return (ERROR_NO_MEMORY);
+    }
     return (0);
 }
 
@@ -783,13 +801,7 @@ deinit_chan(device_t self)
 #else
 #error "Need to define NCR53C710 or NCR53C770"
 #endif
-#ifdef ENABLE_QUICKINTS
-    // Remove quick or normal interrupt based on what was installed
-    if (asave->quick_int && asave->quick_vec_num != 0)
-        a4091_remove_quick_irq_handler();
-    else
-#endif
-        a4091_remove_local_irq_handler();
+    a4091_remove_irq_handler();
 
     a4091_release((uint32_t) sc->sc_siopp - 0x00800000);
 }

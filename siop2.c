@@ -880,7 +880,7 @@ siopngabort(register struct siop_softc *sc, siop_regmap_p rp, const char *where)
 	}
 }
 
-void
+int
 siopnginitialize(struct siop_softc *sc)
 {
 	int i;
@@ -889,6 +889,20 @@ siopnginitialize(struct siop_softc *sc)
 #ifndef PORT_AMIGA
 	extern u_long scsi_nosync;
 	extern int shift_nosync;
+#endif
+
+	/*
+	 * malloc sc_acb to ensure that DS is on a long word boundary.
+	 * Done first so that a failure has nothing else to undo.
+	 */
+#ifdef PORT_AMIGA
+	sc->sc_acb = alloc_dma_buffer(sizeof(struct siop_acb) * SIOP_NACB,
+	                              MEMF_CLEAR);
+	if (sc->sc_acb == NULL)
+		return (ENOMEM);
+#else
+	sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB,
+		M_DEVBUF, M_WAITOK);
 #endif
 
 	/*
@@ -910,18 +924,6 @@ siopnginitialize(struct siop_softc *sc)
 	siop770_load_scripts_ram(sc);
 #else
 	sc->sc_flags &= ~SIOP_INTERNAL_SCRIPTS;
-#endif
-
-	/*
-	 * malloc sc_acb to ensure that DS is on a long word boundary.
-	 */
-#ifdef PORT_AMIGA
-        sc->sc_acb = alloc_dma_buffer(sizeof(struct siop_acb) * SIOP_NACB,
-                                      MEMF_CLEAR);
-#else
-
-	sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB,
-		M_DEVBUF, M_WAITOK);
 #endif
 
 	sync_clock_freq = siopng_sync_clock_freq(sc);
@@ -961,6 +963,7 @@ siopnginitialize(struct siop_softc *sc)
 	}
 
 	siopngreset (sc);
+	return (0);
 }
 
 #ifdef PORT_AMIGA

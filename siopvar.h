@@ -271,7 +271,7 @@ struct	siop_softc {
 void siopng_minphys(struct buf *bp);
 void siopng_scsipi_request(struct scsipi_channel *,
 			scsipi_adapter_req_t, void *);
-void siopnginitialize(struct siop_softc *);
+int siopnginitialize(struct siop_softc *);
 void siopngintr(struct siop_softc *);
 void siopng_dump_registers(struct siop_softc *);
 #ifdef DEBUG
@@ -283,7 +283,7 @@ void siopng_dump(struct siop_softc *);
 void siop_minphys(struct buf *bp);
 void siop_scsipi_request(struct scsipi_channel *,
 			scsipi_adapter_req_t, void *);
-void siopinitialize(struct siop_softc *);
+int siopinitialize(struct siop_softc *);
 void siopintr(struct siop_softc *);
 void siop_dump_registers(struct siop_softc *);
 #ifdef DEBUG
