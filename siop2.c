@@ -794,9 +794,11 @@ siopng_scsidone(struct siop_acb *acb, int stat)
 	 * does not post a stale buffer.
 	 */
 	if (acb->iob_buf != NULL && acb->iob_len != 0)
-		CachePostDMA(acb->iob_buf, (LONG *)&acb->iob_len, 0);
+		CachePostDMA(acb->iob_buf, (LONG *)&acb->iob_len,
+		    acb->iob_dmaflags);
 	acb->iob_buf = NULL;
 	acb->iob_len = 0;
+	acb->iob_dmaflags = 0;
 #endif
 
 	/* Put it on the free list. */
@@ -1308,11 +1310,17 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 	dmaend = NULL;
 #ifdef PORT_AMIGA
 	/*
-	 * Flags must match the single CachePostDMA call in siopng_scsidone().
-	 * DMA_ReadFromRAM would only be correct for transfers to the device,
-	 * and the transfer direction is not known here.
+	 * DMA_ReadFromRAM tells CachePreDMA() that the chip only reads the
+	 * buffer (a transfer to the device), so an MMU library can leave
+	 * copyback enabled for it. Only set it for known data-out transfers.
+	 * siopng_scsidone() passes the same flags to CachePostDMA().
 	 */
 	ULONG flags = 0;
+	if (acb->xs != NULL &&
+	    (acb->xs->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT)) ==
+	    XS_CTL_DATA_OUT)
+		flags = DMA_ReadFromRAM;
+	acb->iob_dmaflags = flags;
 #endif
 	while (count > 0) {
 #ifdef PORT_AMIGA

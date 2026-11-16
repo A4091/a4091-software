@@ -95,6 +95,7 @@ struct siop_acb {
 	void	*iob_buf;
 	u_long	iob_curbuf;
 	u_long	iob_len, iob_curlen;
+	u_long	iob_dmaflags;	/* CachePreDMA() flags, reused for CachePostDMA() */
 	u_char	msgout[6];
 	u_char	msg[6];
 	u_char	stat[1];
