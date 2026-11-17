@@ -1439,6 +1439,26 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         long dcmd_val;
 	(void)istat;
 
+#ifdef PORT_AMIGA
+	/* Preserve any DATA IN bytes before CLF discards the DMA FIFO. */
+	if ((sist & SIOP_SIST_MA) && acb != NULL && acb->iob_len != 0 &&
+	    acb->xs != NULL && (acb->xs->xs_control & XS_CTL_DATA_IN) &&
+	    (rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+		int timeout = 10000;
+
+		rp->siop_ctest3 |= SIOP_CTEST8_FLF;
+		amiga_membarrier();
+		while ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+			if (timeout-- == 0) {
+				printf("DMA FIFO flush timeout\n");
+				break;
+			}
+		}
+		rp->siop_ctest3 &= ~SIOP_CTEST8_FLF;
+		amiga_membarrier();
+	}
+#endif
+
 	dfifo = rp->siop_dfifo;
 	dbc = rp->siop_dbc0;
 	sstat0 = rp->siop_sstat0;
