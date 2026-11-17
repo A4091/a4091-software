@@ -1,0 +1,15 @@
+{
+  "title": "Inside the driver.",
+  "description": "Profiling and coverage captured after the chosen test workload.",
+  "environment": {
+    "Revision": "REPLACE with the exact driver build revision",
+    "Compiler": "REPLACE with the matching Amiga GCC version",
+    "Machine": "REPLACE with the hardware or emulator configuration",
+    "Driver loading": "REPLACE with the loading method",
+    "Workload": "REPLACE with the commands actually run"
+  },
+  "steps": [],
+  "notes": [
+    "Replace this example metadata with facts from your run."
+  ]
+}
