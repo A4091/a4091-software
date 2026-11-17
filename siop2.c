@@ -1639,7 +1639,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 			acb->iob_curlen += adjust;
 			acb->iob_curbuf = 
 			    *((long *)__UNVOLATILE(&rp->siop_dnad)) - adjust;
-			if ((rp->siop_sbcl & 7) == 2)
+			if ((rp->siop_sbcl & 7) == 3)   /* status */
 				acb->dleft = siopng_partial_resid(acb);
 #ifdef DEBUG
 			if (siopng_debug & 0x100) {
@@ -1677,10 +1677,10 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 		switch (rp->siop_sbcl & 7) {
 		case 0:		/* data out */
 		case 1:		/* data in */
-		case 2:		/* status */
-		case 3:		/* command */
-		case 6:		/* message in */
-		case 7:		/* message out */
+		case 2:		/* command */
+		case 3:		/* status */
+		case 6:		/* message out */
+		case 7:		/* message in */
 			rp->siop_dsp = sc->sc_scriptspa + Ent_switch;
 			amiga_membarrier();
 			break;
