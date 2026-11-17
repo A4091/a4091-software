@@ -1384,6 +1384,31 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     int dfifo, dbc, sstat1;
     (void)istat;
 
+#ifdef PORT_AMIGA
+    /*
+     * A target that leaves DATA IN in the middle of a block move (a short
+     * read ending in STATUS, or a disconnect) can leave the last bytes of
+     * the read in the DMA FIFO, not yet written to memory. The CLF below
+     * throws them away, and the residual computed from DBC/DNAD then says
+     * so: the caller lost the tail of its data. Write the FIFO out to
+     * memory first, so DBC/DNAD below include those bytes.
+     */
+    if ((sstat0 & SIOP_SSTAT0_M_A) && acb != NULL && acb->iob_len != 0 &&
+        acb->xs != NULL && (acb->xs->xs_control & XS_CTL_DATA_IN) &&
+        (rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+        int timeout = 10000;
+
+        rp->siop_ctest8 |= SIOP_CTEST8_FLF;
+        while ((rp->siop_ctest1 & SIOP_CTEST1_FMT) != SIOP_CTEST1_FMT) {
+            if (timeout-- == 0) {
+                printf("DMA FIFO flush timeout\n");
+                break;
+            }
+        }
+        rp->siop_ctest8 &= ~SIOP_CTEST8_FLF;
+    }
+#endif
+
     dfifo = rp->siop_dfifo;
     dbc = rp->siop_dbc0;
     sstat1 = rp->siop_sstat1;
