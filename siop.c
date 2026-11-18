@@ -115,6 +115,7 @@ _Static_assert(SIOP_SG_ALIGN >= 4 && SIOP_SG_ALIGN <= 32 &&
 
 #include "scsi_all.h"
 #include "scsipiconf.h"
+#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -870,6 +871,33 @@ siop_timeout(void *arg)
     bsd_splx(s);
 }
 
+/*
+ * Reset may be recovering from an interrupt that found an ACB without
+ * its xfer. On Amiga every issued xfer owns a timeout for that ACB.
+ */
+static int
+siop_reset_has_xfer(struct siop_acb *acb)
+{
+    if (acb->xs != NULL)
+        return 1;
+#ifdef PORT_AMIGA
+    int s = bsd_splbio();
+    for (callout_t *c = callout_head; c != NULL; c = c->co_next) {
+        if (c->func == siop_timeout && c->arg == acb) {
+            acb->xs = (void *)((char *)c -
+                offsetof(struct scsipi_xfer, xs_callout));
+            break;
+        }
+    }
+    bsd_splx(s);
+    if (acb->xs != NULL)
+        return 1;
+#endif
+    /* The chip has stopped. We cannot complete or recycle this ACB. */
+    panic("siopreset: no transfer owns command block %p", acb);
+    return 0;
+}
+
 void
 siopreset(struct siop_softc *sc)
 {
@@ -947,6 +975,16 @@ siopreset(struct siop_softc *sc)
     __USE(dummy);
     sc->sc_flags &= ~(SIOP_INTDEFER|SIOP_INTSOFF);
     bsd_splx (s);
+
+    /* Completion can schedule another command. Check every owner first. */
+    if (sc->sc_flags & SIOP_ALIVE) {
+        if (sc->sc_nexus != NULL && !siop_reset_has_xfer(sc->sc_nexus))
+            return;
+        TAILQ_FOREACH(acb, &sc->nexus_list, chain) {
+            if (!siop_reset_has_xfer(acb))
+                return;
+        }
+    }
 
     delay (siop_reset_delay * 1000);
 #ifdef PORT_AMIGA
@@ -1478,15 +1516,14 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     }
 #endif
 
+    /* A reselection needs no current nexus. A present nexus needs an xfer. */
+    if (acb != NULL && acb->xs == NULL)
+        goto invalid_nexus;
+
     if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff00) {
         /* Normal completion status, or check condition */
-#ifdef DEBUG
-        if (acb == NULL) {
-            printf("%s: completion or check cond with active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
-#endif
+        if (acb == NULL)
+            goto invalid_nexus;
 #ifdef DEBUG
         if (rp->siop_dsa != kvtop((void *)&acb->ds)) {
 #ifdef PORT_AMIGA
@@ -1533,13 +1570,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         return 1;
     }
     if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0b) {
-#ifdef DEBUG
-        if (acb == NULL) {
-            printf("%s: DSTAT_SIR when no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
-#endif
+        if (acb == NULL)
+            goto invalid_nexus;
         target = acb->xs->xs_periph->periph_target;
         if (acb->msg[1] == MSG_EXT_MESSAGE && acb->msg[2] == 3 &&
             acb->msg[3] == MSG_SYNC_REQ) {
@@ -1600,12 +1632,9 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     if (sstat0 & SIOP_SSTAT0_M_A) {     /* Phase mismatch */
 #ifdef DEBUG
         ++siopphmm;
-        if (acb == NULL) {
-            printf("%s: Phase mismatch with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
 #endif
+        if (acb == NULL)
+            goto invalid_nexus;
         if (acb->iob_len) {
             int adjust;
             adjust = ((dfifo - (dbc & 0x7f)) & 0x7f);
@@ -1670,12 +1699,9 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         return 0;
     }
     if (sstat0 & SIOP_SSTAT0_STO) {     /* Select timed out */
+        if (acb == NULL)
+            goto invalid_nexus;
 #ifdef DEBUG
-        if (acb == NULL) {
-            printf("%s: Select timeout with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
         if (rp->siop_sbcl & SIOP_BSY) {
             printf ("ACK! siop was busy at timeout: rp %p script %p dsa %p\n",
                 rp, &scripts, &acb->ds);
@@ -1706,11 +1732,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         target = 7;
     if (sstat0 & SIOP_SSTAT0_UDC) {
 #ifdef DEBUG
-        if (acb == NULL) {
-            printf("%s: Unexpected disconnect with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
         printf ("%s: target %d disconnected unexpectedly\n",
            device_xname(sc->sc_dev), target);
 #endif
@@ -1725,6 +1746,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
     }
     if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == 0xff01 ||
         rp->siop_dsps == 0xff02)) {
+        if (acb == NULL)
+            goto invalid_nexus;
 #ifdef DEBUG
         if (siop_debug & 0x100)
             printf ("%s: TGT %x disconnected TEMP %lx (+%lx) curbuf %lx curlen %lx buf %p len %lx dfifo %x dbc %x sstat1 %x starts %d acb %p\n",
@@ -1733,11 +1756,6 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 acb->iob_curbuf, acb->iob_curlen,
                 acb->ds.chain[0].databuf, acb->ds.chain[0].datalen, dfifo, dbc, sstat1, siopstarts, acb);
 #endif
-        if (acb == NULL) {
-            printf("%s: Disconnect with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
         /*
          * XXXX need to update iob_curbuf/iob_curlen to reflect
          * current data transferred.  If device disconnected in
@@ -1869,6 +1887,21 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
             printf("%s: Reselect message in was not identify: %x\n",
                 device_xname(sc->sc_dev), rp->siop_sfbr);
 #endif
+        /*
+         * locate acb of reselecting device
+         * set sc->sc_nexus to acb
+         */
+        for (acb = sc->nexus_list.tqh_first; acb;
+            acb = acb->chain.tqe_next) {
+            if (reselid == (acb->ds.scsi_addr >> 16) &&
+                reselun == (acb->msgout[0] & 0x07))
+                break;
+        }
+        if (acb == NULL || acb->xs == NULL) {
+            printf("%s: no transfer for reselect ID %02x LUN %d\n",
+                device_xname(sc->sc_dev), reselid, reselun);
+            goto reset;
+        }
         if (sc->sc_nexus) {
 #ifdef DEBUG
             if (siop_debug & 0x100)
@@ -1880,42 +1913,20 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
                 &= ~(1 << sc->sc_nexus->xs->xs_periph->periph_lun);
             --sc->sc_active;
         }
-        /*
-         * locate acb of reselecting device
-         * set sc->sc_nexus to acb
-         */
-        for (acb = sc->nexus_list.tqh_first; acb;
-            acb = acb->chain.tqe_next) {
-            if (reselid != (acb->ds.scsi_addr >> 16) ||
-                reselun != (acb->msgout[0] & 0x07))
-                continue;
-            TAILQ_REMOVE(&sc->nexus_list, acb, chain);
-            sc->sc_nexus = acb;
-            sc->sc_flags |= acb->status;
-            acb->status = 0;
+        TAILQ_REMOVE(&sc->nexus_list, acb, chain);
+        sc->sc_nexus = acb;
+        sc->sc_flags |= acb->status;
+        acb->status = 0;
 #ifdef PORT_AMIGA
-            CacheClearE(&acb->stat[0], sizeof(acb->stat[0]), CACRF_ClearD);
+        CacheClearE(&acb->stat[0], sizeof(acb->stat[0]), CACRF_ClearD);
 #else
-            DCIAS(kvtop(&acb->stat[0]));
+        DCIAS(kvtop(&acb->stat[0]));
 #endif
-            rp->siop_dsa = kvtop((void *)&acb->ds);
-            rp->siop_sxfer =
-                sc->sc_sync[acb->xs->xs_periph->periph_target].sxfer;
-            rp->siop_sbcl =
-                sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl;
-            break;
-        }
-        if (acb == NULL) {
-#ifdef PORT_AMIGA
-            panic("No active I/O for reselecting device %02lx.%lx\nnexus %lx",
-                  reselid, reselun, sc->nexus_list.tqh_first);
-#else
-            printf("%s: target ID %02x reselect nexus_list %p\n",
-                device_xname(sc->sc_dev), reselid,
-                sc->nexus_list.tqh_first);
-            panic("unable to find reselecting device");
-#endif
-        }
+        rp->siop_dsa = kvtop((void *)&acb->ds);
+        rp->siop_sxfer =
+            sc->sc_sync[acb->xs->xs_periph->periph_target].sxfer;
+        rp->siop_sbcl =
+            sc->sc_sync[acb->xs->xs_periph->periph_target].sbcl;
         dma_cachectl ((void *)acb, sizeof(*acb));
         rp->siop_temp = 0;
         rp->siop_dcntl |= SIOP_DCNTL_STD;
@@ -1956,11 +1967,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         return (0);
     }
     if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff06) {
-        if (acb == NULL) {
-            printf("%s: Bad message-in with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        }
+        if (acb == NULL)
+            goto invalid_nexus;
         /* Unrecognized message in byte */
         dma_cachectl (&acb->msg[1],1);
         printf ("%s: Unrecognized message in data sfbr %x msg %x sbcl %x\n",
@@ -1975,6 +1983,8 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         return (0);
     }
     if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0a) {
+        if (acb == NULL)
+            goto invalid_nexus;
         /* Status phase wasn't followed by message in phase? */
         printf ("%s: Status phase not followed by message in phase? sbcl %x sbdl %x\n",
             device_xname(sc->sc_dev), rp->siop_sbcl, rp->siop_sbdl);
@@ -1985,20 +1995,14 @@ siop_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
         }
     }
     if (sstat0 == 0 && dstat & SIOP_DSTAT_SIR) {
-        if (acb == NULL) {
-            printf("%s: DSTA_SIR with no active command?\n",
-                device_xname(sc->sc_dev));
-            goto fail_return;
-        } else {
-            dma_cachectl (&acb->stat[0], 1);
-            dma_cachectl (&acb->msg[0], 1);
-            printf ("SIOP interrupt: %lx sts %x msg %x %x sbcl %x\n",
-                rp->siop_dsps, acb->stat[0], acb->msg[0], acb->msg[1],
-                rp->siop_sbcl);
-        }
-        siopreset(sc);
-        *status = -1;
-        return 0;   /* siopreset has cleaned up */
+        if (acb == NULL)
+            goto invalid_nexus;
+        dma_cachectl (&acb->stat[0], 1);
+        dma_cachectl (&acb->msg[0], 1);
+        printf ("SIOP interrupt: %lx sts %x msg %x %x sbcl %x\n",
+            rp->siop_dsps, acb->stat[0], acb->msg[0], acb->msg[1],
+            rp->siop_sbcl);
+        goto reset;
     }
     if (sstat0 & SIOP_SSTAT0_SGE)
         printf ("SIOP: SCSI Gross Error\n");
@@ -2053,8 +2057,13 @@ bad_phase:
 #ifdef DDB
     Debugger ();
 #endif
-    siopreset(sc);     /* hard reset */
-fail_return:
+    goto reset;
+
+invalid_nexus:
+    printf("%s: invalid nexus %p, dstat %x sstat0 %x dsps %lx\n",
+        device_xname(sc->sc_dev), acb, dstat, sstat0, rp->siop_dsps);
+reset:
+    siopreset(sc);
     *status = -1;
     return 0;       /* siopreset cleaned up */
 }
@@ -2141,7 +2150,7 @@ siopintr(register struct siop_softc *sc)
 #endif
 
 #ifdef DEBUG
-    if (siop_debug & 5) {
+    if ((siop_debug & 5) && sc->sc_nexus != NULL) {
 #ifdef PORT_AMIGA
         CacheClearE(&sc->sc_nexus->stat[0], sizeof(sc->sc_nexus->stat[0]), CACRF_ClearD);
 #else
