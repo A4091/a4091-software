@@ -216,6 +216,138 @@ a4091d uc
 
 For advanced debugging, you can enable serial output by uncommenting various `-DDEBUG_...` flags in the `Makefile`. These messages are sent to the Amiga's serial port (9600 baud, 8-N-1).
 
+### GCC Call-Graph Profiling
+
+Build the GCC `-pg`-instrumented driver and matching debug utility by setting
+`USE_PROFILING=1`:
+
+```bash
+make USE_PROFILING=1
+```
+
+Use `DEVICE=A4092` as usual when building the A4092 variant.
+
+The driver keeps call-graph arcs in public memory without doing file I/O.
+Dump them from the Amiga with the matching profiling build of `a4091d`:
+
+```bash
+a4091d -g RAM:gmon.out 0
+```
+
+Copy `gmon.out` and the matching unstripped device binary to the build host,
+then generate an A4091 report with:
+
+```bash
+m68k-amigaos-gprof a4091.device gmon.out
+```
+
+The profile contains function call counts, but no periodic time samples. The
+normal `as_irq_count` value remains visible in the regular `a4091d` output.
+
+Some Amiga HUNK linkers omit local symbols even in unstripped executables.
+In that case, gprof can attribute static functions to preceding exported
+symbols. Accurate naming requires an external symbol table reconstructed
+from the matching object files and linker map, passed to gprof with
+`--external-symbol-table`. See `PROFILING.md` for the runtime test findings.
+
+### GCC Code Coverage
+
+Build a coverage-instrumented driver and matching `a4091d` in a dedicated
+object directory:
+
+```bash
+make USE_COVERAGE=1 OBJDIR=objs-A4091-coverage a4091.device a4091d
+```
+
+Use `DEVICE=A4092` and a separate object directory for an A4092 build.
+Coverage drivers are intended to be loaded from disk: the instrumentation is
+too large for the 64 KiB board ROM, so coverage builds skip ROM images in the
+default `all` target.
+
+The driver keeps GCC's counters in memory. `a4091d` asks it to serialize a
+snapshot into driver-owned public memory, then writes one `.gcda` file per
+instrumented source file:
+
+```bash
+a4091d -G RAM:coverage 0
+```
+
+Copy the resulting files back to the matching object directories containing
+the `.gcno` files from the build. For example:
+
+```bash
+cp device.gcda objs-A4091-coverage/
+m68k-amigaos-gcov -o objs-A4091-coverage device.c
+```
+
+Files for sources in subdirectories belong beside their corresponding
+`.gcno` files. Coverage counts are cumulative until the driver is unloaded;
+each `a4091d -G` invocation replaces the previous in-memory snapshot.
+Run one dump utility at a time: a subsequent snapshot replaces the buffer
+being read by the previous dump. Counters may advance while serialization
+runs, so this is a diagnostic snapshot rather than an atomic measurement.
+
+### Offline Profiling and Coverage Report
+
+`tools/profile-report.mjs` turns the extracted data into a self-contained
+HTML page with searchable call counts, line/branch coverage, annotated
+source, and downloadable raw artifacts. It uses Node.js 18 or newer and
+the matching Amiga GCC `gcov`, `nm`, and `gprof` tools; no npm packages are
+required. Either profiling, coverage, or both may be present.
+
+Keep the exact driver, object directory (including `.o`, `.gcno`, and
+`.map` files), and source checkout from the measured build. Do not rebuild
+them before analyzing a dump. For example, build both features with:
+
+```bash
+make USE_PROFILING=1 USE_COVERAGE=1 OBJDIR=objs-A4091-profile a4091.device a4091d
+```
+
+After loading that driver and running your workload on the Amiga, dump:
+
+```text
+a4091d -g RAM:gmon.out 0 >RAM:profile.txt
+a4091d -G RAM:coverage 0 >RAM:coverage.txt
+```
+
+Copy `gmon.out`, `profile.txt`, `coverage.txt`, and the `coverage/` directory
+to a host results directory, then run from the matching source checkout:
+
+```bash
+node tools/profile-report.mjs \
+  --results results/my-run \
+  --objects objs-A4091-profile \
+  --driver a4091.device \
+  --output results/my-run/report
+```
+
+Open `results/my-run/report/index.html` directly in a browser. The same file
+can be copied to a static web server; the script does not publish anything.
+It also writes `gprof.txt`, `coverage-summary.txt`, and `symbols.txt` beside
+the HTML. Inputs remain unchanged; temporary coverage files are isolated
+from the build directory. Existing report output files are replaced.
+
+Use `--tool-prefix /opt/amiga/bin/m68k-amigaos-` to select a toolchain and
+`--source-root /path/to/checkout` when running elsewhere. For A4092, pass
+the matching A4092 objects and `a4092.device`. Without `gmon.out`, `--driver`
+is optional. A missing `profile.txt` leaves the interrupt and dropped-arc
+counts unknown, rather than assuming zero.
+
+Optionally copy `tools/profile-report.example.json`, fill in the actual
+revision, machine, workload, and limitations, and pass `--metadata FILE`.
+The page does not claim a test succeeded or assume a particular emulator.
+Known logs (`RESULTS.txt`, `driver.txt`, `probe.txt`, `geometry.txt`,
+`benchmark.txt`, `profile.txt`, `coverage.txt`, and `progress.txt`) are
+embedded when present. Review them and the embedded source before sharing
+the page. SDK/header coverage is excluded from the source table.
+
+The script reconstructs static-function addresses from the matching
+objects and map for gprof. Unsupported multiple-text-hunk layouts fail
+explicitly rather than silently assigning incorrect names. The dumped
+coverage filenames must map unambiguously to `.gcno` files; mismatched
+compiler versions or builds are not interchangeable. Run the host-side
+parser/template tests with `node --test tools/profile-report.test.mjs`.
+
 ---
 
 ## Advanced ROM Customization

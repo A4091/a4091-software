@@ -46,6 +46,8 @@ void td_remove(struct IORequest *ior);
 #define CMD_TERM     0x2ef0  // Terminate command handler (end process)
 #define CMD_ATTACH   0x2ff1  // Attach (open) SCSI peripheral
 #define CMD_DETACH   0x2ef2  // Detach (close) SCSI peripheral
+#ifdef USE_COVERAGE
+#define CMD_COVERAGE 0x2ef3  // Snapshot GCC coverage data
+#endif
 
 #endif /* _CMD_HANDLER_H */
-

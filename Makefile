@@ -70,6 +70,14 @@ ifneq (,$(filter $(DEVNAME),a4092 a4770))
 SRCS    += util/a4092flash/flash.c util/a4092flash/nvram_flash.c util/a4092flash/spi.c mfg.c
 endif
 SRCS    += romfile.c battmem.c
+ifeq ($(USE_PROFILING),1)
+SRCS    += profiling.c
+endif
+ifeq ($(USE_COVERAGE),1)
+SRCS    += coverage.c
+PREFIXASMSRCS := coverage_prefix.S
+POSTFIXASMSRCS := coverage_postfix.S
+endif
 ASMSRCS := reloc.S
 SRCSU   := ncr7xx.c
 SRCSD   := a4091d.c
@@ -77,6 +85,9 @@ OBJS    := $(SRCS:%.c=$(OBJDIR)/%.o)
 OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
+PREFIXASMOBJS := $(PREFIXASMSRCS:%.S=$(OBJDIR)/%.o)
+POSTFIXASMOBJS := $(POSTFIXASMSRCS:%.S=$(OBJDIR)/%.o)
+COVERAGE_NOTES := $(OBJS:%.o=%.gcno)
 OBJSROM := $(OBJDIR)/rom.o
 TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash
 DISK_FILES := $(PROG) $(PROGU) $(PROGD) util/a4092flash/a4092flash
@@ -135,8 +146,24 @@ CFLAGS += -DFULL_VERSION="$(FULL_VERSION)"
 CFLAGS_TOOLS := -Wall -Wextra -Wno-pointer-sign -fomit-frame-pointer -Os -mcpu=68060
 CFLAGS_TOOLS += -DAMIGA_DATE=\"$(ADATE)\"
 
+ifeq ($(USE_PROFILING),1)
+CFLAGS := $(filter-out -fomit-frame-pointer,$(CFLAGS))
+CFLAGS += -DUSE_PROFILING -pg -fno-omit-frame-pointer
+CFLAGS_TOOLS += -DUSE_PROFILING
+STRIP_DRIVER := true
+else
+STRIP_DRIVER := $(STRIP)
+endif
+
+ifeq ($(USE_COVERAGE),1)
+CFLAGS += -DUSE_COVERAGE -fprofile-arcs -ftest-coverage
+CFLAGS += -fprofile-info-section=.gcov_info
+CFLAGS_TOOLS += -DUSE_COVERAGE
+COVERAGE_LIBS := -lgcov
+endif
+
 LDFLAGS_COMMON = -Wl,-Map=$(OBJDIR)/$@.map -Wa,-a > $(OBJDIR)/$@.lst
-LDFLAGS        = -nostartfiles -nostdlib -Tdevice.ld -ldebug -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
+LDFLAGS        = -nostartfiles -nostdlib -Tdevice.ld -ldebug $(COVERAGE_LIBS) -lgcc -lc -lamiga -ramiga-dev $(LDFLAGS_COMMON)
 LDFLAGS_TOOLS  = -mcrt=clib2 -lgcc -lc -lamiga $(LDFLAGS_COMMON)
 
 #CFLAGS  += -g
@@ -206,7 +233,10 @@ ODFS_ROM_TARGET=rom
 ODFS_ROM_BUILD_DIR=build/amiga-rom
 endif
 
-ifeq ($(HAVE_ROM),y)
+ifeq ($(USE_COVERAGE),1)
+# Coverage instrumentation is too large for the 64 KiB board ROM.
+ROMS:=
+else ifeq ($(HAVE_ROM),y)
 ROMS:=$(ROM) $(ROM_CD)
 else
 # Build relocatable kickstart module if we don't have to build a ROM image
@@ -230,10 +260,13 @@ $(OBJDIR)/siop2.o: $(OBJDIR)/siop2_script.out
 $(OBJDIR)/siop.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/siop2.o:: CFLAGS += -I$(OBJDIR)
 $(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += -D_KERNEL -DPORT_AMIGA $(TARGETCFLAGS) -Wno-format
+$(OBJDIR)/a4091d.o:: CFLAGS_TOOLS += $(filter -DENABLE_QUICKINTS,$(CFLAGS))
 $(OBJDIR)/ncr7xx.o:: CFLAGS_TOOLS += -Wno-format
+$(OBJDIR)/coverage.o:: CFLAGS := $(filter-out -pg -fprofile-arcs -ftest-coverage -fprofile-info-section=.gcov_info,$(CFLAGS))
+$(OBJDIR)/profiling.o:: CFLAGS := $(filter-out -pg -fprofile-arcs -ftest-coverage -fprofile-info-section=.gcov_info,$(CFLAGS))
 
 # XXX: Need to generate real dependency files
-$(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h
+$(OBJS): attach.h port.h scsi_message.h scsipiconf.h version.h scsi_spc.h sd.h cmdhandler.h printf.h scsimsg.h scsipi_base.h siopreg.h device.h scsi_all.h scsipi_debug.h siopvar.h scsi_disk.h scsipi_disk.h sys_queue.h profiling.h coverage.h
 
 $(OBJS): Makefile port.h | $(OBJDIR)
 	@echo Building $@
@@ -243,10 +276,10 @@ $(OBJSU) $(OBJSM) $(OBJSD): Makefile | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS_TOOLS) -c $(filter %.c,$^) -o $@
 
-$(PROG): $(OBJS) $(ASMOBJS) device.ld
+$(PROG): $(PREFIXASMOBJS) $(OBJS) $(ASMOBJS) $(POSTFIXASMOBJS) device.ld
 	@echo "Building $@ v$(DEVICE_VERSION).$(DEVICE_REVISION) (v$(FULL_VERSION))"
-	$(QUIET)$(CC) $(CFLAGS) $(OBJS) $(ASMOBJS) $(LDFLAGS) -o $@
-	$(QUIET)$(STRIP) $@
+	$(QUIET)$(CC) $(CFLAGS) $(PREFIXASMOBJS) $(OBJS) $(ASMOBJS) $(POSTFIXASMOBJS) $(LDFLAGS) -o $@
+	$(QUIET)$(STRIP_DRIVER) $@
 	@LEN="`wc -c < $@| sed 's/^ *//'`"; printf "${yellow}$(PROG) is $${LEN} bytes${end}\n"
 
 $(PROGU): $(OBJSU)
@@ -281,7 +314,7 @@ $(OBJDIR)/version.i: Makefile $(OBJDIR)
 	$(QUIET)echo '	dc.b "$(ADATE)"' >> $@
 	$(QUIET)echo '	ENDM' >> $@
 
-$(OBJDIR)/%.o: %.S
+$(OBJDIR)/%.o: %.S | $(OBJDIR)
 	@echo Building $@
 	$(QUIET)$(VASM) -quiet -m68020 -Fhunk -o $@ $< -I $(NDK_PATH)
 
@@ -346,7 +379,11 @@ util/a4092flash/a4092flash:
 
 clean:
 	@echo Cleaning.
-	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
+	$(QUIET)rm -f $(PREFIXASMOBJS) $(OBJS) $(ASMOBJS) $(POSTFIXASMOBJS)
+	$(QUIET)rm -f $(COVERAGE_NOTES)
+	$(QUIET)rm -f $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND)
+	$(QUIET)rm -f $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst
+	$(QUIET)rm -f $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(PROG).zx0 $(CDFS).zx0
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 	$(QUIET)make -s -C util/a4092flash clean
