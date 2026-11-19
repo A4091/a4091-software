@@ -1,0 +1,33 @@
+Blizzard PPC 68060 backup disk
+=============================
+
+Write this ADF to a floppy (or use a writable ADF in a floppy emulator).
+Leave it write-enabled. Power on with S held to disable the Blizzard SCSI
+driver, and boot this floppy in DF0:. Let its startup-sequence run.
+This disk is for the 68060 Blizzard PPC, not the 68040 model.
+
+It automatically runs:
+  SYS:C/bppcid >SYS:backup.log --backup SYS:bppc-backup.bin
+and, only after a successful backup:
+  SYS:C/ncr7xx >SYS:probe.log -a bppc -d -R
+
+bppc-backup.bin contains 393216 bytes (384 KiB) from 00f00000..00f5ffff,
+including the factory header and configuration. Board I/O occupies the
+next 128 KiB; this is not a full 512 KiB programmer image.
+
+backup.log records the board checks, verification and CRC32. The saved
+file is closed, reopened and compared byte for byte with the ROM snapshot.
+probe.log records the board state and SCSI reset release/readback/restore
+test. A rejected release request is a diagnostic result, not a backup error.
+The probe refuses to run with the SCSI driver loaded. It does not access
+the NCR registers or start disk I/O.
+
+No flash write or ID change is requested. The reset probe temporarily
+requests release of SCSI reset, then restores its original state.
+No A4091 drivers, firmware, updater or support files are included.
+
+An existing bppc-backup.bin prevents both commands from running again,
+preserving the backup and its logs. This also preserves partial files after
+a failed or interrupted backup: check backup.log before trusting the file.
+Use a fresh copy of the ADF to retry. Wait for the floppy light to go out
+before removing the disk, then copy the backup and logs to another machine.

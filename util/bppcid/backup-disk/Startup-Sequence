@@ -1,0 +1,26 @@
+; Blizzard PPC 68060 ROM backup and reset probe
+Stack 32768
+FailAt 21
+Echo "Blizzard PPC 68060 ROM backup"
+Echo "Boot with S held to keep the board's SCSI driver disabled."
+Echo ""
+If EXISTS SYS:bppc-backup.bin
+  Echo "Existing bppc-backup.bin found. Nothing was overwritten."
+  Echo "Check backup.log to confirm the earlier backup succeeded."
+  Echo "Use a fresh copy of this disk for another backup and probe."
+Else
+  Echo "Saving and verifying 384 KiB of ROM on this floppy..."
+  SYS:C/bppcid >SYS:backup.log --backup SYS:bppc-backup.bin
+  If WARN
+    Echo "BACKUP FAILED. Read SYS:backup.log for the reason."
+    Echo "Any partial bppc-backup.bin is NOT a verified backup."
+    Echo "The reset probe was skipped."
+  Else
+    Echo "ROM backup saved and verified: SYS:bppc-backup.bin"
+    Echo "Probing SCSI reset release and restoring its original state..."
+    SYS:C/ncr7xx >SYS:probe.log -a bppc -d -R
+    Echo "Probe finished. Results are in SYS:probe.log."
+    Echo "A failed release request is recorded in the log."
+  EndIf
+EndIf
+Echo "Wait for the floppy light to go out before removing the disk."

@@ -78,7 +78,7 @@ OBJSD   := $(SRCSD:%.c=$(OBJDIR)/%.o)
 OBJSU   := $(SRCSU:%.c=$(OBJDIR)/%.o)
 ASMOBJS := $(ASMSRCS:%.S=$(OBJDIR)/%.o)
 OBJSROM := $(OBJDIR)/rom.o
-TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash
+TOOLS   := $(PROGU) $(PROGD) util/a4092flash/a4092flash util/bppcid/bppcid
 DISK_FILES := $(PROG) $(PROGU) $(PROGD) util/a4092flash/a4092flash
 ifneq (,$(filter $(DEVNAME),a4092 a4770))
 DISK_FILES += $(ROM_CD)
@@ -344,12 +344,16 @@ $(OBJDIR):
 util/a4092flash/a4092flash:
 	$(QUIET)make -s -C util/a4092flash DEVICE_VERSION=$(DEVICE_VERSION) DEVICE_REVISION=$(DEVICE_REVISION)
 
+util/bppcid/bppcid: util/bppcid/main.c util/bppcid/flash.c util/bppcid/mapping.S util/bppcid/flash.h util/bppcid/Makefile
+	$(QUIET)$(MAKE) -s -C util/bppcid
+
 clean:
 	@echo Cleaning.
 	$(QUIET)rm -f $(OBJS) $(OBJSU) $(OBJSM) $(OBJSD) $(OBJSROM) $(OBJSROM_ND) $(OBJSROM_CD) $(OBJDIR)/*.map $(OBJDIR)/*.lst $(SIOP_SCRIPT) $(SC_ASM)
 	$(QUIET)rm -f $(PROG).zx0 $(CDFS).zx0
 	$(QUIET)rm -f $(OBJDIR)/rom.bin reloctest
 	$(QUIET)make -s -C util/a4092flash clean
+	$(QUIET)$(MAKE) -s -C util/bppcid clean
 
 distclean: clean
 	@echo Cleaning really good.
