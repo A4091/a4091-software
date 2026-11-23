@@ -1193,7 +1193,14 @@ sd_scsidirect(void *periph_p, void *scmd_p, void *ior)
     scmd->scsi_CmdActual = 0;       /* Actual command used */
     scmd->scsi_SenseActual = 0;     /* Actual sense data returned */
 
+    /*
+     * The command block is copied into the 16-byte scsipi_generic in
+     * the transfer and again into the controller's command block.
+     * Refuse longer commands rather than overrun either copy.
+     */
     cmdlen = scmd->scsi_CmdLength;
+    if (__predict_false(cmdlen > (int) sizeof (struct scsipi_generic)))
+        return (IOERR_BADLENGTH);
     cmdp = (struct scsipi_generic *) scmd->scsi_Command;
 
     buf = scmd->scsi_Data;
