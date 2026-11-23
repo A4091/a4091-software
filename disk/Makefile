@@ -49,8 +49,13 @@ welcome: welcome.c
 	$(AMIGA_CC) $(WELCOME_CFLAGS) $< $(WELCOME_LDFLAGS) -o $@
 	$(AMIGA_STRIP) -s $@
 
+# TinySetPatch derives its version from its own Git tags. Parent
+# command-line variables also enter the environment, so clear both paths
+# through which the driver's FULL_VERSION could reach the sub-build.
+$(TINYSETPATCH): MAKEOVERRIDES =
 $(TINYSETPATCH):
-	$(MAKE) -s -C $(TINYSETPATCH_DIR) TinySetPatch
+	env -u FULL_VERSION -u PROG_VERSION -u PROG_REVISION \
+		$(MAKE) -s -C $(TINYSETPATCH_DIR) TinySetPatch
 
 $(MMULIB_MAIN):
 	$(MAKE) -s -C $(TINYSETPATCH_DIR) download-libs
