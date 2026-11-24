@@ -41,6 +41,12 @@ typedef struct device *device_t;
 #include "siopreg.h"
 #include "siopvar.h"
 #include "attach.h"
+#ifdef USE_PROFILING
+#include "profiling.h"
+#endif
+#ifdef USE_COVERAGE
+#include "coverage.h"
+#endif
 #include "ndkcompat.h"
 
 #define ADDR8(x)      (volatile uint8_t *)(x)
@@ -87,9 +93,187 @@ usage(void)
            "It does not work on any other driver.\n"
            "Usage:  a4091d [<unit>]\n"
            "        a4091d -c   -- show 68040 special registers\n"
+#ifdef USE_PROFILING
+           "        a4091d -g <gmon.out> <unit>\n"
+#endif
+#ifdef USE_COVERAGE
+           "        a4091d -G <directory> <unit>\n"
+#endif
            "        a4091d -p <periph address>\n"
            "        a4091d -x <xs address>\n");
 }
+
+#ifdef USE_PROFILING
+static int
+dump_profile(const char *path, struct a4091_profile *profile)
+{
+    struct a4091_profile_arc *arc;
+    uint32_t header[3];
+    uint32_t pos;
+    uint32_t written = 0;
+    uint8_t was_enabled;
+    FILE *file;
+
+    if (profile == NULL || profile->magic != A4091_PROFILE_MAGIC ||
+        profile->version != A4091_PROFILE_VERSION ||
+        profile->arc_capacity != A4091_PROFILE_ARC_COUNT) {
+        printf("Profiling data is unavailable or incompatible\n");
+        return (1);
+    }
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        printf("Unable to open '%s': %s\n", path, strerror(errno));
+        return (1);
+    }
+
+    was_enabled = profile->enabled;
+    profile->enabled = 0;
+    header[0] = 0;
+    header[1] = profile->text_size;
+    header[2] = sizeof(header);
+    if (fwrite(header, sizeof(header), 1, file) != 1)
+        goto write_error;
+
+    for (pos = 0; pos < profile->arc_capacity; pos++) {
+        arc = &profile->arcs[pos];
+        if (arc->count == 0)
+            continue;
+        if (fwrite(arc, sizeof (*arc), 1, file) != 1)
+            goto write_error;
+        written++;
+    }
+
+    profile->enabled = was_enabled;
+    if (fclose(file) != 0) {
+        printf("Unable to close '%s': %s\n", path, strerror(errno));
+        return (1);
+    }
+
+    printf("Wrote %lu profile arcs to %s", written, path);
+    if (profile->dropped != 0)
+        printf(" (%lu dropped)", profile->dropped);
+    printf("\n");
+    return (0);
+
+write_error:
+    profile->enabled = was_enabled;
+    printf("Unable to write '%s': %s\n", path, strerror(errno));
+    fclose(file);
+    return (1);
+}
+#endif
+
+#ifdef USE_COVERAGE
+static int
+coverage_directory(const char *path)
+{
+    BPTR lock;
+
+    lock = Lock(path, ACCESS_READ);
+    if (lock == 0)
+        lock = CreateDir(path);
+    if (lock == 0) {
+        printf("Unable to create coverage directory '%s' (error %ld)\n",
+               path, IoErr());
+        return (1);
+    }
+    UnLock(lock);
+    return (0);
+}
+
+static const char *
+coverage_basename(const char *path)
+{
+    const char *base = path;
+    const char *pos;
+
+    for (pos = path; *pos != '\0'; pos++) {
+        if (*pos == '/' || *pos == '\\' || *pos == ':')
+            base = pos + 1;
+    }
+    return (base);
+}
+
+static int
+dump_coverage(const char *directory, struct a4091_coverage *coverage,
+              uint32_t available)
+{
+    struct a4091_coverage_file *record;
+    const char *name;
+    const uint8_t *data;
+    uint32_t offset;
+    uint32_t file_no;
+    uint32_t payload_size;
+    size_t dir_len;
+    int path_len;
+    char path[512];
+    FILE *file;
+
+    if (coverage == NULL || coverage->magic != A4091_COVERAGE_MAGIC ||
+        coverage->version != A4091_COVERAGE_VERSION ||
+        coverage->total_size < sizeof (*coverage) ||
+        coverage->total_size > available) {
+        printf("Coverage data is unavailable or incompatible\n");
+        return (1);
+    }
+    if (coverage_directory(directory) != 0)
+        return (1);
+
+    dir_len = strlen(directory);
+    offset = sizeof (*coverage);
+    for (file_no = 0; file_no < coverage->file_count; file_no++) {
+        if (offset > coverage->total_size - sizeof (*record))
+            goto corrupt;
+        record = (void *)((uint8_t *)coverage + offset);
+        if (record->record_size < sizeof (*record) ||
+            record->record_size > coverage->total_size - offset)
+            goto corrupt;
+        payload_size = record->record_size - sizeof (*record);
+        if (record->name_size == 0 ||
+            record->name_size > payload_size ||
+            record->data_size > payload_size - record->name_size ||
+            record->data[record->name_size - 1] != '\0')
+            goto corrupt;
+
+        name = coverage_basename((const char *)record->data);
+        if (dir_len != 0 &&
+            (directory[dir_len - 1] == ':' || directory[dir_len - 1] == '/'))
+            path_len = snprintf(path, sizeof (path), "%s%s", directory,
+                                name);
+        else
+            path_len = snprintf(path, sizeof (path), "%s/%s", directory,
+                                name);
+        if (path_len < 0 || (size_t)path_len >= sizeof (path)) {
+            printf("Coverage output path is too long: %s\n", name);
+            return (1);
+        }
+
+        data = record->data + record->name_size;
+        file = fopen(path, "wb");
+        if (file == NULL) {
+            printf("Unable to open '%s': %s\n", path, strerror(errno));
+            return (1);
+        }
+        if (fwrite(data, record->data_size, 1, file) != 1) {
+            printf("Unable to write '%s': %s\n", path, strerror(errno));
+            fclose(file);
+            return (1);
+        }
+        if (fclose(file) != 0) {
+            printf("Unable to close '%s': %s\n", path, strerror(errno));
+            return (1);
+        }
+        printf("Wrote %s (%lu bytes)\n", path, record->data_size);
+        offset += record->record_size;
+    }
+    return (0);
+
+corrupt:
+    printf("Coverage data is corrupt at record %lu\n", file_no);
+    return (1);
+}
+#endif
 
 typedef const char * const bitdesc_t;
 
@@ -248,6 +432,9 @@ iocmd_name(uint cmd)
         case CMD_TERM:          return ("CMD_TERM");            // 0x2ef0
         case CMD_ATTACH:        return ("CMD_ATTACH");          // 0x2ff1
         case CMD_DETACH:        return ("CMD_DETACH");          // 0x2ef2
+#ifdef USE_COVERAGE
+        case CMD_COVERAGE:      return ("CMD_COVERAGE");        // 0x2ef3
+#endif
         case NSCMD_DEVICEQUERY: return ("NSCMD_DEVICEQUERY");   // 0x4000
         case NSCMD_TD_READ64:   return ("NSCMD_TD_READ64");     // 0xc000
         case NSCMD_TD_WRITE64:  return ("NSCMD_TD_WRITE64");    // 0xc001
@@ -1688,6 +1875,12 @@ main(int argc, char *argv[])
     unsigned int pos = 0;
     int rc = 0;
     int open_and_wait = 0;
+#ifdef USE_PROFILING
+    const char *profile_path = NULL;
+#endif
+#ifdef USE_COVERAGE
+    const char *coverage_path = NULL;
+#endif
     struct IOExtTD     *tio;
     struct MsgPort     *mp;
     struct IOStdReq    *ior;
@@ -1703,6 +1896,24 @@ main(int argc, char *argv[])
                     case 'c':
                         show_cpu_regs();
                         exit(0);
+#ifdef USE_PROFILING
+                    case 'g':
+                        if (++arg >= argc) {
+                            printf("-%c requires an argument\n", *ptr);
+                            exit(1);
+                        }
+                        profile_path = argv[arg];
+                        break;
+#endif
+#ifdef USE_COVERAGE
+                    case 'G':
+                        if (++arg >= argc) {
+                            printf("-%c requires an argument\n", *ptr);
+                            exit(1);
+                        }
+                        coverage_path = argv[arg];
+                        break;
+#endif
                     case 'p': {
                         if (++arg > argc) {
                             printf("-%c requires an argument\n", *ptr);
@@ -1789,6 +2000,36 @@ main(int argc, char *argv[])
     }
 
     ior = &tio->iotd_Req;
+#ifdef USE_PROFILING
+    if (profile_path != NULL) {
+        struct scsipi_periph *dump_periph = (void *)ior->io_Unit;
+        struct scsipi_channel *dump_chan = dump_periph->periph_channel;
+        struct scsipi_adapter *dump_adapt = dump_chan->chan_adapter;
+        a4091_save_t *dump_save = dump_adapt->adapt_asave;
+
+        printf("Interrupts serviced: %lu\n", dump_save->as_irq_count);
+        rc = dump_profile(profile_path, dump_save->as_profile);
+        goto close_device;
+    }
+#endif
+#ifdef USE_COVERAGE
+    if (coverage_path != NULL) {
+        struct a4091_coverage *coverage;
+
+        ior->io_Command = CMD_COVERAGE;
+        ior->io_Data = NULL;
+        ior->io_Length = 0;
+        if (DoIO((struct IORequest *)ior) != 0) {
+            printf("Unable to snapshot coverage data (error %d)\n",
+                   ior->io_Error);
+            rc = 1;
+        } else {
+            coverage = ior->io_Data;
+            rc = dump_coverage(coverage_path, coverage, ior->io_Actual);
+        }
+        goto close_device;
+    }
+#endif
     struct MsgPort *rp = ior->io_Message.mn_ReplyPort;
     struct Library *dp = &ior->io_Device->dd_Library;
     printf("IORequest\n");
@@ -1945,6 +2186,13 @@ main(int argc, char *argv[])
         printf("  as_timer_running=%x\n", asave->as_timer_running);
         printf("  as_irq_signal=%x\n", asave->as_irq_signal);
         printf("  as_irq_count=%x\n", asave->as_irq_count);
+#ifdef USE_PROFILING
+        if (asave->as_profile != NULL) {
+            printf("  as_profile=%p arcs=%lu dropped=%lu\n",
+                   asave->as_profile, asave->as_profile->arc_count,
+                   asave->as_profile->dropped);
+        }
+#endif
         printf("  as_int_mask=%08x\n", asave->as_int_mask);
         printf("  as_timer_mask=%08x\n", asave->as_timer_mask);
         printf("  as_svc_task=%p\n", asave->as_svc_task);
@@ -2043,6 +2291,11 @@ main(int argc, char *argv[])
         }
     }
 
+#ifdef USE_PROFILING
+close_device:
+#elif defined(USE_COVERAGE)
+close_device:
+#endif
     CloseDevice((struct IORequest *) tio);
 
 open_fail:

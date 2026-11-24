@@ -29,6 +29,8 @@ struct timerequest;
 struct callout;
 struct ConfigDev;
 struct Library;
+struct a4091_profile;
+struct a4091_coverage;
 
 typedef struct {
     uint32_t              as_addr;
@@ -76,6 +78,12 @@ typedef struct {
     uint8_t          menu_color_g;
     uint8_t          menu_color_b;
     char             mfg_serial[16];     /* e.g. "A4092-00000001" */
+#endif
+#ifdef USE_PROFILING
+    struct a4091_profile *as_profile;
+#endif
+#ifdef USE_COVERAGE
+    struct a4091_coverage *as_coverage;
 #endif
 } a4091_save_t;
 

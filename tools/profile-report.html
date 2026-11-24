@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>A4091/A4092 · Driver instrumentation report</title>
+<style>
+:root{color-scheme:light;--paper:#f5f5ef;--ink:#172e2a;--muted:#5e7069;--line:#d6ddd5;--green:#286a50;--soft:#e3eee4;--orange:#ae5e29;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,-apple-system,sans-serif}header{background:var(--ink);color:#f1f5e9;padding:22px max(24px,calc((100vw - 1200px)/2))}header .top{display:flex;justify-content:space-between;align-items:center;gap:15px;font:12px var(--mono);letter-spacing:.08em}header a{color:#c0d6cb;text-decoration:none}header .brand{font-weight:700;color:white}main{max-width:1250px;padding:46px 25px 30px;margin:auto}
+.eyebrow{font:12px var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}h1{font-size:clamp(36px,5vw,60px);line-height:1.07;letter-spacing:-.05em;margin:16px 0 20px;font-weight:650}h2{font-size:25px;letter-spacing:-.025em;margin:0}h3{font-size:17px;margin:0 0 10px}
+.lead{max-width:740px;color:var(--muted);font-size:17px;margin:0}
+.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:30px}
+.stamp{white-space:nowrap;border:1px solid #9ab79c;padding:9px 14px;background:var(--soft);border-radius:4px;color:var(--green);font:12px var(--mono)}
+.stamp::before{content:'●';margin-right:8px}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);margin:34px 0 25px;border:1px solid var(--line);background:#fffef8}
+.metric{padding:23px;border-right:1px solid var(--line)}
+.metric:last-child{border:0}
+.metric strong{display:block;font:36px/1.1 var(--mono);letter-spacing:-.055em}
+.metric span{display:block;font-size:13px;color:var(--muted);margin-top:9px}
+.notice{border-left:3px solid var(--green);padding:2px 0 2px 16px;color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:26px;border-bottom:1px solid var(--line);margin:38px 0 28px}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:10px 0 14px;color:var(--muted);font-weight:600}
+.tabs button[aria-selected=true]{color:var(--ink);border-color:var(--green)}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #639880;outline-offset:3px}
+.sectionhead{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:20px}
+.sectionhead p{color:var(--muted);font-size:13px;margin:7px 0 0}
+.controls{display:flex;gap:10px;flex-wrap:wrap}input,select,.button{background:#fffef8;border:1px solid var(--line);border-radius:4px;padding:9px 12px;color:var(--ink)}input{max-width:100%;width:230px}
+.button{display:inline-block;text-decoration:none;font-size:13px}table{width:100%;border-collapse:collapse;text-align:left}th{font:11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:13px 16px;border-bottom:1px solid var(--line);white-space:nowrap}td{padding:13px 16px;border-bottom:1px solid #e3e6df;font-size:13px}tbody tr:hover{background:#eaf0e7}
+.tablewrap{border:1px solid var(--line);border-radius:5px;overflow:auto;background:#fffef8}
+.filename{background:transparent;border:none;padding:0;font:13px var(--mono);color:var(--ink);text-align:left;text-decoration:underline;text-decoration-color:#b7c8bd;text-underline-offset:4px}
+.barcell{width:34%;min-width:185px}
+.barrow{display:flex;align-items:center;gap:13px}
+.track{height:7px;background:#e6ebe2;flex:1;border-radius:1px;min-width:60px}
+.fill{height:100%;background:#548367}
+.barvalue{min-width:60px;text-align:right;font:12px var(--mono)}
+.zero{color:var(--orange)}
+.mono{font-family:var(--mono)}
+.subtle{color:var(--muted)}
+.right{text-align:right}
+.empty{text-align:center;color:var(--muted);padding:32px}
+.footnote{font-size:12px;color:var(--muted);margin:13px 0 25px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.card{border:1px solid var(--line);background:#fffef8;padding:24px;border-radius:5px}
+.card p{color:var(--muted);font-size:14px}
+.specs{display:grid;grid-template-columns:130px 1fr;font-size:13px;gap:10px;margin:14px 0 0}
+.specs dt{color:var(--muted)}
+.specs dd{margin:0}
+.steps{list-style:none;padding:0;margin:15px 0}
+.steps li{padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.steps li:before{content:'✓';color:var(--green);margin-right:10px}
+.logs details{border-bottom:1px solid var(--line);padding:14px 0}
+.logs summary{cursor:pointer;font:13px var(--mono)}pre{font:12px/1.7 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}footer{display:flex;justify-content:space-between;gap:15px;margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font:11px var(--mono)}
+[hidden]{display:none!important}dialog{width:min(1100px,95vw);max-height:90vh;border:1px solid var(--line);border-radius:7px;padding:0;background:var(--paper);color:var(--ink)}dialog::backdrop{background:#102922b8}
+.dialoghead{position:sticky;top:0;background:var(--paper);padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:15px;z-index:1}
+.dialoghead h2{font:17px var(--mono);overflow-wrap:anywhere}
+.source{overflow:auto;max-height:65vh;background:#fffef8}
+.source table{font:12px/1.5 var(--mono)}
+.source td{padding:1px 10px;border:0;white-space:pre}
+.source .lineno{color:#79847d;width:55px;text-align:right;user-select:none}
+.source .count{width:75px;text-align:right;color:var(--green);background:#eff4eb}
+.source .missed{background:#fff0e5}
+.source .missed .count{color:#99522c;background:#f7e0cf}
+.downloads{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+.downloads a{overflow-wrap:anywhere}
+.sr-only{position:absolute;left:-10000px}
+.callnote{background:#e8eee3;padding:16px 20px;margin-bottom:20px;font-size:13px}
+.statusline{font:12px var(--mono);color:var(--muted)}
+@media(max-width:760px){main{padding:26px 16px}
+.hero{display:block}
+.stamp{display:inline-block;margin-top:22px}
+.metrics{grid-template-columns:1fr 1fr}
+.metric:nth-child(2){border-right:0}
+.metric:nth-child(-n+2){border-bottom:1px solid var(--line)}
+.grid{grid-template-columns:1fr}
+.sectionhead{display:block}
+.controls{margin-top:15px}
+.tabs{gap:20px;overflow:auto;white-space:nowrap}
+.tabs button{font-size:13px}td,th{padding:11px}
+.downloads{grid-template-columns:1fr 1fr}header .top{font-size:10px}
+.dialoghead{align-items:start;flex-wrap:wrap}footer{flex-direction:column}}
+@media print{header{background:white;color:black}
+.tabs,.controls,.button{display:none}section[hidden]{display:block!important}section{break-before:page}
+.metrics{break-inside:avoid}body{background:white}}
+</style>
+</head>
+<body>
+<header>
+<div class="top">
+<span class="brand">A4091 / A4092 ENGINEERING</span>
+<span>DRIVER INSTRUMENTATION</span>
+</div>
+</header>
+<main>
+<div class="hero">
+<div>
+<div class="eyebrow">GCC call counts &amp; code coverage</div>
+<h1 id="report-title">Inside the driver.</h1>
+<p class="lead" id="report-description">Profiling and coverage extracted from driver memory with a4091d.</p>
+</div>
+<span class="stamp">DATA SNAPSHOT</span>
+</div>
+<div class="metrics">
+<div class="metric">
+<strong id="arcs">
+</strong>
+<span id="arc-label">Call-graph arcs</span>
+</div>
+<div class="metric">
+<strong id="coverage-count">
+</strong>
+<span>Extracted coverage files</span>
+</div>
+<div class="metric">
+<strong id="irqs">
+</strong>
+<span>Interrupts at profile extraction</span>
+</div>
+<div class="metric">
+<strong id="function-count">
+</strong>
+<span>Functions with recorded calls</span>
+</div>
+</div>
+<div class="notice">Call counts, not elapsed time. There are no periodic samples. Coverage is cumulative and can include initialization and diagnostic commands. Separate dumps need not represent the same instant.</div>
+<nav class="tabs" role="tablist" aria-label="Report views">
+<button role="tab" id="tab-coverage" aria-controls="coverage" aria-selected="true" data-tab="coverage">Code coverage</button>
+<button role="tab" id="tab-calls" aria-controls="calls" aria-selected="false" data-tab="calls">Function calls</button>
+<button role="tab" id="tab-run" aria-controls="run" aria-selected="false" data-tab="run">Test &amp; evidence</button>
+</nav>
+<section id="coverage" role="tabpanel" aria-labelledby="tab-coverage">
+<div class="sectionhead">
+<div>
+<h2>Which code ran?</h2>
+<p>Choose a source file to inspect annotated lines. Zero coverage means unexercised in this run.</p>
+</div>
+<div class="controls">
+<label>
+<span class="sr-only">Filter source files</span>
+<input id="file-filter" placeholder="Find a source file…" type="search">
+</label>
+<label>
+<span class="sr-only">Coverage metric</span>
+<select id="metric">
+<option value="percent">Line coverage</option>
+<option value="branchPercent">Branches executed</option>
+<option value="taken">Branches taken</option>
+</select>
+</label>
+</div>
+</div>
+<div class="tablewrap">
+<table>
+<thead>
+<tr>
+<th>Source file</th>
+<th id="metric-label">Line coverage ↓</th>
+<th class="right">Executable lines</th>
+<th class="right">Branches</th>
+</tr>
+</thead>
+<tbody id="coverage-rows">
+</tbody>
+</table>
+</div>
+<p id="file-status" class="footnote" aria-live="polite">
+</p>
+<p class="footnote">The table includes covered C translation units and included C files. Header-only entries are excluded. “Branches executed” counts branch sites reached; “Branches taken” counts outcomes taken at least once. This test does not measure full-driver correctness.</p>
+</section>
+<section id="calls" role="tabpanel" aria-labelledby="tab-calls" hidden>
+<div class="sectionhead">
+<div>
+<h2>Where the calls went.</h2>
+<p>Instrumented function calls, ordered by frequency.</p>
+</div>
+<div class="controls">
+<label>
+<span class="sr-only">Filter functions</span>
+<input id="call-filter" placeholder="Find a function…" type="search">
+</label>
+<label>
+<span class="sr-only">Function order</span>
+<select id="call-sort">
+<option value="count">Most calls first</option>
+<option value="name">Function name A–Z</option>
+</select>
+</label>
+</div>
+</div>
+<div class="callnote">The interrupt wrapper can run for shared interrupts that the driver does not service. Its call count is therefore not the same as <code>as_irq_count</code>. Optimizer suffixes such as <code>.isra.0</code> are preserved.</div>
+<div class="tablewrap">
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th class="barcell">Calls</th>
+<th class="right">Count</th>
+</tr>
+</thead>
+<tbody id="call-rows">
+</tbody>
+</table>
+</div>
+<p id="call-status" class="footnote" aria-live="polite">
+</p>
+<p class="footnote">Local function symbols are recovered from the matching object files and linker map. Bar lengths compare call counts, not CPU cost. See the raw gprof report for caller/callee relationships.</p>
+<a class="button" data-download="reports/gprof.txt">Download full call graph ↗</a>
+</section>
+<section id="run" role="tabpanel" aria-labelledby="tab-run" hidden>
+<div class="sectionhead">
+<div>
+<h2>Test &amp; evidence.</h2>
+<p>Run context is supplied by the report author, not inferred from successful extraction.</p>
+</div>
+</div>
+<div class="grid">
+<div class="card">
+<h3>Test environment</h3>
+<dl class="specs" id="environment">
+</dl>
+</div>
+<div class="card">
+<h3>Executed workflow</h3>
+<ol class="steps" id="steps">
+</ol>
+</div>
+</div>
+<div class="card" style="margin-top:22px">
+<h3>Scope &amp; interpretation</h3>
+<p>Missing coverage means code was not exercised by this workload, not that it is correct or incorrect. Call frequency is not CPU cost. Instrumentation affects execution time; emulator throughput is not a physical-hardware measurement.</p>
+<div id="notes">
+</div>
+</div>
+<div class="card logs" style="margin-top:22px">
+<h3>Captured command output</h3>
+<div id="logs">
+</div>
+</div>
+<div class="card" style="margin-top:22px">
+<h3>Raw artifacts</h3>
+<p>Embedded in this HTML file. Downloads work offline; .gcda files require the matching build's .gcno files for analysis.</p>
+<div id="downloads" class="downloads">
+</div>
+</div>
+</section>
+<footer>
+<span>A4091 / A4092 DRIVER INSTRUMENTATION</span>
+<span>Offline snapshot · No external requests</span>
+</footer>
+</main>
+<dialog id="source-dialog" aria-labelledby="source-title">
+<div class="dialoghead">
+<div>
+<h2 id="source-title">
+</h2>
+<span class="statusline">Green counts: executed · orange: not executed · –: non-executable</span>
+</div>
+<div class="controls">
+<label>
+<input type="checkbox" id="missed-only" style="width:auto"> Uncovered lines only</label>
+<button class="button" id="close-source">Close ×</button>
+</div>
+</div>
+<div class="source">
+<table aria-label="Annotated source">
+<tbody id="source-rows">
+</tbody>
+</table>
+</div>
+</dialog>
+<script>
+const DATA=/*REPORT_DATA*/;
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}
+[c]));
+$('arcs').textContent=DATA.arcs??'—';
+$('irqs').textContent=DATA.interrupts??'—';
+$('coverage-count').textContent=DATA.coverageFiles;
+$('function-count').textContent=DATA.functions.length;
+$('arc-label').textContent='Call-graph arcs · '+(DATA.dropped===null?'dropped count unavailable':DATA.dropped+' dropped');
+const metadata=DATA.metadata;
+if(metadata.title){$('report-title').textContent=metadata.title;document.title=metadata.title}
+if(metadata.description)$('report-description').textContent=metadata.description;
+$('environment').innerHTML=Object.entries(metadata.environment??{}).map(([k,v])=>`<dt>${esc(k)}</dt>
+<dd>${esc(v)}</dd>`).join('')||'<dd>Not supplied</dd>';
+$('steps').innerHTML=(metadata.steps??[]).map(s=>`<li>${esc(s)}</li>`).join('')||'<li>Workload not supplied</li>';
+$('notes').innerHTML=(metadata.notes??[]).map(s=>`<p>${esc(s)}</p>`).join('');
+const tabs=[...document.querySelectorAll('[data-tab]')];
+function tab(button){tabs.forEach(b=>{const active=b===button;b.setAttribute('aria-selected',active);b.tabIndex=active?0:-1;$(b.dataset.tab).hidden=!active})}
+tabs.forEach((b,i)=>{b.tabIndex=i? -1:0;b.onclick=()=>tab(b);b.onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const n=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tab(tabs[n]);tabs[n].focus()}}});
+function coverage(){const key=$('metric').value,q=$('file-filter').value.toLowerCase(),rows=DATA.files.filter(f=>f.name.toLowerCase().includes(q)).sort((a,b)=>(b[key]??-1)-(a[key]??-1));$('metric-label').textContent=$('metric').selectedOptions[0].text+' ↓';$('coverage-rows').innerHTML=rows.map(f=>`<tr>
+<td>
+<button class="filename" data-file="${esc(f.name)}">${esc(f.name)} ↗</button>
+</td>
+<td class="barcell">
+<div class="barrow">
+<div class="track">
+<div class="fill" style="width:${f[key]??0}%">
+</div>
+</div>
+<span class="barvalue ${f[key]===0?'zero':''}">${f[key]===null?'N/A':f[key].toFixed(2)+'%'}</span>
+</div>
+</td>
+<td class="right mono">${f.lines}</td>
+<td class="right mono">${f.branches||'—'}</td>
+</tr>`).join('')||'<tr><td colspan="4" class="empty">No matching source files.</td></tr>';$('file-status').textContent=`Showing ${rows.length} of ${DATA.files.length} source files`}
+function calls(){const q=$('call-filter').value.toLowerCase(),rows=DATA.functions.filter(f=>f.name.toLowerCase().includes(q)).sort((a,b)=>$('call-sort').value==='name'?a.name.localeCompare(b.name):b.calls-a.calls),max=Math.max(1,...DATA.functions.map(f=>f.calls));$('call-rows').innerHTML=rows.map(f=>`<tr>
+<td class="mono">${esc(f.name)}</td>
+<td class="barcell">
+<div class="track">
+<div class="fill" style="width:${100*f.calls/max}%">
+</div>
+</div>
+</td>
+<td class="right mono">${f.calls.toLocaleString()}</td>
+</tr>`).join('')||'<tr><td colspan="3" class="empty">No matching functions.</td></tr>';$('call-status').textContent=`Showing ${rows.length} of ${DATA.functions.length} functions with recorded calls`}
+let selected=null;function source(){const rows=selected.source.filter(l=>!$('missed-only').checked||/^[#=]/.test(l.count));$('source-rows').innerHTML=rows.map(l=>`<tr class="${/^[#=]/.test(l.count)?'missed':''}">
+<td class="lineno">${l.line}</td>
+<td class="count">${/^[#=]/.test(l.count)?'0':esc(l.count)}</td>
+<td>${esc(l.text)||' '}</td>
+</tr>`).join('')||'<tr><td class="empty">No uncovered lines.</td></tr>'}
+$('coverage-rows').onclick=e=>{const b=e.target.closest('[data-file]');if(!b)return;selected=DATA.files.find(f=>f.name===b.dataset.file);$('source-title').textContent=selected.name;$('missed-only').checked=false;source();$('source-dialog').showModal();document.querySelector('.source').scrollTop=0};$('missed-only').onchange=source;$('close-source').onclick=()=>$('source-dialog').close();
+for(const id of ['file-filter','metric'])$(id).addEventListener('input',coverage);for(const id of ['call-filter','call-sort'])$(id).addEventListener('input',calls);
+const logLabels={probe:'devtest · probe',geometry:'devtest · geometry',benchmark:'devtest · read benchmark (emulated timing)',profile:'a4091d · profile extraction',coverage:'a4091d · coverage extraction',progress:'Startup script · progress'};
+$('logs').innerHTML=Object.entries(DATA.logs).map(([k,v])=>`<details>
+<summary>${esc(logLabels[k]??k)}</summary>
+<pre>${esc(v)}</pre>
+</details>`).join('');
+const href=d=>'data:application/octet-stream;base64,'+d.base64;
+$('downloads').innerHTML=DATA.downloads.map(d=>`<a class="button mono" href="${href(d)}" download="${esc(d.name.split('/').pop())}">${esc(d.name)} ↓</a>`).join('');document.querySelectorAll('[data-download]').forEach(a=>{const d=DATA.downloads.find(d=>d.name===a.dataset.download);if(d){a.href=href(d);a.download=d.name.split('/').pop()}else{a.hidden=true}});coverage();calls();
+</script>
+</body>
+</html>

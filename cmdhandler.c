@@ -44,6 +44,12 @@
 #include "siopvar.h"
 #include "attach.h"
 #include "cmdhandler.h"
+#ifdef USE_PROFILING
+#include "profiling.h"
+#endif
+#ifdef USE_COVERAGE
+#include "coverage.h"
+#endif
 #include "nsd.h"
 #include "ndkcompat.h"
 #include "version.h"
@@ -671,11 +677,32 @@ CMD_SEEK_continue:
             ReplyMsg(&ior->io_Message);
             break;
 
+#ifdef USE_COVERAGE
+        case CMD_COVERAGE:
+            if (!coverage_snapshot()) {
+                ior->io_Error = ERROR_NO_MEMORY;
+            } else {
+                asave->as_coverage = coverage_data();
+                iotd->iotd_Req.io_Data = asave->as_coverage;
+                iotd->iotd_Req.io_Actual =
+                    asave->as_coverage->total_size;
+                ior->io_Error = 0;
+            }
+            ReplyMsg(&ior->io_Message);
+            break;
+#endif
+
         case CMD_TERM:
             PRINTF_CMD("CMD_TERM\n");
             deinit_chan(NULL);
             close_timer();
             asave->as_isr = NULL;
+#ifdef USE_PROFILING
+            profiling_deinit();
+#endif
+#ifdef USE_COVERAGE
+            coverage_deinit();
+#endif
             FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
             FreeMem(asave, sizeof (*asave));
             asave = NULL;
@@ -807,6 +834,13 @@ cmd_handler(void)
         msg->io_Error = ERROR_NO_MEMORY;
         goto fail_allocmem;
     }
+#ifdef USE_PROFILING
+    if (!profiling_init()) {
+        msg->io_Error = ERROR_NO_MEMORY;
+        goto fail_profile;
+    }
+    asave->as_profile = profiling_data();
+#endif
     asave->as_device_private = AllocMem(sizeof (*asave->as_device_private),
                                         MEMF_CLEAR | MEMF_PUBLIC);
     if (asave->as_device_private == NULL) {
@@ -824,6 +858,10 @@ cmd_handler(void)
 fail_timer:
         FreeMem(asave->as_device_private, sizeof (*asave->as_device_private));
 fail_allocmem2:
+#ifdef USE_PROFILING
+        profiling_deinit();
+fail_profile:
+#endif
         FreeMem(asave, sizeof (*asave));
 fail_allocmem:
         /* Terminate handler and give up */
