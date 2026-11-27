@@ -392,7 +392,7 @@ static void cleanup_bootmenu(void)
 
 static struct Gadget *create_gadget(UWORD kind)
 {
-    const struct TagItem tags[] = {
+    static const struct TagItem tags[] = {
         { GT_Underscore, '~' },
         { TAG_DONE, 0 }
     };
@@ -952,7 +952,7 @@ static int scan_disks(void)
                         Text(rp," ",1);
                     itoa(cap,_itoabuf,10);
                     Text(rp,_itoabuf,strlen(_itoabuf));
-                    const char caps[]="KMGTPEZY";
+                    static const char caps[]="KMGTPEZY";
                     Text(rp,&caps[cap_c],1);
                     Text(rp,"B",1);
                 }
