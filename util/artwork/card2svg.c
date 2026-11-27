@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Type definitions to match Amiga types roughly
 typedef char BYTE;
@@ -11,8 +12,12 @@ struct drawing {
     SHORT x, y, w, h;
 };
 
-#include "examples/a4091.h"
-#include "examples/a4092.h"
+#define card card_a4091
+#include "assets/a4091.h"
+#undef card
+#define card card_a4092
+#include "assets/a4092.h"
+#undef card
 
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -41,7 +46,7 @@ void write_svg(const char *filename, const struct drawing *data, int count) {
     FILE *f = fopen(filename, "w");
     if (!f) {
         perror("Error opening file");
-        return;
+        exit(EXIT_FAILURE);
     }
 
     // Canvas size (approximate based on bootmenu offsets)
@@ -95,12 +100,21 @@ void write_svg(const char *filename, const struct drawing *data, int count) {
 
     fprintf(f, "</g>\n");
     fprintf(f, "</svg>\n");
-    fclose(f);
+    if (fclose(f) != 0) {
+        perror(filename);
+        exit(EXIT_FAILURE);
+    }
     printf("Generated %s\n", filename);
 }
 
-int main() {
-    write_svg("examples/a4091.svg", card_a4091, ARRAY_LENGTH(card_a4091));
-    write_svg("examples/a4092.svg", card_a4092, ARRAY_LENGTH(card_a4092));
+int main(int argc, char **argv) {
+    if (argc > 2 || (argc == 2 && strcmp(argv[1], "a4091") && strcmp(argv[1], "a4092"))) {
+        fprintf(stderr, "Usage: %s [a4091|a4092]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+    if (argc == 1 || !strcmp(argv[1], "a4091"))
+        write_svg("examples/a4091.svg", card_a4091, ARRAY_LENGTH(card_a4091));
+    if (argc == 1 || !strcmp(argv[1], "a4092"))
+        write_svg("examples/a4092.svg", card_a4092, ARRAY_LENGTH(card_a4092));
     return 0;
 }
