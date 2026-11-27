@@ -1,5 +1,5 @@
 @DATABASE "A4091"
-@$VER: A4091.guide 1.3 (@A4091_DISK_BUILD_DATE@)
+@$VER: A4091.guide 1.4 (@A4091_DISK_BUILD_DATE@)
 @(C) Stefan Reinauer & Chris Hooper
 @WORDWRAP
 @AUTHOR Stefan Reinauer & Chris Hooper
@@ -23,7 +23,7 @@ ____________________________________________________________________________
                         A4091 Master Guide
 
 
-Guide Version 1.3                      @A4091_DISK_DEVICE_NAME@ Version @A4091_DISK_FULL_VERSION@
+Guide Version 1.4                      @A4091_DISK_DEVICE_NAME@ Version @A4091_DISK_FULL_VERSION@
 
 
      @{"License      : License Terms of this Project                       " link License}
@@ -209,24 +209,28 @@ Here you can
 
 @NODE Contents "Contents of the Disk"
 
-Here's what's on this disk
+The Startup-Sequence adds Tools to the command path. From the disk's root
+directory, use an AmigaDOS command such as Version Tools/devtest FILE FULL
+to read the version and build date from a versioned executable.
 
 @{CODE}
-
-@{B}Tools@{UB}        Directory.
-        This directory contains three tools to test the A4091
-
-        @{"ncr7xx          " link NCR7XXTool}
-        @{"a4091d          " link A4091D}
-        @{"devtest         " link devtest}
-        @{"rdb             " link rdb}
-
-
-@{B}A4091.guide@{UB}
-        This guide. Latest news and changes made to the contents.
-
+@{B}Tools@{UB}
+        @{"ncr7xx" link NCR7XXTool} 1.3     Test the NCR53C7xx controller and its DMA engine.
+        @{"a4091d" link A4091D}         Inspect the running driver's internal state.
+        @{"devtest" link devtest} 2.0+   Probe and benchmark storage devices.
+        @{"rdb" link rdb} 1.3        Inspect and edit the Rigid Disk Block.
+        RDBFlags 1.3   Display or change RDB flags, including LastDisk.
+        scsifix        Redirect 2nd.scsi.device opens to a4091.device.
+        a4092flash     Read and program flash on the A4092 and A4770.
+                       Its version follows the driver release.
+        mfgtool        Inspect manufacturing data and manage OEM artwork.
+        update         Flash the bundled ROM on an A4092 or A4770 disk.
 @{BODY}
 
+@{B}C and Libs@{UB}
+        At startup, TinySetPatch loads the appropriate MMULib CPU library
+        from Libs. This disk includes a build from the 0.3 series. Use
+        Version C/TinySetPatch FILE FULL at the disk's root to see its revision.
 
 @{B}Where is the source code?@{UB}
 
@@ -237,31 +241,35 @@ You can find the source code at https://github.com/A4091/
 
 @NODE NCR7XXTool "ncr7xx tool"
 
-1> ncr7xx
-ncr7xx 1.2 (Jun 17 2024) © Chris Hooper
+ncr7xx 1.3 supports the 53C710, 53C720, 53C720SE and 53C770.
 
+1> ncr7xx -h
 This tool will test an installed NCR53C7xx SCSI controller for correct operation.
 Options:
 	-a  specify card address (slot or physical address): <addr>
+	-b  set DMA burst length: <1|2|4|8|16> (chip-specific)
 	-c  decode device autoconfig area
 	-d  enable debug output
 	-D  perform DMA from/to Amiga memory: <src> <dst> <len>
-	-f  ignore fact enforcer is present
+	-f  ignore fact enforcer is present or driver is loaded
 	-h  display this help text
-	-k  kill (disable) active C= A4091 device driver
+	-k  kill (disable) all active supported device drivers
 	-l  specify the <number> of test iterations to run
 	-L  loop until failure
-	-P  probe and list all detected A4091 cards
+	-P  probe and list all detected supported cards
 	-q  quiet mode (only show errors)
-	-r  display NCR53C710 registers
+	-Q  use Zorro III quick interrupts (lower latency)
+	-r  display detected NCR53C7xx registers
 	-s  decode device external switches
-	-S  attempt to suspend all A4091 drivers while testing
+	-S  attempt to suspend all supported drivers while testing
 	-t  test card
 	-?  show individual test steps
-1>
 
+1> ncr7xx -?
+Numbers may be appended to the -t test command to run a specific unit test.
 Example:  ncr7xx -t56
           This will execute both test 5 and test 6.
+53C710 tests:
   -0  Device access: Check ROM header and Zorro config area
   -1  Register access
           53C710 register read-only bits are verified.
@@ -278,42 +286,52 @@ Example:  ncr7xx -t56
   -6  Copy block DMA: Main mem->main mem data verify
   -7  DMA copy performance (no verify)
   -8  SCSI pins: data pins and some control pins
+53C720/720SE/770 tests:
+  -0  Device access: Check base ROM/register access
+  -4  Bus access and host SCRIPTS fetch
+  -5  Simple DMA via SCRATCHA/TEMP and RAM
+  -6  Copy block DMA: Main mem->main mem data verify
+  -7  DMA copy performance (no verify)
 
 @ENDNODE
 
 @NODE A4091D "a4091d debug tool"
 
-1> a4091d
-This tool is used to show a4091.device driver internal state.
-It does not work on any other driver.
-Usage:  a4091d [<unit>]
-        a4091d -c   -- show 68040 special registers
-        a4091d -p <periph address>
-        a4091d -x <xs address>
-1>
+Run a4091d with no arguments to see which driver this copy was built
+to inspect. For example, a4091d 0 shows the driver's state for unit 0.
+
+    a4091d <unit>               Inspect an open unit or open it normally
+    a4091d -c                   Show 68040 special registers
+    a4091d -p <periph address>  Inspect a SCSI peripheral structure
+    a4091d -x <xs address>      Inspect a SCSI transfer structure
 
 @ENDNODE
 
 @NODE devtest "Amiga devtest tool"
 
-1> devtest
-You must specify an operation to perform
-devtest 1.6 (Aug 25 2024) © Chris Hooper
+This disk carries devtest 2.0+, built from the revision after v2.0.
+This command reports the geometry of unit 0 on this controller.
 
+1> devtest -g @A4091_DISK_DEVICE_NAME@ 0
+
+1> devtest -h
 usage: devtest <options> <x.device> <unit>
-   -b           benchmark device performance [-bb tests latency]
-   -c <cmd>     test a specific device driver request
-   -d           also do destructive operations (write)
-   -g           test drive geometry
-   -h           display help
-   -i <tsize>   data integrity test (destructive) [-i=rand -ii=addr -iii=patt]
-   -l <loops>   run multiple times
-   -m <addr>    use specific memory (<addr> Chip Fast 24Bit Zorro -=list)
-   -mm <addr>   use specific address without allocation by OS
-   -o           test open/close
-   -p           probe SCSI bus for devices
-   -t           test all packet types (basic, TD64, NSD) [-tt = more]
-1>
+   -b                    benchmark device [-bb show latency, -C no CPU %]
+   -B <tsize>[,<align>[,<#tio>]]  benchmark arguments, default: 512k,16,4
+   -c <cmd>[(arg,...)]   test a specific device driver request
+   -d                    also do destructive operations (write)
+   -g                    report drive geometry
+   -h                    display help
+   -i <tsize>[,<align>]  integrity test [-d=destructive] [-dd=no save]
+                         [-i=random -ii=address -iii=pattern]
+   -k <mode>             integrity test mode: simple or butterfly
+   -l <loops>            run multiple times
+   -m <addr>             use specific memory (Chip Fast Zorro MB Copr -=list)
+   -mm <addr>            use specific address without allocation by OS
+   -o                    test open/close
+   -p                    probe SCSI bus for devices (unit is optional)
+   -t                    test all packet types (basic, TD64, NSD); -tt=more
+   -y                    answer all prompts with 'yes'
 
 @ENDNODE
 
@@ -479,7 +497,43 @@ Super Buster    :       The custom chip that handles translation between
 
 @{B}Version History@{UB}
 
-Full history available at https://github.com/A4091/a4091-software/commits/main
+Release notes: https://github.com/A4091/a4091-software/releases
+Full history: https://github.com/A4091/a4091-software/commits/main
+
+Since v42.39 (unreleased):
+
+ o) Mount volumes when the driver is loaded with BindDrivers. Send START
+    UNIT to disks that wait for the host before spinning up.
+ o) Report the actual byte count on short SCSI reads and preserve pending
+    data in the DMA FIFO on a data-in phase mismatch.
+ o) Check the layout of structures shared with the NCR chip at build time.
+ o) Update the bundled ROM filesystem to ODFileSystem v1.0.0-beta5.
+    The utilities disk includes devtest 2.0+ and builds rdb 1.3 from source.
+
+Release v42.39:
+
+ o) Fix an NCR SCRIPTS alignment regression that could leave the A4092
+    unable to detect its disks with v42.38. For these two releases, use v42.39 on the
+    A4092 and v42.38 on the A4091. The v42.39 release notes report an
+    alignment problem on the A4091.
+
+Release v42.38:
+
+ o) Load embedded filesystems on demand, matching the DosType of the
+    partition or boot CD. Update ODFileSystem to v0.7.0.
+ o) Balance interrupt masking on nested calls and polling timeouts.
+    Fix the DMA test buffer in ncr7xx.
+ o) Add TinySetPatch and its CPU libraries to the utilities disk.
+    Update devtest to v1.9 with direct SCSI commands and CPU usage reporting.
+ o) A4092 owners should see the v42.39 entry above before using this ROM.
+
+Release v42.37:
+
+ o) Use ODFileSystem as the default filesystem in the CD boot ROM.
+ o) Extend ncr7xx diagnostics to the 53C720, 720SE and 770. Improve
+    53C770 synchronous transfer timing and wide SCSI target discovery.
+ o) Add a Workbench interface for a4092flash and support OEM boot artwork.
+ o) Generate board-specific utility disks and include devtest 1.8a.
 
 Release v42.36:
 
