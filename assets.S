@@ -6,7 +6,7 @@ _device
         ifd COMMODORE_DEVICE
         incbin "a3090.ld_strip"
         else
-        incbin "a4091.device"
+        incbin "test-driver.device"
         endif
         endif
 

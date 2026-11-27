@@ -1,3 +1,7 @@
+.DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
+include ../../mk/build-config.mk
+
 PROJECT=a4092flash
 CC=m68k-amigaos-gcc
 STRIP=m68k-amigaos-strip
@@ -62,12 +66,18 @@ SRCS = flash.c \
        main.c \
        nvram_flash.c
 
+.build-config: CONFIG_TEXT := $(CC) $(CFLAGS) $(LDLIBS) $(STRIP)
+.build-config: FORCE
+	$(write-config)
+
+$(PROJECT) mfgtool: Makefile .build-config ../../a4091.h ../../ndkcompat.h
+
 a4092flash: $(SRCS) *.h
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 	$(QUIET)$(STRIP) -s $@
 
-mfgtool: mfgtool.c mfg_flash.h oem_flash.h spi.c spi.h nibble_word.h
+mfgtool: mfgtool.c mfg_flash.h oem_flash.h spi.c spi.h flash.h nibble_word.h
 	@echo Building $@
 	$(QUIET)$(CC) $(CFLAGS) -o $@ mfgtool.c spi.c $(LDLIBS)
 
@@ -78,4 +88,4 @@ test:
 	./nvram_test
 
 clean:
-	-rm -rf $(PROJECT) nvram_test mfgtool
+	-rm -rf $(PROJECT) nvram_test mfgtool .build-config
