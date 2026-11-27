@@ -15,7 +15,7 @@
 set -e
 
 if [ $# -lt 2 ]; then
-  echo "Usage: $0 <input> <output>"
+  echo "Usage: $0 <input> <output> [salvador]"
   exit 1
 fi
 
@@ -31,7 +31,7 @@ fi
 # Create temp file and ensure cleanup on exit
 TEMP=$(mktemp)
 trap 'rm -f "$TEMP"' EXIT
-SALVADOR=$(dirname $0)/../3rdparty/salvador/salvador
+SALVADOR=${3:-"$(dirname "$0")/../3rdparty/salvador/salvador"}
 
 # Function to write a 32-bit integer as big-endian binary
 write_be32() {
@@ -47,37 +47,23 @@ get_file_size() {
 }
 
 
-printf 'ZX0\001' > "$OUTPUT"
-USIZE=$(get_file_size "$INPUT")
-write_be32 "$USIZE" >> "$OUTPUT"
-
-need_build=0
-
-if [ ! -x "$SALVADOR" ]; then
-  need_build=1
-else
-  if "$SALVADOR" >/dev/null 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
+if [ "$#" -eq 2 ]; then
+  # A runnable Salvador prints usage and returns 100 with no arguments.
+  rc=0
+  "$SALVADOR" >/dev/null 2>&1 || rc=$?
   if [ "$rc" -ne 100 ]; then
-    need_build=1
+    (cd "$(dirname "$SALVADOR")" && make -s clean all)
   fi
 fi
 
-if [ "$need_build" -ne 0 ]; then
-  echo "Building salvador"
-  ( cd $(dirname $0)/../3rdparty/salvador && make -s clean all )
-  echo "done"
-fi
-
-# Compress to temp file
 "$SALVADOR" "$INPUT" "$TEMP"
-
+USIZE=$(get_file_size "$INPUT")
 CSIZE=$(get_file_size "$TEMP")
-write_be32 "$CSIZE" >> "$OUTPUT"
-
-cat "$TEMP" >> "$OUTPUT"
+{
+  printf 'ZX0\001'
+  write_be32 "$USIZE"
+  write_be32 "$CSIZE"
+  cat "$TEMP"
+} > "$OUTPUT"
 
 echo "$INPUT ($USIZE) -> $OUTPUT ($CSIZE)"

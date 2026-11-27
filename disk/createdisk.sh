@@ -158,14 +158,14 @@ done
 xdftool $DISK write welcome Tools/welcome
 xdftool $DISK write rdb Tools/rdb
 xdftool $DISK write ../ncr7xx Tools/ncr7xx
-xdftool $DISK write ../a4091d Tools/a4091d
+xdftool $DISK write "../${DEVICE_NAME}.a4091d" Tools/a4091d
 xdftool $DISK write scsifix Tools/scsifix
 xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
 xdftool $DISK write ../util/a4092flash/mfgtool Tools/mfgtool
 xdftool $DISK write ../util/a4092flash/mfg.cfg S/mfg.txt
 xdftool $DISK write ../util/a4092flash/serial.txt S/serial.txt
 xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
-xdftool $DISK write $THIRDPARTY/RDBFlags/RDBFlags Tools/RDBFlags
+xdftool $DISK write "$THIRDPARTY/RDBFlags/RDBFlags.gcc" Tools/RDBFlags
 xdftool $DISK write system-configuration Devs/system-configuration
 xdftool $DISK write ../${DEVICE_NAME}.device Devs/${DEVICE_NAME}.device
 if [ "$FLASH_DEVICE" -eq 1 ]; then
@@ -217,6 +217,8 @@ make_variant() {
 
   delete_if_present "$VDISK" "Devs/${dev}.device"
   xdftool $VDISK write ../${dev}.device Devs/${dev}.device
+  delete_if_present "$VDISK" Tools/a4091d
+  xdftool "$VDISK" write "../${dev}.a4091d" Tools/a4091d
 
   delete_if_present "$VDISK" "ROMs/a4092_cdfs.rom"
   delete_if_present "$VDISK" "ROMs/a4770_cdfs.rom"
