@@ -21,8 +21,10 @@ $(DEVTEST): FORCE
 	$(MAKE) -s -C $(THIRDPARTY)/devtest
 	m68k-amigaos-strip -s $@
 
-rdb: $(THIRDPARTY)/bffs/dist/bffs16_src.lha
-	lha xiq2f $< bffs_1.6/bin/rdb
+rdb: $(THIRDPARTY)/bffs/rdb/rdb.c rdb_compat.h Makefile
+	$(AMIGA_CC) -Os -m68000 -fno-strict-aliasing -fwrapv -noixemul \
+		-include rdb_compat.h $< -lamiga -o $@
+	$(AMIGA_STRIP) -s $@
 
 clean:
 	rm -f *_??.??.adf
