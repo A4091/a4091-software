@@ -420,20 +420,18 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	int i, j = 1, ret = 0;
 	UBYTE dip_switches = get_dip_switches();
 	UBYTE hostid = get_host_id();
-#ifdef NCR53C770
-	ULONG unitNum[16];
 	int max_targets = get_target_count();
-#else
-	ULONG unitNum[8];
-	int max_targets = 8;
-#endif
+	ULONG unitNum[1 + 16];   /* count, then up to 16 unit numbers */
 	(void)dev;
 
-	/* Produce unitNum at runtime */
-	unitNum[0] = max_targets - 1;
-	for (i=0; i<max_targets; i++)
+	/*
+	 * List every target except our own ID. IDs above 7 use the Phase V
+	 * wide unit number (target * 10 + 8). The mounter adds the LUNs.
+	 */
+	for (i = 0; i < max_targets && i < 16; i++)
 		if (hostid != i)
-			unitNum[j++] = i;
+			unitNum[j++] = calculate_unit_number(i, 0);
+	unitNum[0] = j - 1;
 
 	printf("Mounter:\n");
 	ms.deviceName = real_device_name;
@@ -452,8 +450,8 @@ static int mount_drives(struct ConfigDev *cd, struct Library *dev)
 	ret = MountDrive(&ms);
 
 	printf("ret = %x\nunitNum = { ", ret);
-	for (i=0; i<max_targets; i++)
-		printf("%lx%s", unitNum[i], i < (max_targets - 1) ? ", " : " }\n");
+	for (i = 0; i < j; i++)
+		printf("%lu%s", unitNum[i], i < (j - 1) ? ", " : " }\n");
 
 	list_filesystems();
 	return ret;
