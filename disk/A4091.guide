@@ -320,8 +320,12 @@ usage: devtest <options> <x.device> <unit>
 @NODE rdb "Amiga rdb tool"
 
 1> rdb
-rdb 1.2 (08-Feb-2018) © Chris Hooper
+rdb 1.3 (21-Nov-2026) ©  Chris Hooper
 Usage: rdb [options] {disk.device} [unit] [flags]
+    -check            Report problems in the RDB
+    -fix              Fix problems in the RDB (asks before writing)
+    -edit             Interactive RDB and partition editor
+    -newrdb           Create a new Rigid Disk Block on a blank disk
     -rigid            Edit fields in the Rigid Disk Block
     -part NAME        Modify partition table parameters of NAME
     -newpart NAME     Add new partition NAME to the RDB
@@ -340,6 +344,16 @@ Usage: rdb [options] {disk.device} [unit] [flags]
          PreAlloc Interleave LowCyl HighCyl NumBuffers BufMemType MaxTransfer
          Mask BootPri DosType
 1>
+
+Utility to show and edit Amiga disk RDB fields, copyright Chris Hooper
+
+This product is distributed as freeware with no warranties expressed or
+implied.  There are no restrictions on distribution or application of
+this program other than it may not be used in contribution with or
+converted to an application under the terms of the GNU Public License
+nor sold for profit greater than the cost of distribution.  Also, this
+notice must accompany all redistributions and/or modifications of this
+program.  Remember:  If you expect bugs, you should not be disappointed.
 
 @ENDNODE
 
