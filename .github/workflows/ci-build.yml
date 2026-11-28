@@ -24,6 +24,9 @@ jobs:
     - name: Mark git directory as safe
       run: git config --global --add safe.directory '*'
 
+    - name: Install L-Packer build dependencies
+      run: apt-get update && apt-get install -y cmake
+
     - name: Building all targets
       run: make all-targets
 
