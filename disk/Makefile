@@ -10,6 +10,10 @@ MMULIB_ARCHIVE=$(TINYSETPATCH_DIR)/downloads/MMULib.lha
 MMULIB_FILES=$(addprefix $(TINYSETPATCH_DIR)/MMULib/Libs/,$(addsuffix .library,mmu 68020 68030 68040 68060))
 RDBFLAGS_DIR=$(THIRDPARTY)/RDBFlags
 RDBFLAGS=$(RDBFLAGS_DIR)/RDBFlags.gcc
+LPACKER_DIR=$(THIRDPARTY)/L-Packer
+LPACKER_BUILD_DIR=lpacker-build
+LPACKER=$(LPACKER_BUILD_DIR)/L-Packer
+CMAKE ?= cmake
 AMIGA_CC ?= m68k-amigaos-gcc
 AMIGA_STRIP ?= m68k-amigaos-strip
 FULL_VERSION ?= $(shell git -C .. describe --tags --dirty | sed -r 's/^(release_|v)//')
@@ -30,8 +34,15 @@ DEVICE ?= $(if $(DEVNAME),$(board_$(DEVNAME)),A4091)
 disk:
 	$(MAKE) -C .. DEVICE="$(DEVICE)" disk
 
-image: welcome scsifix $(DEVTEST) rdb $(RDBFLAGS) $(TINYSETPATCH) $(MMULIB_FILES)
-	DEVICE=$(DEVICE) DEVNAME=$(DEVNAME) FULL_VERSION="$(FULL_VERSION)" ADATE="$(ADATE)" ./createdisk.sh
+image: welcome scsifix $(DEVTEST) rdb $(RDBFLAGS) $(TINYSETPATCH) $(MMULIB_FILES) $(LPACKER)
+	DEVICE=$(DEVICE) DEVNAME=$(DEVNAME) FULL_VERSION="$(FULL_VERSION)" ADATE="$(ADATE)" \
+		LPACKER="$(LPACKER)" ./createdisk.sh
+
+# Host tool that packs the executables and libraries on the disk. CMake
+# tracks the sources, so let it decide whether anything needs rebuilding.
+$(LPACKER): FORCE
+	$(CMAKE) -S $(LPACKER_DIR) -B $(LPACKER_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release >/dev/null
+	+$(CMAKE) --build $(LPACKER_BUILD_DIR)
 
 $(DEVTEST): FORCE
 	$(MAKE) -s -C $(THIRDPARTY)/devtest OBJDIR=objs devtest
@@ -51,6 +62,7 @@ clean:
 	rm -f NDK3.2.lha
 	rm -rf Tools
 	rm -f .welcome-config welcome scsifix.o scsifix rdb
+	rm -rf $(LPACKER_BUILD_DIR)
 	$(MAKE) -C $(TINYSETPATCH_DIR) clean
 	$(MAKE) -C $(THIRDPARTY)/devtest clean
 

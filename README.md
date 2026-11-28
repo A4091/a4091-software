@@ -63,6 +63,8 @@ make
 
 This will generate a bootable `.adf` file that can be written to a floppy disk. It contains some documentation and tools useful for your A4091.
 
+The tools and libraries on the disk are packed with [L-Packer](https://github.com/reinauer/L-Packer) to save space; they unpack themselves when loaded. The disk build compiles L-Packer for the host from `3rdparty/L-Packer`, which needs CMake and a C/C++ compiler. The driver itself is not packed, and the LHA release archive keeps the original, unpacked files.
+
 ### 💾 What's on the Disk
 
 The A4091 floppy disk is bootable and contains several useful tools and documentation:

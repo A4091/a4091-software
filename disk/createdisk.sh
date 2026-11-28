@@ -25,11 +25,33 @@ TOOLS_INFO_SOURCE=Tools.info
 A4092FLASH_INFO_SOURCE=a4092flash.info
 GUIDE_TMP=A4091.guide.tmp
 UPDATE_SCRIPT_TMP=update.tmp
+LPACKER=${LPACKER:-}
+PACK_DIR=$(mktemp -d)
 
 cleanup() {
   rm -f "$UPDATE_SCRIPT_TMP" "$GUIDE_TMP"
+  rm -rf "$PACK_DIR"
 }
 trap cleanup EXIT
+
+# Write an executable to the disk, packed with L-Packer if LPACKER is set.
+# Extra arguments go to L-Packer (-library for libraries). Packed files
+# unpack themselves when loaded; only the disk gets packed copies.
+write_packed() {
+  local disk=$1 src=$2 dst=$3 packed log
+  shift 3
+  if [ -z "$LPACKER" ]; then
+    xdftool "$disk" write "$src" "$dst"
+    return
+  fi
+  packed="$PACK_DIR/${dst//\//_}"
+  if ! log=$("$LPACKER" "$src" "$packed" -zx0 "$@" 2>&1); then
+    echo "$log"
+    echo "L-Packer failed on $src"
+    exit 1
+  fi
+  xdftool "$disk" write "$packed" "$dst"
+}
 
 devname_from_device() {
   case "$1" in
@@ -151,22 +173,24 @@ xdftool $DISK makedir Libs
 xdftool $DISK makedir ROMs
 xdftool $DISK makedir S
 xdftool $DISK makedir Tools
-xdftool $DISK write $TINYSETPATCH_BIN C/TinySetPatch
+write_packed $DISK $TINYSETPATCH_BIN C/TinySetPatch
 for lib in $MMULIB_LIBS; do
-  xdftool $DISK write "$MMULIB_DIR/${lib}.library" "Libs/${lib}.library"
+  write_packed $DISK "$MMULIB_DIR/${lib}.library" "Libs/${lib}.library" -library
 done
-xdftool $DISK write welcome Tools/welcome
-xdftool $DISK write rdb Tools/rdb
-xdftool $DISK write ../ncr7xx Tools/ncr7xx
-xdftool $DISK write "../${DEVICE_NAME}.a4091d" Tools/a4091d
+write_packed $DISK welcome Tools/welcome
+write_packed $DISK rdb Tools/rdb
+write_packed $DISK ../ncr7xx Tools/ncr7xx
+write_packed $DISK "../${DEVICE_NAME}.a4091d" Tools/a4091d
+# Too small to gain anything from packing.
 xdftool $DISK write scsifix Tools/scsifix
-xdftool $DISK write ../util/a4092flash/a4092flash Tools/a4092flash
-xdftool $DISK write ../util/a4092flash/mfgtool Tools/mfgtool
+write_packed $DISK ../util/a4092flash/a4092flash Tools/a4092flash
+write_packed $DISK ../util/a4092flash/mfgtool Tools/mfgtool
 xdftool $DISK write ../util/a4092flash/mfg.cfg S/mfg.txt
 xdftool $DISK write ../util/a4092flash/serial.txt S/serial.txt
-xdftool $DISK write $THIRDPARTY/devtest/devtest Tools/devtest
-xdftool $DISK write "$THIRDPARTY/RDBFlags/RDBFlags.gcc" Tools/RDBFlags
+write_packed $DISK $THIRDPARTY/devtest/devtest Tools/devtest
+write_packed $DISK "$THIRDPARTY/RDBFlags/RDBFlags.gcc" Tools/RDBFlags
 xdftool $DISK write system-configuration Devs/system-configuration
+# L-Packer cannot pack devices, so the driver goes on the disk as it is.
 xdftool $DISK write ../${DEVICE_NAME}.device Devs/${DEVICE_NAME}.device
 if [ "$FLASH_DEVICE" -eq 1 ]; then
   ROM_NAME=${DEVICE_NAME}_cdfs.rom
@@ -218,7 +242,7 @@ make_variant() {
   delete_if_present "$VDISK" "Devs/${dev}.device"
   xdftool $VDISK write ../${dev}.device Devs/${dev}.device
   delete_if_present "$VDISK" Tools/a4091d
-  xdftool "$VDISK" write "../${dev}.a4091d" Tools/a4091d
+  write_packed "$VDISK" "../${dev}.a4091d" Tools/a4091d
 
   delete_if_present "$VDISK" "ROMs/a4092_cdfs.rom"
   delete_if_present "$VDISK" "ROMs/a4770_cdfs.rom"
