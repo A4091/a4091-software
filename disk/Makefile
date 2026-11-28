@@ -48,8 +48,10 @@ $(DEVTEST): FORCE
 	$(MAKE) -s -C $(THIRDPARTY)/devtest OBJDIR=objs devtest
 	m68k-amigaos-strip -s $@
 
+# Version reads the first $VER: marker. Keep rdb's identification
+# string ahead of the bare marker it uses to scan filesystem binaries.
 rdb: $(THIRDPARTY)/bffs/rdb/rdb.c rdb_compat.h Makefile
-	$(AMIGA_CC) -Os -m68000 -fno-strict-aliasing -fwrapv -noixemul \
+	$(AMIGA_CC) -Os -m68000 -fno-toplevel-reorder -fno-strict-aliasing -fwrapv -noixemul \
 		-include rdb_compat.h $< -lamiga -o $@
 	$(AMIGA_STRIP) -s $@
 

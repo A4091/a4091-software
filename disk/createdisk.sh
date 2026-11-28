@@ -50,6 +50,7 @@ write_packed() {
     echo "L-Packer failed on $src"
     exit 1
   fi
+  python3 check-version-tag.py "$src" "$packed"
   xdftool "$disk" write "$packed" "$dst"
 }
 
