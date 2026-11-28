@@ -7,3 +7,4 @@ system-configuration
 update.tmp
 welcome
 .welcome-config
+lpacker-build/

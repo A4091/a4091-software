@@ -19,3 +19,7 @@
 [submodule "3rdparty/TinySetPatch"]
 	path = 3rdparty/TinySetPatch
 	url = ../../reinauer/TinySetPatch
+[submodule "3rdparty/L-Packer"]
+	path = 3rdparty/L-Packer
+	url = ../../reinauer/L-Packer
+	branch = library
